@@ -152,47 +152,6 @@ const Divider = styled.div`
   margin: 16px 0;
 `;
 
-const RangeContainer = styled.div`
-  width: 100%;
-  max-width: 400px;
-  margin-bottom: 12px;
-`;
-
-const RangeSlider = styled.input`
-  width: 100%;
-  height: 4px;
-  background: ${props => props.theme === 'dark' ? '#444' : '#e8e8ed'};
-  border-radius: 4px;
-  outline: none;
-  -webkit-appearance: none;
-  
-  &::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #0066CC;
-    cursor: pointer;
-  }
-  
-  &::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: #0066CC;
-    cursor: pointer;
-    border: none;
-  }
-`;
-
-const RangeValue = styled.div`
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: ${props => props.theme === 'dark' ? '#888' : '#666'};
-  margin-top: 6px;
-`;
-
 const SelectDropdown = styled.select`
   background-color: ${props => props.theme === 'dark' ? '#444' : '#f5f5f7'};
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
@@ -217,60 +176,65 @@ const AboutText = styled.div`
   transition: color 0.3s ease;
 `;
 
-// 窗口大小设置样式
-const SizeInputsContainer = styled.div`
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 16px;
+const Button = styled.button`
+  background-color: ${props => {
+    if (props.primary) {
+      return '#0066CC';
+    } else {
+      return props.theme === 'dark' ? '#444' : '#e0e0e0';
+    }
+  }};
+  color: ${props => {
+    if (props.primary) {
+      return 'white';
+    } else {
+      return props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f';
+    }
+  }};
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  
+  &:hover {
+    background-color: ${props => {
+      if (props.primary) {
+        return '#0055B3';
+      } else {
+        return props.theme === 'dark' ? '#555' : '#d0d0d0';
+      }
+    }};
+  }
+  
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.3);
+  }
 `;
 
-const SizeInput = styled.input`
-  width: 80px;
-  padding: 8px;
+const DownloadInput = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 500px;
+`;
+
+const PathInput = styled.input`
+  flex: 1;
+  padding: 8px 12px;
   border-radius: 6px;
-  background-color: ${props => props.theme === 'dark' ? '#333' : '#f5f5f7'};
+  background-color: ${props => props.theme === 'dark' ? '#444' : '#f5f5f7'};
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
   border: 1px solid ${props => props.theme === 'dark' ? '#555' : '#d2d2d7'};
-  text-align: center;
-  font-size: 13px;
+  font-size: 14px;
   
   &:focus {
     outline: none;
     border-color: #0066CC;
-  }
-  
-  &::-webkit-inner-spin-button,
-  &::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-  }
-`;
-
-const SizeDimension = styled.span`
-  color: ${props => props.theme === 'dark' ? '#999' : '#86868b'};
-  font-size: 13px;
-`;
-
-const ApplyButton = styled.button`
-  background-color: #0066CC;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 16px;
-  font-size: 13px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.2s ease;
-  
-  &:hover {
-    background-color: #0055AA;
-  }
-  
-  &:disabled {
-    background-color: ${props => props.theme === 'dark' ? '#444' : '#d1d1d6'};
-    color: ${props => props.theme === 'dark' ? '#777' : '#999'};
-    cursor: not-allowed;
   }
 `;
 
@@ -279,48 +243,53 @@ const Settings = ({
   language, 
   onThemeChange, 
   onLanguageChange,
-  windowSize,
-  onWindowSizeChange,
-  gridSize,
   animation,
   downloadLocation,
-  appDisplayMode,
   autoUpdate,
   wifiOnlyUpdate,
-  preloadPopularApps,
   hardwareAcceleration,
   sendUsageStats,
-  allowThirdPartyTracking,
-  onGridSizeChange,
   onAnimationChange,
   onDownloadLocationChange,
-  onAppDisplayModeChange,
   onAutoUpdateChange,
   onWifiOnlyUpdateChange,
-  onPreloadPopularAppsChange,
   onHardwareAccelerationChange,
   onSendUsageStatsChange,
-  onAllowThirdPartyTrackingChange,
   onClearCache
 }) => {
-  // 本地窗口大小状态（用于修改前的暂存）
-  const [customWidth, setCustomWidth] = useState(windowSize.width);
-  const [customHeight, setCustomHeight] = useState(windowSize.height);
+  // 本地状态用于下载位置输入
+  const [downloadPath, setDownloadPath] = useState(downloadLocation);
   
-  // 当props更新时同步本地状态
+  // 每当下载位置改变时更新本地状态
   useEffect(() => {
-    setCustomWidth(windowSize.width);
-    setCustomHeight(windowSize.height);
-  }, [windowSize]);
-
-  // 窗口大小应用按钮点击处理函数
-  const handleApplyWindowSize = () => {
-    onWindowSizeChange({
-      width: customWidth,
-      height: customHeight
-    });
+    setDownloadPath(downloadLocation);
+  }, [downloadLocation]);
+  
+  const handleBrowseClick = () => {
+    // 在实际应用中，这里会调用文件选择器
+    console.log('选择下载位置文件夹');
+    // 模拟选择文件夹
+    const newPath = '/Users/选择的路径';
+    setDownloadPath(newPath);
+    onDownloadLocationChange(newPath);
   };
-
+  
+  const handleDownloadPathChange = (e) => {
+    setDownloadPath(e.target.value);
+  };
+  
+  const handleDownloadPathBlur = () => {
+    onDownloadLocationChange(downloadPath);
+  };
+  
+  const handleThemeChange = (e) => {
+    onThemeChange(e.target.value);
+  };
+  
+  const handleLanguageChange = (e) => {
+    onLanguageChange(e.target.value);
+  };
+  
   return (
     <SettingsContainer theme={theme}>
       <SettingsTitle theme={theme}>设置</SettingsTitle>
@@ -329,34 +298,35 @@ const Settings = ({
         <SectionTitle theme={theme}>外观</SectionTitle>
         <OptionGroup>
           <OptionLabel theme={theme}>主题</OptionLabel>
+          <OptionDescription theme={theme}>选择应用的外观主题</OptionDescription>
           <RadioGroup>
-            <RadioLabel selected={theme === 'light'} theme={theme}>
+            <RadioLabel theme={theme} selected={theme === 'light'}>
               <RadioInput 
                 type="radio" 
                 name="theme" 
                 value="light" 
                 checked={theme === 'light'} 
-                onChange={() => onThemeChange('light')} 
+                onChange={handleThemeChange}
               />
               浅色
             </RadioLabel>
-            <RadioLabel selected={theme === 'dark'} theme={theme}>
+            <RadioLabel theme={theme} selected={theme === 'dark'}>
               <RadioInput 
                 type="radio" 
                 name="theme" 
                 value="dark" 
                 checked={theme === 'dark'} 
-                onChange={() => onThemeChange('dark')} 
+                onChange={handleThemeChange}
               />
               深色
             </RadioLabel>
-            <RadioLabel selected={theme === 'system'} theme={theme}>
+            <RadioLabel theme={theme} selected={theme === 'system'}>
               <RadioInput 
                 type="radio" 
                 name="theme" 
                 value="system" 
                 checked={theme === 'system'} 
-                onChange={() => onThemeChange('system')} 
+                onChange={handleThemeChange}
               />
               跟随系统
             </RadioLabel>
@@ -366,136 +336,58 @@ const Settings = ({
         <Divider theme={theme} />
         
         <OptionGroup>
-          <OptionLabel theme={theme}>窗口大小</OptionLabel>
-          <OptionDescription theme={theme}>
-            设置应用程序窗口的尺寸（最小宽度800px，最小高度600px）
-          </OptionDescription>
-          <SizeInputsContainer>
-            <SizeInput 
-              type="number" 
-              min="800" 
-              max="3840" 
-              value={customWidth}
-              onChange={(e) => setCustomWidth(parseInt(e.target.value, 10) || 800)}
-              theme={theme}
-            />
-            <SizeDimension theme={theme}>×</SizeDimension>
-            <SizeInput 
-              type="number" 
-              min="600" 
-              max="2160" 
-              value={customHeight}
-              onChange={(e) => setCustomHeight(parseInt(e.target.value, 10) || 600)}
-              theme={theme}
-            />
-            <SizeDimension theme={theme}>像素</SizeDimension>
-            <ApplyButton 
-              onClick={handleApplyWindowSize}
-              disabled={customWidth < 800 || customHeight < 600}
-              theme={theme}
-            >
-              应用窗口大小
-            </ApplyButton>
-          </SizeInputsContainer>
-          <OptionDescription theme={theme}>
-            当前窗口大小: {windowSize.width} × {windowSize.height} 像素
-          </OptionDescription>
+          <OptionLabel theme={theme}>语言</OptionLabel>
+          <OptionDescription theme={theme}>选择应用的显示语言</OptionDescription>
+          <SelectDropdown 
+            theme={theme} 
+            value={language}
+            onChange={handleLanguageChange}
+          >
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </SelectDropdown>
         </OptionGroup>
         
         <Divider theme={theme} />
         
         <OptionGroup>
-          <OptionLabel theme={theme}>应用展示方式</OptionLabel>
-          <OptionDescription theme={theme}>
-            选择应用程序在主页和分类页面中的显示方式
-          </OptionDescription>
-          <RadioGroup>
-            <RadioLabel selected={appDisplayMode === 'grid'} theme={theme}>
-              <RadioInput 
-                type="radio" 
-                name="displayMode" 
-                value="grid" 
-                checked={appDisplayMode === 'grid'} 
-                onChange={() => onAppDisplayModeChange('grid')} 
-              />
-              网格视图
-            </RadioLabel>
-            <RadioLabel selected={appDisplayMode === 'list'} theme={theme}>
-              <RadioInput 
-                type="radio" 
-                name="displayMode" 
-                value="list" 
-                checked={appDisplayMode === 'list'} 
-                onChange={() => onAppDisplayModeChange('list')} 
-              />
-              列表视图
-            </RadioLabel>
-            <RadioLabel selected={appDisplayMode === 'compact'} theme={theme}>
-              <RadioInput 
-                type="radio" 
-                name="displayMode" 
-                value="compact" 
-                checked={appDisplayMode === 'compact'} 
-                onChange={() => onAppDisplayModeChange('compact')} 
-              />
-              紧凑视图
-            </RadioLabel>
-          </RadioGroup>
-        </OptionGroup>
-        
-        <OptionGroup>
-          <OptionLabel theme={theme}>网格大小</OptionLabel>
-          <RangeContainer>
-            <RangeSlider 
-              type="range" 
-              min="3" 
-              max="6" 
-              value={gridSize} 
-              onChange={(e) => onGridSizeChange(parseInt(e.target.value, 10))} 
-              theme={theme}
-            />
-            <RangeValue theme={theme}>
-              <span>小</span>
-              <span>中</span>
-              <span>大</span>
-            </RangeValue>
-          </RangeContainer>
-        </OptionGroup>
-        
-        <OptionGroup>
           <OptionLabel theme={theme}>界面动画</OptionLabel>
+          <OptionDescription theme={theme}>启用或禁用应用界面动画效果</OptionDescription>
           <ToggleOption>
             <ToggleSwitch>
               <ToggleInput 
                 type="checkbox" 
                 checked={animation} 
-                onChange={(e) => onAnimationChange(e.target.checked)} 
+                onChange={(e) => onAnimationChange(e.target.checked)}
               />
               <ToggleSlider theme={theme} />
             </ToggleSwitch>
-            <ToggleLabel theme={theme}>启用界面动画效果</ToggleLabel>
+            <ToggleLabel theme={theme}>{animation ? '已启用' : '已禁用'}</ToggleLabel>
           </ToggleOption>
         </OptionGroup>
       </SettingsSection>
       
       <SettingsSection theme={theme}>
-        <SectionTitle theme={theme}>下载与安装</SectionTitle>
+        <SectionTitle theme={theme}>下载设置</SectionTitle>
         <OptionGroup>
-          <OptionLabel theme={theme}>默认下载位置</OptionLabel>
-          <SelectDropdown 
-            theme={theme}
-            value={downloadLocation}
-            onChange={(e) => onDownloadLocationChange(e.target.value)}
-          >
-            <option value="/Downloads">下载文件夹</option>
-            <option value="/Desktop">桌面</option>
-            <option value="/Documents">文档</option>
-            <option value="/custom">自定义位置</option>
-          </SelectDropdown>
+          <OptionLabel theme={theme}>下载位置</OptionLabel>
+          <OptionDescription theme={theme}>设置应用下载文件的保存位置</OptionDescription>
+          <DownloadInput>
+            <PathInput 
+              theme={theme} 
+              type="text" 
+              value={downloadPath}
+              onChange={handleDownloadPathChange}
+              onBlur={handleDownloadPathBlur}
+            />
+            <Button theme={theme} onClick={handleBrowseClick}>浏览...</Button>
+          </DownloadInput>
         </OptionGroup>
-        
+      </SettingsSection>
+      
+      <SettingsSection theme={theme}>
+        <SectionTitle theme={theme}>通用设置</SectionTitle>
         <OptionGroup>
-          <OptionLabel theme={theme}>自动更新</OptionLabel>
           <ToggleOption>
             <ToggleSwitch>
               <ToggleInput 
@@ -505,8 +397,9 @@ const Settings = ({
               />
               <ToggleSlider theme={theme} />
             </ToggleSwitch>
-            <ToggleLabel theme={theme}>应用自动更新</ToggleLabel>
+            <ToggleLabel theme={theme}>自动更新应用</ToggleLabel>
           </ToggleOption>
+          
           <ToggleOption>
             <ToggleSwitch>
               <ToggleInput 
@@ -516,123 +409,50 @@ const Settings = ({
               />
               <ToggleSlider theme={theme} />
             </ToggleSwitch>
-            <ToggleLabel theme={theme}>仅在Wi-Fi连接时下载更新</ToggleLabel>
+            <ToggleLabel theme={theme}>仅在WIFI网络下更新</ToggleLabel>
           </ToggleOption>
-        </OptionGroup>
-      </SettingsSection>
-      
-      <SettingsSection theme={theme}>
-        <SectionTitle theme={theme}>性能</SectionTitle>
-        <OptionGroup>
-          <OptionLabel theme={theme}>预加载</OptionLabel>
+          
           <ToggleOption>
             <ToggleSwitch>
               <ToggleInput 
                 type="checkbox" 
-                checked={preloadPopularApps}
-                onChange={(e) => onPreloadPopularAppsChange(e.target.checked)}
-              />
-              <ToggleSlider theme={theme} />
-            </ToggleSwitch>
-            <ToggleLabel theme={theme}>预加载流行应用数据</ToggleLabel>
-          </ToggleOption>
-          <ToggleOption>
-            <ToggleSwitch>
-              <ToggleInput 
-                type="checkbox" 
-                checked={hardwareAcceleration}
+                checked={hardwareAcceleration} 
                 onChange={(e) => onHardwareAccelerationChange(e.target.checked)}
               />
               <ToggleSlider theme={theme} />
             </ToggleSwitch>
             <ToggleLabel theme={theme}>启用硬件加速</ToggleLabel>
           </ToggleOption>
-        </OptionGroup>
-        
-        <OptionGroup>
-          <OptionLabel theme={theme}>缓存</OptionLabel>
-          <OptionDescription theme={theme}>
-            当前缓存大小: 124MB
-          </OptionDescription>
-          <button style={{ 
-            padding: '6px 12px', 
-            backgroundColor: theme === 'dark' ? '#444' : '#f5f5f7',
-            color: theme === 'dark' ? '#f5f5f7' : '#1d1d1f',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '13px'
-          }}
-          onClick={onClearCache}>
-            清除缓存
-          </button>
-        </OptionGroup>
-      </SettingsSection>
-      
-      <SettingsSection theme={theme}>
-        <SectionTitle theme={theme}>语言和地区</SectionTitle>
-        <OptionGroup>
-          <OptionLabel theme={theme}>应用语言</OptionLabel>
-          <RadioGroup>
-            <RadioLabel selected={language === 'zh'} theme={theme}>
-              <RadioInput 
-                type="radio" 
-                name="language" 
-                value="zh" 
-                checked={language === 'zh'} 
-                onChange={() => onLanguageChange('zh')} 
-              />
-              简体中文
-            </RadioLabel>
-            <RadioLabel selected={language === 'en'} theme={theme}>
-              <RadioInput 
-                type="radio" 
-                name="language" 
-                value="en" 
-                checked={language === 'en'} 
-                onChange={() => onLanguageChange('en')} 
-              />
-              English
-            </RadioLabel>
-          </RadioGroup>
-        </OptionGroup>
-      </SettingsSection>
-      
-      <SettingsSection theme={theme}>
-        <SectionTitle theme={theme}>隐私与安全</SectionTitle>
-        <OptionGroup>
+          
           <ToggleOption>
             <ToggleSwitch>
               <ToggleInput 
                 type="checkbox" 
-                checked={sendUsageStats}
+                checked={sendUsageStats} 
                 onChange={(e) => onSendUsageStatsChange(e.target.checked)}
               />
               <ToggleSlider theme={theme} />
             </ToggleSwitch>
-            <ToggleLabel theme={theme}>允许应用发送使用统计信息</ToggleLabel>
+            <ToggleLabel theme={theme}>发送匿名使用数据</ToggleLabel>
           </ToggleOption>
-          <ToggleOption>
-            <ToggleSwitch>
-              <ToggleInput 
-                type="checkbox" 
-                checked={allowThirdPartyTracking}
-                onChange={(e) => onAllowThirdPartyTrackingChange(e.target.checked)}
-              />
-              <ToggleSlider theme={theme} />
-            </ToggleSwitch>
-            <ToggleLabel theme={theme}>允许第三方应用跟踪</ToggleLabel>
-          </ToggleOption>
+        </OptionGroup>
+        
+        <Divider theme={theme} />
+        
+        <OptionGroup>
+          <OptionLabel theme={theme}>缓存</OptionLabel>
+          <OptionDescription theme={theme}>清除应用缓存数据，可能会暂时影响应用性能</OptionDescription>
+          <Button theme={theme} onClick={onClearCache}>清除缓存</Button>
         </OptionGroup>
       </SettingsSection>
       
       <SettingsSection theme={theme}>
         <SectionTitle theme={theme}>关于</SectionTitle>
         <AboutText theme={theme}>
-          <p>OpenStore v1.0.0</p>
-          <p>© 2023 OpenStore 团队</p>
-          <p>一个开源的基于Tauri和React的跨平台应用商店</p>
-          <p>Open Store - 你的跨平台应用商店</p>
+          Open Store v0.1.0<br />
+          一个开源的应用商店<br />
+          <br />
+          © 2023 Open Store Team
         </AboutText>
       </SettingsSection>
     </SettingsContainer>

@@ -15,22 +15,6 @@ const HeaderContainer = styled.header`
   transition: background-color 0.3s ease, border-color 0.3s ease;
 `;
 
-const LogoText = styled.div`
-  font-weight: 600;
-  font-size: 16px;
-  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-  margin-right: 20px;
-  letter-spacing: 0.3px;
-  transition: color 0.3s ease;
-  cursor: default;
-  user-select: none;
-  
-  span {
-    color: #0066CC;
-    font-weight: 700;
-  }
-`;
-
 const SearchBar = styled.div`
   flex: 1;
   max-width: 580px;
@@ -104,12 +88,27 @@ const HeaderButton = styled.button`
   }
 `;
 
-const Header = ({ onSearch, theme = 'light' }) => {
+const LanguageSelector = styled.select`
+  background-color: transparent;
+  border: none;
+  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
+  font-size: 13px;
+  padding: 0 5px;
+  cursor: pointer;
+  outline: none;
+  
+  &:focus {
+    outline: none;
+  }
+  
+  option {
+    background-color: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
+  }
+`;
+
+const Header = ({ onSearch, theme = 'light', language = 'zh' }) => {
   return (
     <HeaderContainer theme={theme}>
-      <LogoText theme={theme}>
-        <span>Open</span>Store
-      </LogoText>
       <SearchBar>
         <SearchIcon theme={theme}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -117,26 +116,21 @@ const Header = ({ onSearch, theme = 'light' }) => {
           </svg>
         </SearchIcon>
         <SearchInput 
-          placeholder="搜索应用"
+          placeholder={language === 'zh' ? "搜索软件源" : "Search software sources"}
           onChange={(e) => onSearch(e.target.value)}
           theme={theme}
         />
       </SearchBar>
       
       <HeaderActions>
-        <HeaderButton title="下载管理" theme={theme}>
+        <HeaderButton title={language === 'zh' ? "检查更新" : "Check Updates"} theme={theme}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+            <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
           </svg>
         </HeaderButton>
-        <HeaderButton title="已安装" theme={theme}>
+        <HeaderButton title={language === 'zh' ? "刷新" : "Refresh"} theme={theme}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
-          </svg>
-        </HeaderButton>
-        <HeaderButton title="通知" theme={theme}>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
           </svg>
         </HeaderButton>
       </HeaderActions>

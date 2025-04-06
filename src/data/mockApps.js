@@ -1,276 +1,301 @@
+// 模拟应用数据，提供应用程序展示所需的数据
+
+// 特色应用，用于轮播展示
 export const featuredApps = [
   {
     id: 1,
-    name: 'Photoshop Express',
-    tag: '精选',
-    tagline: '专业照片编辑，简单易用',
-    featuredImage: 'https://images.unsplash.com/photo-1587440871875-191322ee64b0?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968520.png',
-    iconBgColor: '#001E36',
-    screenshot: 'https://images.unsplash.com/photo-1587440871875-191322ee64b0?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Adobe Inc.',
-    price: 0,
-    description: '使用强大而易用的工具编辑、润色和增强图像。'
+    name: 'Visual Studio Code',
+    developer: 'Microsoft',
+    description: '微软开发的强大代码编辑器，支持多种编程语言和丰富的扩展插件。',
+    rating: 4.8,
+    ratingCount: 124850,
+    price: '免费',
+    category: 'dev-tools',
+    icon: 'https://code.visualstudio.com/favicon.ico',
+    featuredImage: 'https://code.visualstudio.com/assets/home/home-screenshot-win.png',
+    screenshots: [
+      'https://code.visualstudio.com/assets/home/home-screenshot-win.png',
+      'https://code.visualstudio.com/assets/docs/languages/javascript/overview.png'
+    ],
+    source: 'official'
   },
   {
     id: 2,
-    name: 'Visual Studio Code',
-    tag: '开发者必备',
-    tagline: '强大的代码编辑器，为开发而生',
-    featuredImage: 'https://images.unsplash.com/photo-1547954575-855750c57bd3?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    icon: 'https://cdn-icons-png.flaticon.com/512/906/906324.png',
-    iconBgColor: '#007ACC',
-    screenshot: 'https://images.unsplash.com/photo-1547954575-855750c57bd3?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Microsoft',
-    price: 0,
-    description: '代码编辑，重新定义。免费。基于开源。随处可用。'
+    name: 'Notion',
+    developer: 'Notion Labs, Inc.',
+    description: '一站式笔记、知识库和项目管理工具，支持丰富的内容编辑和团队协作。',
+    rating: 4.7,
+    ratingCount: 89325,
+    price: '免费/订阅',
+    category: 'software',
+    icon: 'https://www.notion.so/front-static/favicon.ico',
+    featuredImage: 'https://www.notion.so/cdn-cgi/image/format=webp,width=1080/https://img.youtube.com/vi/bOATCZGNUhM/maxresdefault.jpg',
+    screenshots: [
+      'https://www.notion.so/cdn-cgi/image/format=webp,width=1080/https://img.youtube.com/vi/bOATCZGNUhM/maxresdefault.jpg',
+      'https://www.notion.so/cdn-cgi/image/quality=100,format=webp/front-static/pages/product/home-page-hero-refreshed-v3.png'
+    ],
+    source: 'cn-mirror'
   },
   {
     id: 3,
-    name: 'Affinity Designer',
-    tag: '创意工具',
-    tagline: '专业图形设计软件',
-    featuredImage: 'https://images.unsplash.com/photo-1558655146-605d86ed31b3?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968581.png',
-    iconBgColor: '#753BBD',
-    screenshot: 'https://images.unsplash.com/photo-1558655146-605d86ed31b3?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Serif Labs',
-    price: 49.99,
-    description: '最快速、最流畅、最精确的矢量图形设计软件。'
+    name: 'ChatGPT',
+    developer: 'OpenAI',
+    description: '基于先进AI技术的对话助手，可回答问题、创作内容、提供帮助。',
+    rating: 4.9,
+    ratingCount: 203769,
+    price: '免费/订阅',
+    category: 'ai-models',
+    icon: 'https://chat.openai.com/apple-touch-icon.png',
+    featuredImage: 'https://static.vecteezy.com/system/resources/previews/021/608/790/original/chatgpt-logo-chat-gpt-icon-on-black-background-free-vector.jpg',
+    screenshots: [
+      'https://static.vecteezy.com/system/resources/previews/021/608/790/original/chatgpt-logo-chat-gpt-icon-on-black-background-free-vector.jpg',
+      'https://images.unsplash.com/photo-1684391545095-231e3471c75d'
+    ],
+    source: 'cn-mirror'
   }
 ];
 
+// 热门应用
 export const topApps = [
   {
     id: 4,
-    name: 'Visual Studio Code',
-    icon: 'https://cdn-icons-png.flaticon.com/512/906/906324.png',
-    iconBgColor: '#007ACC',
-    screenshot: 'https://images.unsplash.com/photo-1547954575-855750c57bd3?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Microsoft',
-    price: 0,
-    description: '代码编辑，重新定义。免费。基于开源。随处可用。'
+    name: 'Google Chrome',
+    developer: 'Google LLC',
+    description: '快速、安全的网络浏览器，由Google开发。',
+    rating: 4.6,
+    ratingCount: 147892,
+    price: '免费',
+    category: 'software',
+    icon: 'https://www.google.com/chrome/static/images/chrome-logo.svg',
+    screenshots: [
+      'https://www.google.com/chrome/static/images/homepage/homepage.png'
+    ],
+    source: 'official'
   },
   {
     id: 5,
-    name: 'Notion',
-    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968885.png',
-    iconBgColor: '#FFFFFF',
-    screenshot: 'https://images.unsplash.com/photo-1595675024853-0f3ec9098ac7?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Notion Labs, Inc.',
-    price: 0,
-    description: '集笔记、任务、知识库和数据库于一体的全能工作空间。'
+    name: 'Spotify',
+    developer: 'Spotify AB',
+    description: '全球最大的音乐流媒体服务，提供数百万首歌曲和播客。',
+    rating: 4.5,
+    ratingCount: 178293,
+    price: '免费/订阅',
+    category: 'others',
+    icon: 'https://open.spotifycdn.com/cdn/images/favicon.0f31d2ea.ico',
+    screenshots: [
+      'https://storage.googleapis.com/pr-newsroom-wp/1/2018/11/Spotify_Design_Screenshot.png'
+    ],
+    source: 'official'
   },
   {
     id: 6,
-    name: 'Spotify',
-    icon: 'https://cdn-icons-png.flaticon.com/512/174/174872.png',
-    iconBgColor: '#1ED760',
-    screenshot: 'https://images.unsplash.com/photo-1614680376408-81e91ffe3db7?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Spotify AB',
-    price: 0,
-    description: 'Spotify是一个数字音乐服务，让您可以访问数百万首歌曲。'
-  },
+    name: 'Adobe Photoshop',
+    developer: 'Adobe Inc.',
+    description: '专业图像编辑和设计软件。',
+    rating: 4.4,
+    ratingCount: 95467,
+    price: '订阅',
+    category: 'software',
+    icon: 'https://www.adobe.com/content/dam/cc/icons/photoshop.svg',
+    screenshots: [
+      'https://www.adobe.com/content/dam/cc/us/en/creativecloud/photography/discover/photoshop-vs-lightroom/thumbnail.jpg'
+    ],
+    source: 'cn-mirror'
+  }
+];
+
+// 新应用
+export const newApps = [
   {
     id: 7,
-    name: 'Adobe Illustrator',
-    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968472.png',
-    iconBgColor: '#330000',
-    screenshot: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Adobe Inc.',
-    price: 20.99,
-    description: '行业标准矢量图形软件，被数百万设计师和艺术家使用。'
+    name: 'Obsidian',
+    developer: 'Obsidian',
+    description: '强大的知识库和笔记应用，基于本地Markdown文件。',
+    rating: 4.8,
+    ratingCount: 42789,
+    price: '免费/付费',
+    category: 'others',
+    icon: 'https://obsidian.md/favicon.ico',
+    screenshots: [
+      'https://obsidian.md/images/screenshot.png'
+    ],
+    source: 'official'
   },
   {
     id: 8,
-    name: 'Slack',
-    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968940.png',
-    iconBgColor: '#4A154B',
-    screenshot: 'https://images.unsplash.com/photo-1614680376739-8360a29cb6a6?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Slack Technologies, Inc.',
-    price: 0,
-    description: 'Slack是与团队沟通的新方式。它比电子邮件更快、更有条理，也更安全。'
+    name: 'Discord',
+    developer: 'Discord Inc.',
+    description: '为社区设计的语音、视频和文字聊天应用。',
+    rating: 4.7,
+    ratingCount: 156798,
+    price: '免费',
+    category: 'software',
+    icon: 'https://discord.com/assets/847541504914fd33810e70a0ea73177e.ico',
+    screenshots: [
+      'https://discord.com/assets/3f43dd981da2f7064925a708d3982460.svg'
+    ],
+    source: 'official'
   },
   {
     id: 9,
-    name: 'Figma',
-    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968705.png',
-    iconBgColor: '#F24E1E',
-    screenshot: 'https://images.unsplash.com/photo-1613791286635-ba23a7180809?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Figma, Inc.',
-    price: 0,
-    description: 'Figma帮助团队从始至终创建、测试和发布更好的设计。'
+    name: 'VLC Media Player',
+    developer: 'VideoLAN',
+    description: '免费开源的跨平台多媒体播放器，可播放大多数多媒体文件。',
+    rating: 4.6,
+    ratingCount: 87456,
+    price: '免费',
+    category: 'software',
+    icon: 'https://www.videolan.org/images/vlc-logo.png',
+    screenshots: [
+      'https://www.videolan.org/images/vlc-ios-appletv/playlist-4.0.jpg'
+    ],
+    source: 'cn-mirror'
   }
 ];
 
-export const newApps = [
+// 工作应用
+export const workApps = [
   {
     id: 10,
-    name: 'Raycast',
-    icon: 'https://cdn-icons-png.flaticon.com/512/281/281760.png',
-    iconBgColor: '#FF6363',
-    screenshot: 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Raycast Technologies Inc.',
-    price: 0,
-    description: 'Raycast是一个极快、完全可扩展的启动器。它可以帮助您完成任务、计算、分享常用链接等。'
+    name: 'Microsoft Office',
+    developer: 'Microsoft',
+    description: '微软办公套件，包括Word、Excel、PowerPoint等应用。',
+    rating: 4.7,
+    ratingCount: 203456,
+    price: '订阅',
+    category: 'software',
+    icon: 'https://img-prod-cms-rt-microsoft-com.akamaized.net/cms/api/am/imageFileData/RE1Mu3b',
+    screenshots: [
+      'https://img-prod-cms-rt-microsoft-com.akamaized.net/cms/api/am/imageFileData/RWOeOY'
+    ],
+    source: 'official'
   },
   {
     id: 11,
-    name: 'Rectangle',
-    icon: 'https://cdn-icons-png.flaticon.com/512/1150/1150595.png',
-    iconBgColor: '#59C1DC',
-    screenshot: 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Ryan Hanson',
-    price: 0,
-    description: '使用键盘快捷键或贴靠区域移动和调整macOS中的窗口大小。'
+    name: 'Slack',
+    developer: 'Slack Technologies',
+    description: '团队协作工具，提供组织沟通和工作管理功能。',
+    rating: 4.5,
+    ratingCount: 123789,
+    price: '免费/订阅',
+    category: 'software',
+    icon: 'https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png',
+    screenshots: [
+      'https://a.slack-edge.com/0f40c/marketing/img/features/desktop/desktop-product-ui-get-more-done.ko-KR.png'
+    ],
+    source: 'official'
   },
   {
     id: 12,
-    name: 'Alfred',
-    icon: 'https://cdn-icons-png.flaticon.com/512/732/732076.png',
-    iconBgColor: '#5C1F87',
-    screenshot: 'https://images.unsplash.com/photo-1506097425191-7ad538b29cef?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Running with Crayons Ltd',
-    price: 29,
-    description: 'Alfred是一款屡获殊荣的macOS应用，通过热键、关键词、文本扩展等方式提高您的效率。'
-  },
-  {
-    id: 13,
-    name: 'Obsidian',
-    icon: 'https://cdn-icons-png.flaticon.com/512/786/786261.png',
-    iconBgColor: '#483699',
-    screenshot: 'https://images.unsplash.com/photo-1517842645767-c639042777db?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Obsidian',
-    price: 0,
-    description: 'Obsidian是一个基于本地纯文本Markdown文件的强大知识库。'
-  },
-  {
-    id: 14,
-    name: 'CleanMyMac X',
-    icon: 'https://cdn-icons-png.flaticon.com/512/2164/2164832.png',
-    iconBgColor: '#FBAB47',
-    screenshot: 'https://images.unsplash.com/photo-1517430816045-df4b7de11d1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'MacPaw Inc.',
-    price: 34.95,
-    description: '使用这款多合一的macOS清理工具清理、优化和维护您的Mac。'
-  },
-  {
-    id: 15,
-    name: 'Final Cut Pro',
-    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968697.png',
-    iconBgColor: '#0053A2',
-    screenshot: 'https://images.unsplash.com/photo-1536240478700-b869070f9279?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Apple',
-    price: 299.99,
-    description: '革命性的视频编辑应用程序，让您以难以置信的轻松和精确度编辑视频。'
-  }
-];
-
-export const workApps = [
-  {
-    id: 16,
-    name: 'Microsoft Office',
-    icon: 'https://cdn-icons-png.flaticon.com/512/732/732222.png',
-    iconBgColor: '#D83B01',
-    screenshot: 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Microsoft',
-    price: 69.99,
-    description: '一套生产力应用程序，包括Word、Excel、PowerPoint等。'
-  },
-  {
-    id: 17,
     name: 'Trello',
-    icon: 'https://cdn-icons-png.flaticon.com/512/6124/6124991.png',
-    iconBgColor: '#0079BF',
-    screenshot: 'https://images.unsplash.com/photo-1531973576160-7125cd663d86?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
     developer: 'Atlassian',
-    price: 0,
-    description: 'Trello通过提供视觉化、灵活和协作的方式来管理项目，帮助团队推进工作。'
-  },
-  {
-    id: 18,
-    name: 'Asana',
-    icon: 'https://cdn-icons-png.flaticon.com/512/5968/5968901.png',
-    iconBgColor: '#FC636B',
-    screenshot: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'Asana, Inc.',
-    price: 0,
-    description: '团队组织、跟踪和管理工作的工作管理平台。'
+    description: '可视化项目管理工具，使用看板方法组织任务。',
+    rating: 4.4,
+    ratingCount: 89764,
+    price: '免费/订阅',
+    category: 'software',
+    icon: 'https://trello.com/favicon.ico',
+    screenshots: [
+      'https://images.ctfassets.net/rz1oowkt5gyp/75rDABL8fyMtNLJPtI5hZa/8f52a51713c627d165fe1eb975812555/hero-2.png'
+    ],
+    source: 'cn-mirror'
   }
 ];
 
 // 游戏应用
 export const gameApps = [
   {
-    id: 101,
+    id: 13,
     name: 'Minecraft',
-    icon: 'https://cdn-icons-png.flaticon.com/512/906/906175.png',
-    iconBgColor: '#3CBC41',
-    screenshot: 'https://images.unsplash.com/photo-1627856013091-fed6e4e30025?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
     developer: 'Mojang Studios',
-    price: 29.99,
-    description: '探索、创造和生存在一个由方块构成的世界中。'
+    description: '开放世界沙盒游戏，玩家可以探索、建造和创造。',
+    rating: 4.8,
+    ratingCount: 345678,
+    price: '付费',
+    category: 'games',
+    icon: 'https://www.minecraft.net/content/dam/games/minecraft/key-art/Games_Subnav_Minecraft-300x365.jpg',
+    screenshots: [
+      'https://www.minecraft.net/content/dam/minecraft/home/home-hero-1200x600.jpg'
+    ],
+    source: 'official'
   },
   {
-    id: 102,
-    name: '王者荣耀',
-    icon: 'https://cdn-icons-png.flaticon.com/512/6828/6828737.png',
-    iconBgColor: '#3BA3FF',
-    screenshot: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: '腾讯游戏',
-    price: 0,
-    description: '5v5多人在线竞技游戏，体验英雄对战的乐趣。'
+    id: 14,
+    name: 'Steam',
+    developer: 'Valve Corporation',
+    description: '数字游戏分发平台，提供大量PC游戏和社区功能。',
+    rating: 4.7,
+    ratingCount: 254789,
+    price: '免费',
+    category: 'games',
+    icon: 'https://store.steampowered.com/favicon.ico',
+    screenshots: [
+      'https://cdn.cloudflare.steamstatic.com/store/home/store_home_share.jpg'
+    ],
+    source: 'official'
   },
   {
-    id: 103,
+    id: 15,
     name: 'Among Us',
-    icon: 'https://cdn-icons-png.flaticon.com/512/8676/8676496.png',
-    iconBgColor: '#D82B4B',
-    screenshot: 'https://images.unsplash.com/photo-1603481588273-2f908a9a7a1b?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
     developer: 'InnerSloth',
-    price: 4.99,
-    description: '在太空舰船中找出冒充者的多人社交推理游戏。'
+    description: '多人在线派对游戏，玩家合作完成任务或找出内鬼。',
+    rating: 4.6,
+    ratingCount: 187456,
+    price: '付费',
+    category: 'games',
+    icon: 'https://play-lh.googleusercontent.com/8ddL1kuoNUB5vUvgDVjYY3_6HwQcrg1K2fd_R8soD-e2QYj8fT9cfhfh3G0hnSruLKec',
+    screenshots: [
+      'https://cdn.cloudflare.steamstatic.com/steam/apps/945360/ss_47f3523dbf251a6f142e4912d82f1c58cc9a3944.1920x1080.jpg'
+    ],
+    source: 'cn-mirror'
   }
 ];
 
-// AI大模型
+// AI 大模型应用
 export const aiApps = [
   {
-    id: 201,
-    name: 'ChatGPT',
-    icon: 'https://cdn-icons-png.flaticon.com/512/4711/4711987.png',
-    iconBgColor: '#10A37F',
-    screenshot: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: 'OpenAI',
-    price: 0,
-    description: '强大的对话AI模型，可以回答问题、创作内容和提供帮助。'
+    id: 16,
+    name: 'Claude',
+    developer: 'Anthropic',
+    description: 'Anthropic开发的对话式AI助手，注重安全和有用性。',
+    rating: 4.7,
+    ratingCount: 45678,
+    price: '免费/订阅',
+    category: 'ai-models',
+    icon: 'https://claude.ai/favicon.ico',
+    screenshots: [
+      'https://assets-global.website-files.com/639d36b8b8b42a18d3edfeae/649b2361be0fd38a0d1a9ac1_Homepage%20(1).png'
+    ],
+    source: 'official'
   },
   {
-    id: 202,
+    id: 17,
     name: 'Midjourney',
-    icon: 'https://cdn-icons-png.flaticon.com/512/10095/10095439.png',
-    iconBgColor: '#0B0B0B',
-    screenshot: 'https://images.unsplash.com/photo-1687461635423-da48a9ed2075?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
     developer: 'Midjourney, Inc.',
-    price: 10,
-    description: '通过简单的文本描述生成令人惊叹的AI艺术作品。'
+    description: '由AI驱动的图像生成工具，通过文本描述创作艺术作品。',
+    rating: 4.8,
+    ratingCount: 78945,
+    price: '订阅',
+    category: 'ai-models',
+    icon: 'https://www.midjourney.com/apple-touch-icon.png',
+    screenshots: [
+      'https://cdn.midjourney.com/12c7b25e-79d5-4ecc-805e-e5a642a0c216/0_1.png'
+    ],
+    source: 'official'
   },
   {
-    id: 203,
-    name: '文心一言',
-    icon: 'https://cdn-icons-png.flaticon.com/512/9333/9333570.png',
-    iconBgColor: '#175FFF',
-    screenshot: 'https://images.unsplash.com/photo-1684573344555-45524a50ab6c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80',
-    developer: '百度',
-    price: 0,
-    description: '中文大语言模型，提供自然流畅的对话和创作能力。'
+    id: 18,
+    name: 'Stable Diffusion',
+    developer: 'Stability AI',
+    description: '开源AI图像生成模型，能从文本描述创建详细图像。',
+    rating: 4.6,
+    ratingCount: 56789,
+    price: '免费/开源',
+    category: 'ai-models',
+    icon: 'https://stability.ai/favicon.ico',
+    screenshots: [
+      'https://cdn.sparrowai.com/sdk-ui-desktop-stable-diffusion.png'
+    ],
+    source: 'cn-mirror'
   }
-];
-
-export const categories = [
-  'dev-tools',
-  'software',
-  'games',
-  'ai-models',
-  'others'
 ]; 
