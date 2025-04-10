@@ -1,248 +1,131 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import styled from 'styled-components';
 
 const FeaturedContainer = styled.div`
-  margin-bottom: 30px;
-  position: relative;
+  width: 100%;
+  overflow: hidden;
+  padding: 20px 0 24px 0;
 `;
 
 const FeaturedTitle = styled.h2`
-  font-size: 20px;
-  font-weight: 600;
-  margin: 0 0 16px 0;
-  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 14px 0;
+  color: #1d1d1f;
+  padding: 0;
 `;
 
 const Carousel = styled.div`
-  overflow: hidden;
-  border-radius: 12px;
-  position: relative;
-  height: 280px;
-  
-  @media (max-width: 768px) {
-    height: 240px;
-  }
-  
-  @media (max-width: 480px) {
-    height: 200px;
-  }
-`;
-
-const CarouselInner = styled.div`
   display: flex;
-  transition: transform 0.5s ease;
-  height: 100%;
-  transform: translateX(-${props => props.active * 100}%);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 0;
+  
+  &::-webkit-scrollbar {
+    height: 6px;
+    background-color: transparent;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 6px;
+  }
+  
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+  }
+  
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
 `;
 
-const Slide = styled.div`
-  min-width: 100%;
-  height: 100%;
-  position: relative;
+const FeaturedCard = styled.div`
+  flex: 0 0 auto;
+  width: calc(90% - 20px);
+  max-width: 800px;
+  margin-right: 20px;
+  height: 320px;
+  border-radius: 10px;
   overflow: hidden;
+  position: relative;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  scroll-snap-align: start;
+  transition: transform 0.3s ease;
+  cursor: pointer;
+  
+  &:hover {
+    transform: scale(0.99);
+  }
+  
+  @media (min-width: 1024px) {
+    width: calc(75% - 20px);
+    height: 360px;
+  }
+
+  @media (min-width: 1280px) {
+    width: calc(60% - 20px);
+    height: 380px;
+  }
 `;
 
-const SlideImage = styled.img`
+const FeaturedImage = styled.img`
   width: 100%;
   height: 100%;
   object-fit: cover;
 `;
 
-const SlideContent = styled.div`
+const FeaturedOverlay = styled.div`
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 20px;
-  background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0));
+  padding: 30px 24px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
   color: white;
 `;
 
-const SlideTitle = styled.h3`
-  margin: 0 0 4px 0;
-  font-size: 24px;
+const FeaturedTag = styled.span`
+  display: inline-block;
+  background-color: #0066CC;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
   font-weight: 600;
-  
-  @media (max-width: 768px) {
-    font-size: 20px;
-  }
-  
-  @media (max-width: 480px) {
-    font-size: 18px;
-  }
+  text-transform: uppercase;
+  margin-bottom: 10px;
 `;
 
-const SlideDescription = styled.p`
-  margin: 0;
-  font-size: 14px;
+const FeaturedAppTitle = styled.h3`
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+`;
+
+const FeaturedAppSubtitle = styled.h4`
+  font-size: 16px;
+  font-weight: 400;
+  margin: 0 0 12px 0;
   opacity: 0.9;
-  
-  @media (max-width: 480px) {
-    font-size: 12px;
-  }
 `;
 
-const NavButton = styled.button`
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 40px;
-  height: 40px;
-  background-color: rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  z-index: 10;
-  backdrop-filter: blur(4px);
-  
-  &:hover {
-    background-color: rgba(255, 255, 255, 0.5);
-  }
-  
-  &:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-  }
-  
-  svg {
-    width: 24px;
-    height: 24px;
-    fill: white;
-  }
-  
-  &.prev {
-    left: 16px;
-  }
-  
-  &.next {
-    right: 16px;
-  }
-  
-  @media (max-width: 768px) {
-    width: 32px;
-    height: 32px;
-    
-    svg {
-      width: 18px;
-      height: 18px;
-    }
-  }
-`;
-
-const Indicators = styled.div`
-  position: absolute;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  z-index: 10;
-`;
-
-const Indicator = styled.button`
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: ${props => props.active ? 'white' : 'rgba(255,255,255,0.5)'};
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  padding: 0;
-  
-  &:hover {
-    background-color: ${props => props.active ? 'white' : 'rgba(255,255,255,0.7)'};
-  }
-`;
-
-const FeaturedApps = ({ featuredApps, theme = 'light' }) => {
-  const [activeSlide, setActiveSlide] = useState(0);
-  const [autoplay, setAutoplay] = useState(true);
-  
-  // 自动轮播
-  useEffect(() => {
-    let interval;
-    
-    if (autoplay) {
-      interval = setInterval(() => {
-        setActiveSlide(prev => (prev + 1) % featuredApps.length);
-      }, 5000);
-    }
-    
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [autoplay, featuredApps.length]);
-  
-  // 鼠标悬停时暂停自动轮播
-  const handleMouseEnter = () => setAutoplay(false);
-  const handleMouseLeave = () => setAutoplay(true);
-  
-  const goToPrev = () => {
-    setActiveSlide(prev => (prev - 1 + featuredApps.length) % featuredApps.length);
-  };
-  
-  const goToNext = () => {
-    setActiveSlide(prev => (prev + 1) % featuredApps.length);
-  };
-  
-  const goToSlide = (index) => {
-    setActiveSlide(index);
-  };
-  
+const FeaturedApps = ({ featuredApps }) => {
   return (
     <FeaturedContainer>
-      <FeaturedTitle theme={theme}>精选应用</FeaturedTitle>
-      <Carousel 
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <CarouselInner active={activeSlide}>
-          {featuredApps.map(app => (
-            <Slide key={app.id}>
-              <SlideImage src={app.featuredImage || app.screenshots[0]} alt={app.name} />
-              <SlideContent>
-                <SlideTitle>{app.name}</SlideTitle>
-                <SlideDescription>{app.description}</SlideDescription>
-              </SlideContent>
-            </Slide>
-          ))}
-        </CarouselInner>
-        
-        <NavButton 
-          className="prev" 
-          onClick={goToPrev}
-          disabled={featuredApps.length <= 1}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-          </svg>
-        </NavButton>
-        
-        <NavButton 
-          className="next" 
-          onClick={goToNext}
-          disabled={featuredApps.length <= 1}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
-          </svg>
-        </NavButton>
-        
-        <Indicators>
-          {featuredApps.map((_, index) => (
-            <Indicator 
-              key={index} 
-              active={index === activeSlide} 
-              onClick={() => goToSlide(index)}
-            />
-          ))}
-        </Indicators>
+      <FeaturedTitle>精选应用</FeaturedTitle>
+      <Carousel>
+        {featuredApps.map((app, index) => (
+          <FeaturedCard key={index}>
+            <FeaturedImage src={app.featuredImage} alt={app.name} />
+            <FeaturedOverlay>
+              <FeaturedTag>{app.tag}</FeaturedTag>
+              <FeaturedAppTitle>{app.name}</FeaturedAppTitle>
+              <FeaturedAppSubtitle>{app.tagline}</FeaturedAppSubtitle>
+            </FeaturedOverlay>
+          </FeaturedCard>
+        ))}
       </Carousel>
     </FeaturedContainer>
   );

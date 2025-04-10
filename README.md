@@ -1,20 +1,15 @@
-# OpenStore - Software Source Manager
+# OpenStore - Cross-Platform App Store
 
-A cross-platform software source management tool built with Tauri and React, featuring a clean modern UI.
+A cross-platform application store built with Tauri and React, featuring a macOS App Store inspired UI.
 
 ## Features
 
-- Clean, modern design 
+- Clean, modern design based on macOS App Store
 - Responsive layout
-- Software source management:
-  - Add, edit, delete and disable software sources
-  - Configure update settings
-  - Manage download locations
-- Settings:
-  - Theme customization (light/dark/system)
-  - Language selection
-  - Performance optimization
-  - Window size settings
+- Category navigation
+- Featured apps section
+- App grid display
+- Search functionality
 
 ## Screenshots
 
@@ -64,6 +59,7 @@ OpenStore/
 ├── src/                   # React frontend
 │   ├── assets/            # Static assets
 │   ├── components/        # React components
+│   ├── data/              # Mock data
 │   ├── App.jsx            # Main App component
 │   └── main.jsx           # Entry point
 ├── src-tauri/             # Tauri backend (Rust)
@@ -72,85 +68,5 @@ OpenStore/
 ```
 
 ## License
-
-MIT
-
-# OpenStore 应用商店
-
-OpenStore是一个开源应用商店项目，允许用户浏览、下载和管理应用程序。
-
-## 特点
-
-- 浏览不同类别的应用程序
-- 支持自定义软件源
-- 导入和导出JSON格式的软件源
-- 深色/浅色主题支持
-- 多语言支持
-
-## 安装
-
-```bash
-# 克隆项目
-git clone https://github.com/yourusername/openstore.git
-
-# 进入项目目录
-cd openstore
-
-# 安装依赖
-npm install
-
-# 运行开发服务器
-npm start
-```
-
-## 软件源JSON格式
-
-OpenStore支持导入自定义JSON格式的软件源。以下是JSON源文件的格式规范：
-
-```json
-{
-  "name": "软件源名称",
-  "url": "软件源URL",
-  "description": "软件源描述",
-  "version": "1.0",
-  "items": [
-    {
-      "name": "应用名称",
-      "author": "开发者",
-      "description": "应用描述",
-      "version": "1.0.0",
-      "size": "大小",
-      "releaseDate": "发布日期",
-      "category": "分类",
-      "iconUrl": "图标URL",
-      "downloadUrl": "下载链接",
-      "tags": ["标签1", "标签2"]
-    }
-  ]
-}
-```
-
-### 字段说明
-
-**源信息：**
-- `name`: 软件源名称（必填）
-- `url`: 软件源URL（必填）
-- `description`: 软件源描述（可选）
-- `version`: 软件源版本（可选）
-
-**应用项目：**
-- `items`: 应用程序列表，数组类型（必填）
-  - `name`: 应用名称（必填）
-  - `author`: 开发者名称（可选）
-  - `description`: 应用描述（可选）
-  - `version`: 应用版本（可选）
-  - `size`: 应用大小（可选）
-  - `releaseDate`: 发布日期（可选）
-  - `category`: 分类（可选，可选值：software、game、ai-model）
-  - `iconUrl`: 图标URL（可选）
-  - `downloadUrl`: 下载链接（必填）
-  - `tags`: 标签数组（可选）
-
-## 许可
 
 MIT

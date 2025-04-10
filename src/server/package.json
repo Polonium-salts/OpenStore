@@ -1,0 +1,14 @@
+{
+  "name": "openstore-proxy",
+  "version": "1.0.0",
+  "description": "OpenStore download proxy server",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "node-fetch": "^2.7.0"
+  }
+} 

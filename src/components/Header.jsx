@@ -1,136 +1,193 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 
-const HeaderContainer = styled.header`
-  height: 44px;
-  background-color: ${props => props.theme === 'dark' ? 'rgba(30, 30, 32, 0.8)' : 'rgba(245, 245, 247, 0.8)'};
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid ${props => props.theme === 'dark' ? '#333' : '#d2d2d7'};
+const HeaderContainer = styled.div`
   display: flex;
   align-items: center;
-  padding: 0 20px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  transition: background-color 0.3s ease, border-color 0.3s ease;
+  padding: 12px 20px;
+  background-color: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
+  border-bottom: 1px solid ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'};
+  height: 64px;
+  position: relative;
+  z-index: 10;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 `;
 
-const SearchBar = styled.div`
+const LogoSection = styled.div`
+  display: flex;
+  align-items: center;
+  margin-right: 24px;
+  min-width: 120px;
+`;
+
+const Logo = styled.div`
+  font-size: 18px;
+  font-weight: 600;
+  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
+  
+  span {
+    color: #0066CC;
+  }
+`;
+
+const SearchContainer = styled.div`
   flex: 1;
-  max-width: 580px;
-  margin: 0 auto;
+  max-width: 600px;
   position: relative;
+  margin: 0 24px;
 `;
 
 const SearchInput = styled.input`
   width: 100%;
-  height: 32px;
-  background-color: ${props => props.theme === 'dark' ? 'rgba(70, 70, 75, 0.2)' : 'rgba(142, 142, 147, 0.12)'};
-  border-radius: 7px;
+  height: 36px;
+  padding: 0 40px;
+  border-radius: 8px;
   border: none;
-  padding: 0 34px;
-  font-size: 13px;
+  background-color: ${props => props.theme === 'dark' ? '#1d1d1f' : '#f5f5f7'};
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-  outline: none;
+  font-size: 14px;
   transition: all 0.2s ease;
-
+  
   &:focus {
-    background-color: ${props => props.theme === 'dark' ? 'rgba(70, 70, 75, 0.3)' : 'rgba(142, 142, 147, 0.18)'};
+    outline: none;
+    background-color: ${props => props.theme === 'dark' ? '#3a3a3d' : '#ffffff'};
+    box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
   }
-
+  
   &::placeholder {
-    color: ${props => props.theme === 'dark' ? '#888' : '#86868b'};
+    color: ${props => props.theme === 'dark' ? '#999' : '#666'};
   }
 `;
 
 const SearchIcon = styled.div`
   position: absolute;
-  left: 10px;
+  left: 12px;
   top: 50%;
   transform: translateY(-50%);
+  color: ${props => props.theme === 'dark' ? '#999' : '#666'};
   display: flex;
   align-items: center;
-  justify-content: center;
   
   svg {
-    width: 14px;
-    height: 14px;
-    fill: ${props => props.theme === 'dark' ? '#888' : '#86868b'};
+    width: 16px;
+    height: 16px;
   }
 `;
 
 const HeaderActions = styled.div`
   display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 8px;
+  margin-left: auto;
 `;
 
 const HeaderButton = styled.button`
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background-color: ${props => props.active ? 
+    (props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed') : 
+    'transparent'
+  };
+  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  
-  svg {
-    width: 18px;
-    height: 18px;
-    fill: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-  }
+  transition: all 0.2s ease;
+  position: relative;
   
   &:hover {
-    background-color: ${props => props.theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'};
+    background-color: ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'};
+  }
+  
+  svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+  }
+
+  &::after {
+    content: attr(title);
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: ${props => props.theme === 'dark' ? '#3a3a3d' : '#1d1d1f'};
+    color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#ffffff'};
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+  }
+
+  &:hover::after {
+    opacity: 1;
+    visibility: visible;
   }
 `;
 
-const LanguageSelector = styled.select`
-  background-color: transparent;
-  border: none;
-  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-  font-size: 13px;
-  padding: 0 5px;
-  cursor: pointer;
-  outline: none;
-  
-  &:focus {
-    outline: none;
-  }
-  
-  option {
-    background-color: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
-  }
-`;
+const Header = ({ theme, onSearch, onToggleDownloadManager, isDownloadManagerVisible }) => {
+  const [searchTerm, setSearchTerm] = useState('');
 
-const Header = ({ onSearch, theme = 'light', language = 'zh' }) => {
+  const handleSearch = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    onSearch(value);
+  };
+
   return (
     <HeaderContainer theme={theme}>
-      <SearchBar>
+      <LogoSection>
+        <Logo theme={theme}>
+          <span>Open</span>Store
+        </Logo>
+      </LogoSection>
+
+      <SearchContainer>
         <SearchIcon theme={theme}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            <path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
           </svg>
         </SearchIcon>
-        <SearchInput 
-          placeholder={language === 'zh' ? "搜索软件源" : "Search software sources"}
-          onChange={(e) => onSearch(e.target.value)}
+        <SearchInput
+          type="text"
+          placeholder="搜索应用..."
+          value={searchTerm}
+          onChange={handleSearch}
           theme={theme}
         />
-      </SearchBar>
-      
+      </SearchContainer>
+
       <HeaderActions>
-        <HeaderButton title={language === 'zh' ? "检查更新" : "Check Updates"} theme={theme}>
+        <HeaderButton 
+          title="下载管理"
+          theme={theme}
+          active={isDownloadManagerVisible}
+          onClick={onToggleDownloadManager}
+        >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
           </svg>
         </HeaderButton>
-        <HeaderButton title={language === 'zh' ? "刷新" : "Refresh"} theme={theme}>
+        <HeaderButton 
+          title="已安装"
+          theme={theme}
+        >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+          </svg>
+        </HeaderButton>
+        <HeaderButton 
+          title="通知"
+          theme={theme}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
           </svg>
         </HeaderButton>
       </HeaderActions>
