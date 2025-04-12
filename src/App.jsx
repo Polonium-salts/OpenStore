@@ -4,7 +4,8 @@ import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Settings from './components/Settings';
 import SourceManager from './components/SourceManager';
-import DownloadManager from './components/DownloadManager';
+import SimpleDownloadManager from './components/SimpleDownloadManager';
+import { TauriDownloader } from './components/TauriDownloader';
 import { fetchAppsFromSources, fetchAppsByCategory } from './services/sourceService';
 
 const AppContainer = styled.div`
@@ -218,12 +219,21 @@ const App = () => {
   };
 
   const handleDownload = (app) => {
-    if (downloadManagerRef.current) {
-      downloadManagerRef.current.startDownload({
-        name: app.name,
-        downloadUrl: app.downloadUrl
-      });
-    }
+    // 在下载前显示下载管理器
+    setIsDownloadManagerVisible(true);
+    
+    // 延迟一下，确保下载管理器已经渲染并且引用可用
+    setTimeout(() => {
+      if (downloadManagerRef.current) {
+        downloadManagerRef.current.startDownload({
+          name: app.name,
+          downloadUrl: app.downloadUrl
+        });
+      } else {
+        console.error('下载管理器引用不可用');
+        alert(`无法启动下载: 下载管理器未准备好`);
+      }
+    }, 100); // 短暂延迟确保下载管理器已渲染
   };
 
   const getCategoryTitle = () => {
@@ -248,7 +258,7 @@ const App = () => {
     }
 
     if (isDownloadManagerVisible) {
-      return <DownloadManager ref={downloadManagerRef} theme={theme} />;
+      return <SimpleDownloadManager ref={downloadManagerRef} theme={theme} />;
     }
 
     if (loading) {
@@ -308,6 +318,13 @@ const App = () => {
           {renderContent()}
         </ContentArea>
       </MainContent>
+      
+      {/* 全局下载管理器组件，处理后台下载任务 */}
+      <TauriDownloader 
+        onDownloadStart={(download) => console.log('下载开始:', download.name)}
+        onDownloadComplete={(download) => console.log('下载完成:', download.name)}
+        onDownloadError={(download, error) => console.error('下载错误:', download.name, error)}
+      />
     </AppContainer>
   );
 };
