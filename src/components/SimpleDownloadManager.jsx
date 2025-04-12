@@ -24,10 +24,12 @@ const Title = styled.div`
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
 `;
 
-const DownloadList = styled.div`
+const LogContainer = styled.div`
   max-height: 600px;
   overflow-y: auto;
   padding: 16px;
+  font-family: monospace;
+  background-color: ${props => props.theme === 'dark' ? '#1a1a1a' : '#f0f0f0'};
 `;
 
 const EmptyState = styled.div`
@@ -37,95 +39,97 @@ const EmptyState = styled.div`
   font-size: 14px;
 `;
 
-const DownloadItem = styled.div`
-  padding: 12px;
-  border-radius: 6px;
-  background-color: ${props => props.theme === 'dark' ? '#1d1d1f' : '#f5f5f7'};
-  margin-bottom: 8px;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
-const DownloadHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-`;
-
-const DownloadName = styled.div`
-  font-size: 14px;
-  font-weight: 500;
-  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-`;
-
-const DownloadStatus = styled.div`
-  font-size: 12px;
+const LogEntry = styled.div`
+  padding: 4px 0;
+  font-size: 13px;
+  border-bottom: 1px solid ${props => props.theme === 'dark' ? '#333' : '#e0e0e0'};
   color: ${props => {
-    switch (props.status) {
-      case 'completed': return '#34C759';
+    switch (props.type) {
+      case 'info': return props.theme === 'dark' ? '#4CADEB' : '#0066CC';
+      case 'success': return '#34C759';
       case 'error': return '#FF3B30';
-      default: return props.theme === 'dark' ? '#999' : '#666';
+      case 'warning': return '#FFCC00';
+      default: return props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f';
     }
   }};
 `;
 
+const Timestamp = styled.span`
+  color: ${props => props.theme === 'dark' ? '#777' : '#999'};
+  margin-right: 8px;
+`;
+
+const ButtonContainer = styled.div`
+  display: flex;
+  padding: 8px 16px;
+  justify-content: space-between;
+  border-top: 1px solid ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'};
+`;
+
 const Button = styled.button`
-  padding: 4px 8px;
+  padding: 6px 12px;
   border-radius: 4px;
   border: none;
   font-size: 12px;
   cursor: pointer;
   background-color: ${props => props.variant === 'danger' ? '#FF3B30' : '#0066CC'};
   color: white;
-  margin-top: 8px;
   
   &:hover {
     opacity: 0.8;
   }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 `;
 
+const formatTime = (date) => {
+  return date.toLocaleTimeString('zh-CN', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+};
+
 const SimpleDownloadManager = forwardRef(({ theme }, ref) => {
-  const [downloads, setDownloads] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [activeDownloads, setActiveDownloads] = useState([]);
+  const logContainerRef = React.useRef(null);
+  
+  // 滚动到日志底部
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [logs]);
+  
+  // 添加日志条目
+  const addLogEntry = (message, type = 'info') => {
+    const timestamp = new Date();
+    setLogs(prev => [...prev, { id: Date.now(), message, type, timestamp }]);
+  };
   
   // 设置下载事件监听器
   useEffect(() => {
     // 下载开始事件
     const handleDownloadStart = (download) => {
-      console.log('下载开始:', download.name);
-      
-      // 查找是否已存在该下载
-      const existingDownload = downloads.find(d => d.id === download.id);
-      if (existingDownload) {
-        // 更新现有的下载状态
-        setDownloads(prev => prev.map(d => 
-          d.id === download.id ? { ...d, status: 'downloading' } : d
-        ));
-      }
+      addLogEntry(`开始下载: ${download.name}`, 'info');
+      setActiveDownloads(prev => [...prev, download.id]);
     };
     
     // 下载完成事件
     const handleDownloadComplete = (download) => {
-      console.log('下载完成:', download.name);
-      
-      setDownloads(prev => prev.map(d => 
-        d.id === download.id ? { ...d, status: 'completed' } : d
-      ));
+      addLogEntry(`下载完成: ${download.name}`, 'success');
+      setActiveDownloads(prev => prev.filter(id => id !== download.id));
     };
     
     // 下载错误事件
     const handleDownloadError = (data) => {
-      console.error('下载错误:', data.download.name, data.error);
-      
-      setDownloads(prev => prev.map(d => 
-        d.id === data.download.id ? { 
-          ...d, 
-          status: 'error', 
-          error: data.error?.message || '下载失败' 
-        } : d
-      ));
+      addLogEntry(`下载失败: ${data.download.name} - ${data.error?.message || '未知错误'}`, 'error');
+      setActiveDownloads(prev => prev.filter(id => id !== data.download.id));
     };
     
     // 添加事件监听器
@@ -133,97 +137,76 @@ const SimpleDownloadManager = forwardRef(({ theme }, ref) => {
     TauriDownloaderUtil.addDownloadListener('onComplete', handleDownloadComplete);
     TauriDownloaderUtil.addDownloadListener('onError', handleDownloadError);
     
+    // 初始化日志
+    addLogEntry('下载日志初始化完成', 'info');
+    
     // 清理事件监听器
     return () => {
       TauriDownloaderUtil.removeDownloadListener('onStart', handleDownloadStart);
       TauriDownloaderUtil.removeDownloadListener('onComplete', handleDownloadComplete);
       TauriDownloaderUtil.removeDownloadListener('onError', handleDownloadError);
     };
-  }, [downloads]);
+  }, []);
   
   useImperativeHandle(ref, () => ({
     startDownload: async (app) => {
-      console.log('开始下载应用:', app.name, app.downloadUrl);
-      
-      // 创建一个下载记录
-      const downloadId = Date.now();
-      const newDownload = {
-        id: downloadId,
-        name: app.name,
-        url: app.downloadUrl,
-        status: 'starting',
-        error: null
-      };
-      
-      setDownloads(prev => [...prev, newDownload]);
+      addLogEntry(`准备下载应用: ${app.name}`, 'info');
       
       try {
+        // 检查下载URL
+        if (!app.downloadUrl) {
+          throw new Error('下载链接为空');
+        }
+        
+        addLogEntry(`解析下载链接: ${app.downloadUrl}`, 'info');
+        
         // 使用 TauriDownloaderUtil 进行下载
-        console.log('使用Tauri WebView下载:', app.name);
+        addLogEntry(`启动Tauri WebView下载: ${app.name}`, 'info');
         TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
       } catch (error) {
-        console.error('下载错误:', error);
-        setDownloads(prev => prev.map(d => 
-          d.id === downloadId ? { ...d, status: 'error', error: error.message } : d
-        ));
+        addLogEntry(`下载初始化失败: ${error.message}`, 'error');
       }
     }
   }));
 
-  const removeDownload = (downloadId) => {
-    setDownloads(prev => prev.filter(d => d.id !== downloadId));
-  };
-
-  const retryDownload = (download) => {
-    ref.current.startDownload({ name: download.name, downloadUrl: download.url });
-    removeDownload(download.id);
+  const clearLogs = () => {
+    setLogs([]);
+    addLogEntry('日志已清空', 'info');
   };
 
   return (
     <Container theme={theme}>
       <Header theme={theme}>
-        <Title theme={theme}>下载管理器 ({downloads.length})</Title>
+        <Title theme={theme}>下载日志 {activeDownloads.length > 0 ? `(${activeDownloads.length} 个下载进行中)` : ''}</Title>
       </Header>
       
-      <DownloadList>
-        {downloads.length === 0 ? (
+      <LogContainer theme={theme} ref={logContainerRef}>
+        {logs.length === 0 ? (
           <EmptyState theme={theme}>
-            暂无下载任务
+            暂无下载日志
           </EmptyState>
         ) : (
-          downloads.map(download => (
-            <DownloadItem key={download.id} theme={theme}>
-              <DownloadHeader>
-                <DownloadName theme={theme}>{download.name}</DownloadName>
-                <DownloadStatus theme={theme} status={download.status}>
-                  {download.status === 'starting' ? '准备中' :
-                   download.status === 'downloading' ? '下载中' :
-                   download.status === 'completed' ? '下载完成' :
-                   '下载失败'}
-                </DownloadStatus>
-              </DownloadHeader>
-              
-              {download.status === 'error' && (
-                <>
-                  <div style={{ color: '#FF3B30', fontSize: '12px', marginBottom: '8px' }}>
-                    {download.error}
-                  </div>
-                  <Button onClick={() => retryDownload(download)}>
-                    重试
-                  </Button>
-                </>
-              )}
-              
-              <Button 
-                variant={download.status === 'error' ? 'danger' : undefined} 
-                onClick={() => removeDownload(download.id)}
-              >
-                {download.status === 'error' ? '删除' : '关闭'}
-              </Button>
-            </DownloadItem>
+          logs.map(log => (
+            <LogEntry key={log.id} type={log.type} theme={theme}>
+              <Timestamp theme={theme}>[{formatTime(log.timestamp)}]</Timestamp>
+              {log.message}
+            </LogEntry>
           ))
         )}
-      </DownloadList>
+      </LogContainer>
+      
+      <ButtonContainer theme={theme}>
+        <Button 
+          onClick={clearLogs} 
+          variant="secondary"
+          disabled={logs.length === 0}
+        >
+          清空日志
+        </Button>
+        <span style={{ color: theme === 'dark' ? '#999' : '#666', fontSize: '12px' }}>
+          {activeDownloads.length > 0 ? `${activeDownloads.length} 个下载进行中` : ''}
+        </span>
+      </ButtonContainer>
     </Container>
   );
 });

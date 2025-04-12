@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Settings from './components/Settings';
 import SourceManager from './components/SourceManager';
 import SimpleDownloadManager from './components/SimpleDownloadManager';
-import { TauriDownloader } from './components/TauriDownloader';
+import AppDetails from './components/AppDetails';
+import { TauriDownloader, TauriDownloaderUtil } from './components/TauriDownloader';
 import { fetchAppsFromSources, fetchAppsByCategory } from './services/sourceService';
 
 const AppContainer = styled.div`
@@ -13,7 +14,27 @@ const AppContainer = styled.div`
   height: 100vh;
   background-color: ${props => props.theme === 'dark' ? '#1d1d1f' : '#f5f5f7'};
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-  transition: background-color 0.3s ease, color 0.3s ease;
+  background-image: ${props => props.backgroundImage ? `url(${props.backgroundImage})` : 'none'};
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  position: relative;
+  overflow: hidden;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: ${props => props.backgroundImage 
+      ? (props.theme === 'dark' ? `rgba(29, 29, 31, ${props.backgroundOpacity || 0.8})` : `rgba(245, 245, 247, ${props.backgroundOpacity || 0.8})`) 
+      : 'transparent'};
+    z-index: 0;
+    pointer-events: none;
+    will-change: opacity;
+  }
 `;
 
 const MainContent = styled.div`
@@ -21,6 +42,8 @@ const MainContent = styled.div`
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 `;
 
 const ContentArea = styled.div`
@@ -136,9 +159,121 @@ const DownloadButton = styled.button`
   }
 `;
 
+// 新增列表视图的样式组件
+const AppList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+`;
+
+const ListAppCard = styled.div`
+  background-color: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px ${props => props.theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)'};
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px ${props => props.theme === 'dark' ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.1)'};
+  }
+`;
+
+const ListAppIcon = styled(AppIcon)`
+  margin-right: 16px;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+`;
+
+const ListAppInfo = styled.div`
+  flex: 1;
+  display: flex;
+  align-items: center;
+`;
+
+const ListAppContent = styled.div`
+  flex: 1;
+  min-width: 0; // 确保文本可以正确截断
+`;
+
+const ListAppName = styled(AppName)`
+  margin-bottom: 2px;
+`;
+
+const ListAppDeveloper = styled(AppDeveloper)`
+  margin-bottom: 4px;
+`;
+
+const ListAppDescription = styled(AppDescription)`
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  font-size: 12px;
+`;
+
+const ListAppActions = styled.div`
+  display: flex;
+  align-items: center;
+  margin-left: 16px;
+  flex-shrink: 0;
+`;
+
+const HeaderContainer = styled.header`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+`;
+
+const ViewControls = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const ViewButton = styled.button`
+  background-color: ${props => props.active ? '#f5f5f7' : 'transparent'};
+  border: none;
+  border-radius: 4px;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &:hover {
+    background-color: ${props => props.active ? '#f5f5f7' : '#f5f5f710'};
+  }
+
+  svg {
+    width: 16px;
+    height: 16px;
+    fill: #1d1d1f;
+  }
+`;
+
 const App = () => {
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'light';
+  });
+  const [backgroundImage, setBackgroundImage] = useState(() => {
+    return localStorage.getItem('backgroundImage') || '';
+  });
+  const [backgroundOpacity, setBackgroundOpacity] = useState(() => {
+    return parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
+  });
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('viewMode') || 'grid';
   });
   const [currentCategory, setCurrentCategory] = useState('dev-tools');
   const [apps, setApps] = useState([]);
@@ -146,11 +281,41 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDownloadManagerVisible, setIsDownloadManagerVisible] = useState(false);
+  const [selectedApp, setSelectedApp] = useState(null);
   const downloadManagerRef = useRef(null);
+  
+  // 使用防抖，避免频繁更新localStorage
+  const debounceTimeoutRef = useRef(null);
+  
+  // 节流保存 - 只有当值真正改变时才执行存储
+  const saveToLocalStorage = useCallback((key, value, prevValue) => {
+    if (value !== prevValue) {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+      
+      debounceTimeoutRef.current = setTimeout(() => {
+        localStorage.setItem(key, typeof value === 'string' ? value : value.toString());
+      }, 50); // 50ms的防抖延迟
+    }
+  }, []);
+
+  // 使用useEffect带上之前的值进行比较
+  useEffect(() => {
+    saveToLocalStorage('theme', theme);
+  }, [theme, saveToLocalStorage]);
 
   useEffect(() => {
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+    saveToLocalStorage('backgroundImage', backgroundImage);
+  }, [backgroundImage, saveToLocalStorage]);
+
+  useEffect(() => {
+    saveToLocalStorage('backgroundOpacity', backgroundOpacity.toString());
+  }, [backgroundOpacity, saveToLocalStorage]);
+
+  useEffect(() => {
+    saveToLocalStorage('viewMode', viewMode);
+  }, [viewMode, saveToLocalStorage]);
 
   useEffect(() => {
     const handleStorageChange = (e) => {
@@ -163,7 +328,7 @@ const App = () => {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [currentCategory]);
 
-  const loadApps = async (category) => {
+  const loadApps = useCallback(async (category) => {
     setLoading(true);
     try {
       let appsList = [];
@@ -181,7 +346,7 @@ const App = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (['dev-tools', 'software', 'games', 'ai-models'].includes(currentCategory)) {
@@ -189,7 +354,7 @@ const App = () => {
     }
   }, [currentCategory]);
 
-  const handleSearch = (term) => {
+  const handleSearch = useCallback((term) => {
     setSearchTerm(term);
     if (!term.trim()) {
       setFilteredApps(apps);
@@ -202,55 +367,201 @@ const App = () => {
     });
 
     setFilteredApps(searchResults);
+  }, [apps]);
+
+  const handleAppClick = (app) => {
+    setSelectedApp(app);
   };
 
-  const handleCategorySelect = (category) => {
+  const handleBackToList = useCallback(() => {
+    setSelectedApp(null);
+  }, []);
+
+  const handleCategorySelect = useCallback((category) => {
     setCurrentCategory(category);
     setSearchTerm('');
     setIsDownloadManagerVisible(false);
-  };
+    setSelectedApp(null);
+  }, []);
 
-  const handleThemeChange = (newTheme) => {
-    setTheme(newTheme);
-  };
+  // 处理主题切换 - 优化为useCallback
+  const handleThemeChange = useCallback((newTheme) => {
+    if (newTheme !== theme) {
+      setTheme(newTheme);
+    }
+  }, [theme]);
 
-  const handleToggleDownloadManager = () => {
+  const handleToggleDownloadManager = useCallback(() => {
     setIsDownloadManagerVisible(!isDownloadManagerVisible);
-  };
+  }, [isDownloadManagerVisible]);
 
   const handleDownload = (app) => {
-    // 在下载前显示下载管理器
-    setIsDownloadManagerVisible(true);
-    
-    // 延迟一下，确保下载管理器已经渲染并且引用可用
-    setTimeout(() => {
+    try {
+      // 首先尝试使用下载管理器引用
       if (downloadManagerRef.current) {
+        console.log('使用下载管理器引用启动下载');
         downloadManagerRef.current.startDownload({
           name: app.name,
           downloadUrl: app.downloadUrl
         });
       } else {
-        console.error('下载管理器引用不可用');
-        alert(`无法启动下载: 下载管理器未准备好`);
+        // 如果引用不可用，直接使用TauriDownloaderUtil
+        console.log('下载管理器引用不可用，使用备用方法');
+        TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
       }
-    }, 100); // 短暂延迟确保下载管理器已渲染
-  };
-
-  const getCategoryTitle = () => {
-    switch (currentCategory) {
-      case 'dev-tools': return '所有应用';
-      case 'software': return '软件';
-      case 'games': return '游戏';
-      case 'ai-models': return 'AI大模型';
-      case 'settings': return '设置';
-      case 'sources': return '软件源';
-      default: return isDownloadManagerVisible ? '下载管理' : '';
+      
+      // 可以添加一个小提示，让用户知道下载已开始
+      const toast = document.createElement('div');
+      toast.style.position = 'fixed';
+      toast.style.bottom = '20px';
+      toast.style.right = '20px';
+      toast.style.padding = '10px 20px';
+      toast.style.backgroundColor = '#0066CC';
+      toast.style.color = 'white';
+      toast.style.borderRadius = '4px';
+      toast.style.zIndex = '9999';
+      toast.style.transition = 'opacity 0.5s ease';
+      toast.textContent = `正在下载: ${app.name}`;
+      
+      document.body.appendChild(toast);
+      
+      // 3秒后消失
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+          document.body.removeChild(toast);
+        }, 500);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('下载启动失败:', error);
+      alert(`下载 ${app.name} 失败: ${error.message || '未知错误'}`);
     }
   };
 
-  const renderContent = () => {
+  // 处理背景图片变更 - 优化为useCallback
+  const handleBackgroundImageChange = useCallback((imageUrl, opacity) => {
+    // 如果图片URL变化才设置
+    if (imageUrl !== backgroundImage) {
+      setBackgroundImage(imageUrl);
+    }
+    
+    // 如果提供了透明度值，并且与当前值不同，才更新透明度
+    if (opacity !== undefined && Math.abs(opacity - backgroundOpacity) > 0.01) {
+      setBackgroundOpacity(opacity);
+    }
+  }, [backgroundImage, backgroundOpacity]);
+
+  // 使用useCallback优化handleViewModeChange函数
+  const handleViewModeChange = useCallback((mode) => {
+    setViewMode(mode);
+    localStorage.setItem('viewMode', mode);
+  }, []);
+
+  // 使用useEffect保存视图模式到localStorage
+  useEffect(() => {
+    localStorage.setItem('viewMode', viewMode);
+  }, [viewMode]);
+
+  // 使用useMemo缓存设置组件
+  const settingsComponent = useMemo(() => {
     if (currentCategory === 'settings') {
-      return <Settings theme={theme} onThemeChange={handleThemeChange} />;
+      return (
+        <Settings 
+          theme={theme} 
+          language="zh-CN"
+          viewMode={viewMode}
+          onThemeChange={handleThemeChange}
+          onLanguageChange={() => {}}
+          onViewModeChange={handleViewModeChange}
+          backgroundImage={backgroundImage}
+          onBackgroundImageChange={handleBackgroundImageChange}
+        />
+      );
+    }
+    return null;
+  }, [currentCategory, theme, viewMode, backgroundImage, handleThemeChange, handleViewModeChange, handleBackgroundImageChange]);
+
+  // 渲染网格视图
+  const renderGridView = useCallback(() => {
+    return (
+      <AppGrid>
+        {filteredApps.map(app => (
+          <AppCard 
+            key={app.id} 
+            theme={theme}
+            onClick={() => handleAppClick(app)}
+          >
+            <AppHeader>
+              <AppIcon bgColor={app.iconBgColor}>
+                <img src={app.icon} alt={app.name} />
+              </AppIcon>
+              <AppInfo>
+                <AppName>{app.name}</AppName>
+                <AppDeveloper theme={theme}>{app.developer || '未知开发者'}</AppDeveloper>
+              </AppInfo>
+            </AppHeader>
+            <AppDescription theme={theme}>{app.description}</AppDescription>
+            <AppFooter>
+              <AppPrice theme={theme}>{app.price === 0 ? '免费' : `￥${app.price}`}</AppPrice>
+              <DownloadButton 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownload(app);
+                }}
+              >
+                下载
+              </DownloadButton>
+            </AppFooter>
+          </AppCard>
+        ))}
+      </AppGrid>
+    );
+  }, [filteredApps, theme, handleAppClick, handleDownload]);
+
+  // 渲染列表视图
+  const renderListView = useCallback(() => {
+    return (
+      <AppList>
+        {filteredApps.map(app => (
+          <ListAppCard 
+            key={app.id} 
+            theme={theme}
+            onClick={() => handleAppClick(app)}
+          >
+            <ListAppIcon bgColor={app.iconBgColor}>
+              <img src={app.icon} alt={app.name} />
+            </ListAppIcon>
+            <ListAppInfo>
+              <ListAppContent>
+                <ListAppName>{app.name}</ListAppName>
+                <ListAppDeveloper theme={theme}>{app.developer || '未知开发者'}</ListAppDeveloper>
+                <ListAppDescription theme={theme}>{app.description}</ListAppDescription>
+              </ListAppContent>
+              <ListAppActions>
+                <AppPrice theme={theme} style={{ marginRight: '12px' }}>
+                  {app.price === 0 ? '免费' : `￥${app.price}`}
+                </AppPrice>
+                <DownloadButton 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownload(app);
+                  }}
+                >
+                  下载
+                </DownloadButton>
+              </ListAppActions>
+            </ListAppInfo>
+          </ListAppCard>
+        ))}
+      </AppList>
+    );
+  }, [filteredApps, theme, handleAppClick, handleDownload]);
+
+  // 使用useMemo缓存内容区域
+  const renderContent = useCallback(() => {
+    if (currentCategory === 'settings') {
+      return settingsComponent;
     }
 
     if (currentCategory === 'sources') {
@@ -258,7 +569,22 @@ const App = () => {
     }
 
     if (isDownloadManagerVisible) {
-      return <SimpleDownloadManager ref={downloadManagerRef} theme={theme} />;
+      return (
+        <div className="download-log-container">
+          <SimpleDownloadManager ref={downloadManagerRef} theme={theme} />
+        </div>
+      );
+    }
+
+    if (selectedApp) {
+      return (
+        <AppDetails 
+          app={selectedApp} 
+          theme={theme} 
+          onBack={handleBackToList}
+          onDownload={handleDownload}
+        />
+      );
     }
 
     if (loading) {
@@ -273,46 +599,85 @@ const App = () => {
       return <div>没有找到应用，请添加软件源</div>;
     }
 
-    return (
-      <AppGrid>
-        {filteredApps.map(app => (
-          <AppCard key={app.id} theme={theme}>
-            <AppHeader>
-              <AppIcon bgColor={app.iconBgColor}>
-                <img src={app.icon} alt={app.name} />
-              </AppIcon>
-              <AppInfo>
-                <AppName>{app.name}</AppName>
-                <AppDeveloper theme={theme}>{app.developer || '未知开发者'}</AppDeveloper>
-              </AppInfo>
-            </AppHeader>
-            <AppDescription theme={theme}>{app.description}</AppDescription>
-            <AppFooter>
-              <AppPrice theme={theme}>{app.price === 0 ? '免费' : `￥${app.price}`}</AppPrice>
-              <DownloadButton onClick={() => handleDownload(app)}>
-                下载
-              </DownloadButton>
-            </AppFooter>
-          </AppCard>
-        ))}
-      </AppGrid>
-    );
+    // 根据视图模式选择不同的渲染方式
+    return viewMode === 'grid' ? renderGridView() : renderListView();
+  }, [
+    currentCategory, 
+    settingsComponent, 
+    theme, 
+    isDownloadManagerVisible, 
+    selectedApp, 
+    loading, 
+    filteredApps, 
+    searchTerm,
+    viewMode,
+    renderGridView,
+    renderListView,
+    handleBackToList,
+    handleDownload
+  ]);
+
+  // 使用useMemo缓存sidebar和header组件
+  const sidebar = useMemo(() => (
+    <Sidebar 
+      currentCategory={currentCategory}
+      onCategorySelect={handleCategorySelect}
+      theme={theme}
+      hasBackgroundImage={!!backgroundImage}
+      backgroundOpacity={backgroundOpacity}
+    />
+  ), [currentCategory, theme, backgroundImage, backgroundOpacity, handleCategorySelect]);
+
+  // 使用useMemo优化Header组件
+  const memoizedHeader = useMemo(() => (
+    <Header
+      theme={theme}
+      onSearch={handleSearch}
+      onToggleDownloadManager={handleToggleDownloadManager}
+      isDownloadManagerVisible={isDownloadManagerVisible}
+      hasBackgroundImage={!!backgroundImage}
+      backgroundOpacity={backgroundOpacity}
+      viewMode={viewMode}
+      onViewModeChange={handleViewModeChange}
+    />
+  ), [theme, handleSearch, handleToggleDownloadManager, isDownloadManagerVisible, backgroundImage, backgroundOpacity, viewMode, handleViewModeChange]);
+
+  const getCategoryTitle = () => {
+    if (selectedApp) {
+      return '应用详情';
+    }
+    
+    switch (currentCategory) {
+      case 'dev-tools': return '所有应用';
+      case 'software': return '软件';
+      case 'games': return '游戏';
+      case 'ai-models': return 'AI大模型';
+      case 'settings': return '设置';
+      case 'sources': return '软件源';
+      default: return isDownloadManagerVisible ? '下载日志' : '';
+    }
   };
 
+  // 确保下载管理器在组件挂载时初始化
+  useEffect(() => {
+    // 组件挂载时，确保下载管理器引用已准备好
+    const initDownloadManager = () => {
+      if (!downloadManagerRef.current && isDownloadManagerVisible) {
+        // 如果需要显示下载管理器，下一帧会创建它，确保引用可用
+        setTimeout(() => {
+          console.log('下载管理器初始化状态:', !!downloadManagerRef.current);
+        }, 100);
+      }
+    };
+    
+    initDownloadManager();
+  }, [isDownloadManagerVisible]);
+
   return (
-    <AppContainer theme={theme}>
-      <Sidebar 
-        currentCategory={currentCategory}
-        onCategorySelect={handleCategorySelect}
-        theme={theme}
-      />
+    <AppContainer theme={theme} backgroundImage={backgroundImage} backgroundOpacity={backgroundOpacity}>
+      {sidebar}
       <MainContent>
-        <Header 
-          theme={theme} 
-          onSearch={handleSearch}
-          onToggleDownloadManager={handleToggleDownloadManager}
-          isDownloadManagerVisible={isDownloadManagerVisible}
-        />
+        {memoizedHeader}
         <ContentArea>
           <h2>{getCategoryTitle()}</h2>
           {renderContent()}

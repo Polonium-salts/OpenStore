@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import JsonEditor from './JsonEditor';
 
@@ -125,12 +125,76 @@ const Tab = styled.div`
   }
 `;
 
-const SourceManager = ({ theme }) => {
+const FileUploadContainer = styled.div`
+  background-color: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px ${props => props.theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)'};
+  border: 2px dashed ${props => props.theme === 'dark' ? '#3a3a3d' : '#d2d2d7'};
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  
+  &:hover, &.dragover {
+    border-color: #0066CC;
+    background-color: ${props => props.theme === 'dark' ? 'rgba(0, 102, 204, 0.1)' : 'rgba(0, 102, 204, 0.05)'};
+  }
+`;
+
+const FileUploadInput = styled.input`
+  display: none;
+`;
+
+const FileUploadText = styled.div`
+  text-align: center;
+  margin: 8px 0;
+  color: ${props => props.theme === 'dark' ? '#bbb' : '#666'};
+`;
+
+const FileUploadIcon = styled.div`
+  margin-bottom: 12px;
+  color: ${props => props.theme === 'dark' ? '#bbb' : '#666'};
+  font-size: 24px;
+`;
+
+const Divider = styled.div`
+  width: 100%;
+  height: 1px;
+  background-color: ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'};
+  margin: 20px 0;
+  position: relative;
+  
+  &::before {
+    content: 'OR';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
+    padding: 0 10px;
+    color: ${props => props.theme === 'dark' ? '#999' : '#666'};
+    font-size: 12px;
+  }
+`;
+
+const HintText = styled.div`
+  font-size: 12px;
+  color: ${props => props.theme === 'dark' ? '#999' : '#666'};
+  margin-top: 8px;
+`;
+
+const SourceManager = ({ theme, onSourcesChange }) => {
   const [sources, setSources] = useState([]);
   const [newSource, setNewSource] = useState({ name: '', url: '' });
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('sources');
   const [editorData, setEditorData] = useState([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     // 从本地存储加载软件源
@@ -152,6 +216,17 @@ const SourceManager = ({ theme }) => {
   // 验证软件源URL
   const validateSourceUrl = async (url) => {
     try {
+      // 检查并转换GitHub链接为raw链接
+      const githubRegex = /github\.com\/([^\/]+)\/([^\/]+)\/blob\/(main|master)\/(.+\.json)/i;
+      const match = url.match(githubRegex);
+      
+      if (match) {
+        // 将GitHub普通链接转换为raw链接
+        const rawUrl = `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${match[3]}/${match[4]}`;
+        console.log('已将GitHub链接转换为raw链接:', rawUrl);
+        url = rawUrl;
+      }
+
       const response = await fetch(url);
       const data = await response.json();
       
@@ -202,6 +277,10 @@ const SourceManager = ({ theme }) => {
     }
 
     try {
+      // 检查是否为GitHub链接并可能需要转换
+      const isGithubUrl = /github\.com\/([^\/]+)\/([^\/]+)\/blob\/(main|master)\/(.+\.json)/i.test(newSource.url);
+      const originalUrl = isGithubUrl ? newSource.url : null;
+      
       const validation = await validateSourceUrl(newSource.url);
       
       let sourceUrl = newSource.url;
@@ -220,7 +299,7 @@ const SourceManager = ({ theme }) => {
           url: sourceUrl,
           data: validation.processedData,
           createdAt: new Date().toISOString(),
-          originalUrl: newSource.url
+          originalUrl: originalUrl || newSource.url
         };
         
         blobSourceId = newBlobSource.id;
@@ -231,14 +310,21 @@ const SourceManager = ({ theme }) => {
         id: Date.now(),
         name: newSource.name,
         url: sourceUrl,
-        originalUrl: isLocalProcessed ? newSource.url : null,
+        originalUrl: isLocalProcessed ? (originalUrl || newSource.url) : originalUrl,
         enabled: true,
         isLocalBlob: isLocalProcessed,
-        blobSourceId: blobSourceId
+        blobSourceId: blobSourceId,
+        isGithubConverted: isGithubUrl
       }];
       
       saveSources(updatedSources);
       setNewSource({ name: '', url: '' });
+      
+      // 如果是GitHub链接，显示转换提示
+      if (isGithubUrl) {
+        setError('已自动转换为GitHub raw链接，软件源添加成功！');
+        setTimeout(() => setError(''), 3000);
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -341,6 +427,123 @@ const SourceManager = ({ theme }) => {
     }
   };
 
+  // 处理文件上传
+  const handleFileUpload = async (file) => {
+    if (!file) return;
+    
+    // 验证文件类型
+    if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
+      setError('请上传有效的 JSON 文件');
+      return;
+    }
+    
+    try {
+      // 读取文件内容
+      const reader = new FileReader();
+      
+      reader.onload = async (e) => {
+        try {
+          const content = e.target.result;
+          const data = JSON.parse(content);
+          
+          // 验证JSON结构
+          if (!Array.isArray(data) || !data.every(app => 
+            app.id && app.name && app.icon && app.description && 
+            typeof app.price !== 'undefined' && app.downloadUrl
+          )) {
+            setError('JSON文件格式无效，请确保包含所有必需字段');
+            return;
+          }
+          
+          // 处理数据
+          const processedData = data.map(app => {
+            if (!app.category) {
+              return { ...app, category: 'software' };
+            }
+            return app;
+          });
+          
+          // 创建Blob对象
+          const blob = new Blob([JSON.stringify(processedData, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          
+          // 保存到本地存储
+          const blobSources = JSON.parse(localStorage.getItem('blobSources') || '[]');
+          const newBlobSource = {
+            id: Date.now(),
+            url,
+            data: processedData,
+            createdAt: new Date().toISOString(),
+            fileName: file.name
+          };
+          
+          localStorage.setItem('blobSources', JSON.stringify([...blobSources, newBlobSource]));
+          
+          // 添加新软件源
+          const sourceName = `上传的源: ${file.name.replace('.json', '')}`;
+          const updatedSources = [...sources, {
+            id: Date.now(),
+            name: sourceName,
+            url,
+            enabled: true,
+            isLocalBlob: true,
+            blobSourceId: newBlobSource.id
+          }];
+          
+          saveSources(updatedSources);
+          setError('');
+          
+          if (onSourcesChange) {
+            onSourcesChange();
+          }
+        } catch (err) {
+          setError('解析JSON文件失败: ' + err.message);
+        }
+      };
+      
+      reader.onerror = () => {
+        setError('读取文件失败');
+      };
+      
+      reader.readAsText(file);
+    } catch (err) {
+      setError('处理文件失败: ' + err.message);
+    }
+  };
+  
+  // 处理文件选择
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+  
+  // 处理拖拽事件
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+  
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+  
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+  
+  const handleFileUploadClick = () => {
+    fileInputRef.current.click();
+  };
+
   return (
     <Container theme={theme}>
       <Title>软件源管理</Title>
@@ -366,6 +569,28 @@ const SourceManager = ({ theme }) => {
       
       {activeTab === 'sources' && (
         <>
+          <FileUploadContainer 
+            theme={theme}
+            className={isDragging ? 'dragover' : ''}
+            onClick={handleFileUploadClick}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <FileUploadIcon>📂</FileUploadIcon>
+            <FileUploadText theme={theme}>
+              点击或拖拽 JSON 文件至此处上传软件源
+            </FileUploadText>
+            <FileUploadInput 
+              type="file" 
+              ref={fileInputRef}
+              accept=".json,application/json" 
+              onChange={handleFileSelect}
+            />
+          </FileUploadContainer>
+          
+          <Divider theme={theme} />
+          
           <AddSourceForm onSubmit={handleAddSource} theme={theme}>
             <FormGroup>
               <Label theme={theme}>软件源名称</Label>
@@ -387,6 +612,7 @@ const SourceManager = ({ theme }) => {
                 placeholder="输入软件源JSON文件URL"
                 theme={theme}
               />
+              <HintText theme={theme}>支持直接输入GitHub文件链接，系统会自动转换为原始内容链接</HintText>
             </FormGroup>
             
             <ButtonGroup>

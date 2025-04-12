@@ -13,6 +13,9 @@ const Title = styled.h3`
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 `;
 
 const JsonObjectList = styled.div`
@@ -24,15 +27,13 @@ const JsonObjectList = styled.div`
 const ArrayItemContainer = styled.div`
   border: 1px solid ${props => props.theme === 'dark' ? '#444' : '#e8e8ed'};
   border-radius: 6px;
-  padding: 12px;
+  padding: 12px 12px 0 12px;
   margin-bottom: 12px;
   position: relative;
 `;
 
 const ArrayControls = styled.div`
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
   gap: 8px;
 `;
 
@@ -40,7 +41,7 @@ const Button = styled.button`
   padding: 6px 12px;
   border-radius: 6px;
   border: none;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   background-color: ${props => {
     if (props.variant === 'primary') return '#0066CC';
@@ -53,20 +54,41 @@ const Button = styled.button`
   &:hover {
     opacity: 0.8;
   }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 `;
 
-const PropertyRow = styled.div`
+const AppHeader = styled.div`
   display: flex;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-  gap: 8px;
+  justify-content: space-between;
   align-items: center;
+  margin-bottom: 10px;
 `;
 
-const PropertyKey = styled.div`
+const AppTitle = styled.div`
   font-weight: 500;
-  width: 120px;
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
+`;
+
+const FormGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+`;
+
+const FormField = styled.div`
+  margin-bottom: 10px;
+`;
+
+const FieldLabel = styled.label`
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: ${props => props.theme === 'dark' ? '#aaa' : '#666'};
 `;
 
 const Input = styled.input`
@@ -75,8 +97,8 @@ const Input = styled.input`
   border: 1px solid ${props => props.theme === 'dark' ? '#444' : '#e8e8ed'};
   background-color: ${props => props.theme === 'dark' ? '#1d1d1f' : 'white'};
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-  flex: 1;
-  min-width: 200px;
+  width: 100%;
+  font-size: 13px;
   
   &:focus {
     outline: none;
@@ -90,6 +112,8 @@ const Select = styled.select`
   border: 1px solid ${props => props.theme === 'dark' ? '#444' : '#e8e8ed'};
   background-color: ${props => props.theme === 'dark' ? '#1d1d1f' : 'white'};
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
+  width: 100%;
+  font-size: 13px;
   
   &:focus {
     outline: none;
@@ -109,6 +133,12 @@ const JsonPreview = styled.pre`
   margin-top: 16px;
 `;
 
+const ToolBar = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+`;
+
 const DeleteButton = styled.button`
   background-color: transparent;
   border: none;
@@ -122,16 +152,11 @@ const DeleteButton = styled.button`
   }
 `;
 
-const ButtonGroup = styled.div`
-  display: flex;
-  gap: 8px;
-  margin-top: 16px;
-`;
-
 const ErrorMessage = styled.div`
   color: #FF3B30;
   font-size: 14px;
   margin-top: 8px;
+  margin-bottom: 8px;
 `;
 
 // 为软件源定义应用模板
@@ -152,6 +177,7 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
   const [jsonData, setJsonData] = useState(initialData);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   
   useEffect(() => {
     // 如果初始数据为空，添加一个空的应用对象
@@ -245,59 +271,133 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
     }
   };
 
+  // 解析下载链接并提取有用信息
+  const parseDownloadUrl = (downloadUrl) => {
+    try {
+      // 使用URL对象解析链接
+      const url = new URL(downloadUrl);
+      
+      // 从路径中获取文件名
+      let fileName = url.pathname.split('/').pop().split('?')[0];
+      if (!fileName) {
+        fileName = 'unknown_file';
+      }
+      
+      // 对URL解码以处理特殊字符
+      try {
+        fileName = decodeURIComponent(fileName);
+      } catch (e) {
+        // 解码失败，保持原始文件名
+        console.warn('文件名解码失败:', e);
+      }
+      
+      // 提取文件扩展名
+      const extension = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
+      
+      // 猜测文件类型
+      let fileType = 'unknown';
+      let category = 'software';
+      
+      if (['exe', 'msi', 'zip', 'rar', '7z', 'deb', 'rpm', 'dmg', 'pkg', 'appimage'].includes(extension)) {
+        fileType = 'software';
+        category = 'software';
+      } else if (['apk', 'ipa'].includes(extension)) {
+        fileType = 'mobile_app';
+        category = 'software';
+      } else if (['iso'].includes(extension)) {
+        fileType = 'system';
+        category = 'software';
+      } else if (['gguf', 'ggml', 'bin', 'safetensors', 'pt'].includes(extension)) {
+        fileType = 'ai_model';
+        category = 'ai-models';
+      } else if (['gba', 'gbc', 'nes', 'rom', 'n64', 'z64', 'sfc', 'smc'].includes(extension)) {
+        fileType = 'game_rom';
+        category = 'games';
+      } else if (['exe', 'msi'].includes(extension) && (fileName.toLowerCase().includes('game') || fileName.toLowerCase().includes('setup'))) {
+        fileType = 'game';
+        category = 'games';
+      }
+      
+      // 尝试从URL的路径部分提取可能的应用名称
+      let appName = fileName.replace(/\.[^/.]+$/, '')  // 移除扩展名
+                            .replace(/[-_.]/g, ' ')     // 替换连字符、下划线和点为空格
+                            .replace(/\s+/g, ' ')       // 替换多个空格为单个空格
+                            .trim();                    // 移除前后空格
+      
+      // 如果文件名包含版本号，尝试清理
+      appName = appName.replace(/\sv?[\d.]+(\s|$)/i, ' ').trim();
+      
+      // 尝试获取版本号
+      const versionMatch = fileName.match(/[vV]?(\d+\.\d+(\.\d+)?)/);
+      const version = versionMatch ? versionMatch[1] : '';
+      
+      // 生成多种备用图标URL选项
+      const iconUrls = [
+        `https://icon.horse/icon/${url.hostname}`,
+        `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=128`,
+        `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${url.hostname}&size=128`
+      ];
+      
+      // 返回解析结果
+      return {
+        fileName,
+        appName,
+        version,
+        domain: url.hostname,
+        iconUrl: iconUrls[0], // 主图标URL
+        iconUrlFallbacks: iconUrls, // 备用图标URL
+        fileType,
+        extension,
+        category
+      };
+    } catch (error) {
+      console.error('解析URL失败:', error);
+      return null;
+    }
+  };
+
   // 从下载链接自动获取软件信息
   const handleAutoFill = async (index, downloadUrl) => {
     try {
       setLoading(true);
       setError('');
 
-      // 尝试从下载链接获取软件信息
-      const response = await fetch(downloadUrl, {
-        method: 'HEAD'
-      });
-
-      if (!response.ok) {
-        throw new Error('无法访问下载链接');
+      // 检查URL格式
+      if (!downloadUrl || !downloadUrl.trim()) {
+        throw new Error('下载链接不能为空');
       }
-
-      // 从响应头中获取文件名和大小信息
-      const contentDisposition = response.headers.get('content-disposition');
-      const contentLength = response.headers.get('content-length');
       
-      let fileName = '';
-      if (contentDisposition) {
-        const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
-        if (matches && matches[1]) {
-          fileName = matches[1].replace(/['"]/g, '');
-        }
+      // 确保URL以http或https开头
+      if (!downloadUrl.match(/^https?:\/\//i)) {
+        // 尝试修复URL
+        downloadUrl = 'https://' + downloadUrl.replace(/^:?\/+/, '');
       }
 
-      if (!fileName) {
-        // 如果响应头中没有文件名，从URL中提取
-        fileName = downloadUrl.split('/').pop().split('?')[0];
+      // 尝试解析下载链接
+      const urlInfo = parseDownloadUrl(downloadUrl);
+      if (!urlInfo) {
+        throw new Error('无法解析下载链接，请确保链接格式正确');
       }
-
-      // 从文件名中提取可能的版本号
-      const versionMatch = fileName.match(/[vV]?(\d+\.\d+(\.\d+)?)/);
-      const version = versionMatch ? versionMatch[1] : '';
-
+      
       // 更新应用信息
       const newData = [...jsonData];
       newData[index] = {
         ...newData[index],
         downloadUrl,
-        name: fileName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '),
-        version,
+        name: urlInfo.appName || '未命名应用',
+        version: urlInfo.version || '',
         id: Date.now(),
-        description: `${fileName} - 大小: ${formatFileSize(contentLength)}`,
-        icon: `https://icon.horse/icon/${new URL(downloadUrl).hostname}`,
-        price: 0
+        description: `${urlInfo.fileName} - 从 ${urlInfo.domain} 下载`,
+        icon: urlInfo.iconUrl,
+        price: 0,
+        category: urlInfo.category
       };
 
       setJsonData(newData);
       setError('');
     } catch (err) {
       setError('自动填写失败: ' + err.message);
+      console.error('自动填写错误详情:', err);
     } finally {
       setLoading(false);
     }
@@ -318,18 +418,51 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
     return `${size.toFixed(2)} ${units[unitIndex]}`;
   };
 
+  // 显示图标加载状态提示
+  const renderIconStatus = (loading) => {
+    return (
+      <div 
+        style={{ 
+          position: 'fixed', 
+          bottom: '20px', 
+          right: '20px',
+          padding: '8px 16px',
+          background: loading ? '#0066CC' : '#34C759',
+          color: 'white',
+          borderRadius: '4px',
+          fontSize: '13px',
+          transition: 'opacity 0.3s',
+          opacity: loading ? 1 : 0,
+          pointerEvents: 'none'
+        }}
+      >
+        {loading ? '处理中...' : '填写完成'}
+      </div>
+    );
+  }
+
   return (
     <EditorContainer theme={theme}>
-      <Title>{title}</Title>
+      <Title>
+        {title}
+        <ArrayControls>
+          <Button 
+            variant="primary" 
+            onClick={handleAddApp}
+            disabled={loading}
+          >
+            添加应用
+          </Button>
+          <Button 
+            onClick={() => setShowPreview(!showPreview)}
+            disabled={loading}
+          >
+            {showPreview ? '隐藏预览' : '显示预览'}
+          </Button>
+        </ArrayControls>
+      </Title>
       
-      <ArrayControls>
-        <Button 
-          variant="primary" 
-          onClick={handleAddApp}
-          disabled={loading}
-        >
-          添加应用
-        </Button>
+      <ToolBar>
         <Button 
           onClick={handleExport}
           disabled={loading}
@@ -342,69 +475,126 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
         >
           粘贴JSON (Ctrl+V)
         </Button>
-      </ArrayControls>
+      </ToolBar>
       
       {error && <ErrorMessage>{error}</ErrorMessage>}
+      
+      {renderIconStatus(loading)}
       
       <JsonObjectList>
         {jsonData.map((app, index) => (
           <ArrayItemContainer key={index} theme={theme}>
-            <div style={{ position: 'absolute', top: '10px', right: '10px' }}>
+            <AppHeader>
+              <AppTitle theme={theme}>
+                {app.name || `应用 #${index + 1}`}
+              </AppTitle>
               <DeleteButton onClick={() => handleDeleteApp(index)} title="删除">×</DeleteButton>
-            </div>
+            </AppHeader>
             
-            <PropertyRow>
-              <PropertyKey theme={theme}>下载链接</PropertyKey>
-              <Input
-                type="url"
-                value={app.downloadUrl}
-                onChange={(e) => handleUpdateProperty(index, 'downloadUrl', e.target.value)}
-                theme={theme}
-                placeholder="软件下载链接"
-              />
-              <Button
-                onClick={() => handleAutoFill(index, app.downloadUrl)}
-                disabled={!app.downloadUrl || loading}
-                variant="success"
-              >
-                自动填写
-              </Button>
-            </PropertyRow>
+            <FormGrid>
+              <FormField>
+                <FieldLabel theme={theme}>下载链接</FieldLabel>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <Input
+                    type="url"
+                    value={app.downloadUrl}
+                    onChange={(e) => handleUpdateProperty(index, 'downloadUrl', e.target.value)}
+                    theme={theme}
+                    placeholder="软件下载链接"
+                  />
+                  <Button
+                    onClick={() => handleAutoFill(index, app.downloadUrl)}
+                    disabled={!app.downloadUrl || loading}
+                    variant="success"
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    自动
+                  </Button>
+                </div>
+              </FormField>
 
-            <PropertyRow>
-              <PropertyKey theme={theme}>ID</PropertyKey>
-              <Input
-                type="number"
-                value={app.id}
-                onChange={(e) => handleUpdateProperty(index, 'id', e.target.value)}
-                theme={theme}
-              />
-            </PropertyRow>
+              <FormField>
+                <FieldLabel theme={theme}>应用ID</FieldLabel>
+                <Input
+                  type="number"
+                  value={app.id}
+                  onChange={(e) => handleUpdateProperty(index, 'id', e.target.value)}
+                  theme={theme}
+                  placeholder="ID"
+                />
+              </FormField>
+              
+              <FormField>
+                <FieldLabel theme={theme}>名称</FieldLabel>
+                <Input
+                  type="text"
+                  value={app.name}
+                  onChange={(e) => handleUpdateProperty(index, 'name', e.target.value)}
+                  theme={theme}
+                  placeholder="应用名称"
+                />
+              </FormField>
+              
+              <FormField>
+                <FieldLabel theme={theme}>图标URL</FieldLabel>
+                <Input
+                  type="text"
+                  value={app.icon}
+                  onChange={(e) => handleUpdateProperty(index, 'icon', e.target.value)}
+                  theme={theme}
+                  placeholder="图标URL地址"
+                />
+              </FormField>
+              
+              <FormField>
+                <FieldLabel theme={theme}>价格</FieldLabel>
+                <Input
+                  type="number"
+                  value={app.price}
+                  onChange={(e) => handleUpdateProperty(index, 'price', e.target.value)}
+                  theme={theme}
+                  placeholder="0"
+                />
+              </FormField>
+              
+              <FormField>
+                <FieldLabel theme={theme}>分类</FieldLabel>
+                <Select
+                  value={app.category || 'software'}
+                  onChange={(e) => handleUpdateProperty(index, 'category', e.target.value)}
+                  theme={theme}
+                >
+                  <option value="software">软件</option>
+                  <option value="games">游戏</option>
+                  <option value="ai-models">AI大模型</option>
+                </Select>
+              </FormField>
+              
+              <FormField>
+                <FieldLabel theme={theme}>版本</FieldLabel>
+                <Input
+                  type="text"
+                  value={app.version || ''}
+                  onChange={(e) => handleUpdateProperty(index, 'version', e.target.value)}
+                  theme={theme}
+                  placeholder="应用版本号"
+                />
+              </FormField>
+              
+              <FormField>
+                <FieldLabel theme={theme}>开发者</FieldLabel>
+                <Input
+                  type="text"
+                  value={app.developer || ''}
+                  onChange={(e) => handleUpdateProperty(index, 'developer', e.target.value)}
+                  theme={theme}
+                  placeholder="开发者名称"
+                />
+              </FormField>
+            </FormGrid>
             
-            <PropertyRow>
-              <PropertyKey theme={theme}>名称</PropertyKey>
-              <Input
-                type="text"
-                value={app.name}
-                onChange={(e) => handleUpdateProperty(index, 'name', e.target.value)}
-                theme={theme}
-                placeholder="应用名称"
-              />
-            </PropertyRow>
-            
-            <PropertyRow>
-              <PropertyKey theme={theme}>图标URL</PropertyKey>
-              <Input
-                type="text"
-                value={app.icon}
-                onChange={(e) => handleUpdateProperty(index, 'icon', e.target.value)}
-                theme={theme}
-                placeholder="图标URL地址"
-              />
-            </PropertyRow>
-            
-            <PropertyRow>
-              <PropertyKey theme={theme}>描述</PropertyKey>
+            <FormField>
+              <FieldLabel theme={theme}>描述</FieldLabel>
               <Input
                 type="text"
                 value={app.description}
@@ -412,43 +602,10 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
                 theme={theme}
                 placeholder="应用描述"
               />
-            </PropertyRow>
+            </FormField>
             
-            <PropertyRow>
-              <PropertyKey theme={theme}>价格</PropertyKey>
-              <Input
-                type="number"
-                value={app.price}
-                onChange={(e) => handleUpdateProperty(index, 'price', e.target.value)}
-                theme={theme}
-                placeholder="0"
-              />
-            </PropertyRow>
-            
-            <PropertyRow>
-              <PropertyKey theme={theme}>版本</PropertyKey>
-              <Input
-                type="text"
-                value={app.version || ''}
-                onChange={(e) => handleUpdateProperty(index, 'version', e.target.value)}
-                theme={theme}
-                placeholder="应用版本号"
-              />
-            </PropertyRow>
-            
-            <PropertyRow>
-              <PropertyKey theme={theme}>开发者</PropertyKey>
-              <Input
-                type="text"
-                value={app.developer || ''}
-                onChange={(e) => handleUpdateProperty(index, 'developer', e.target.value)}
-                theme={theme}
-                placeholder="开发者名称"
-              />
-            </PropertyRow>
-            
-            <PropertyRow>
-              <PropertyKey theme={theme}>截图URL</PropertyKey>
+            <FormField>
+              <FieldLabel theme={theme}>截图URL</FieldLabel>
               <Input
                 type="text"
                 value={app.screenshot || ''}
@@ -456,27 +613,16 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
                 theme={theme}
                 placeholder="截图URL地址"
               />
-            </PropertyRow>
-            
-            <PropertyRow>
-              <PropertyKey theme={theme}>分类</PropertyKey>
-              <Select
-                value={app.category || 'software'}
-                onChange={(e) => handleUpdateProperty(index, 'category', e.target.value)}
-                theme={theme}
-              >
-                <option value="software">软件</option>
-                <option value="games">游戏</option>
-                <option value="ai-models">AI大模型</option>
-              </Select>
-            </PropertyRow>
+            </FormField>
           </ArrayItemContainer>
         ))}
       </JsonObjectList>
       
-      <JsonPreview theme={theme}>
-        {JSON.stringify(jsonData, null, 2)}
-      </JsonPreview>
+      {showPreview && (
+        <JsonPreview theme={theme}>
+          {JSON.stringify(jsonData, null, 2)}
+        </JsonPreview>
+      )}
     </EditorContainer>
   );
 };

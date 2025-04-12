@@ -3,7 +3,7 @@ import styled from 'styled-components';
 
 const Card = styled.div`
   display: flex;
-  flex-direction: column;
+  flex-direction: ${props => props.viewMode === 'list' ? 'row' : 'column'};
   border-radius: 8px;
   background-color: white;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.07);
@@ -19,10 +19,20 @@ const Card = styled.div`
 `;
 
 const AppImage = styled.div`
-  height: 0;
-  padding-bottom: 56.25%; /* 16:9 aspect ratio */
-  position: relative;
-  overflow: hidden;
+  ${props => props.viewMode === 'list' 
+    ? `
+      width: 120px;
+      min-width: 120px;
+      position: relative;
+      overflow: hidden;
+    `
+    : `
+      height: 0;
+      padding-bottom: 56.25%; /* 16:9 aspect ratio */
+      position: relative;
+      overflow: hidden;
+    `
+  }
   
   img {
     position: absolute;
@@ -35,13 +45,22 @@ const AppImage = styled.div`
 `;
 
 const AppIcon = styled.div`
-  width: 48px;
-  height: 48px;
+  width: ${props => props.viewMode === 'list' ? '36px' : '48px'};
+  height: ${props => props.viewMode === 'list' ? '36px' : '48px'};
   border-radius: 10px;
   background-color: ${props => props.bgColor || '#f5f5f7'};
   position: absolute;
-  bottom: -18px;
-  left: 10px;
+  ${props => props.viewMode === 'list' 
+    ? `
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    ` 
+    : `
+      bottom: -18px;
+      left: 10px;
+    `
+  }
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   overflow: hidden;
   
@@ -53,7 +72,7 @@ const AppIcon = styled.div`
 `;
 
 const AppInfo = styled.div`
-  padding: 24px 10px 10px;
+  padding: ${props => props.viewMode === 'list' ? '10px 16px' : '24px 10px 10px'};
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -78,7 +97,7 @@ const AppDescription = styled.p`
   margin: 0 0 8px 0;
   flex: 1;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: ${props => props.viewMode === 'list' ? '1' : '2'};
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -102,19 +121,19 @@ const GetButton = styled.button`
   }
 `;
 
-const AppCard = ({ app }) => {
+const AppCard = ({ app, viewMode = 'grid' }) => {
   return (
-    <Card>
-      <AppImage>
+    <Card viewMode={viewMode}>
+      <AppImage viewMode={viewMode}>
         <img src={app.screenshot} alt={`${app.name} screenshot`} />
-        <AppIcon bgColor={app.iconBgColor}>
+        <AppIcon viewMode={viewMode} bgColor={app.iconBgColor}>
           <img src={app.icon} alt={`${app.name} icon`} />
         </AppIcon>
       </AppImage>
-      <AppInfo>
+      <AppInfo viewMode={viewMode}>
         <AppName>{app.name}</AppName>
         <AppDeveloper>{app.developer}</AppDeveloper>
-        <AppDescription>{app.description}</AppDescription>
+        <AppDescription viewMode={viewMode}>{app.description}</AppDescription>
         <GetButton>{app.price === 0 ? '获取' : `¥${app.price.toFixed(2)}`}</GetButton>
       </AppInfo>
     </Card>

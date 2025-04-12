@@ -33,15 +33,30 @@ const Grid = styled.div`
   }
 `;
 
-const AppGrid = ({ title, apps }) => {
+const List = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+`;
+
+const AppGrid = ({ title, apps, viewMode = 'grid' }) => {
   return (
     <GridContainer>
       <SectionTitle>{title}</SectionTitle>
-      <Grid>
-        {apps.map((app, index) => (
-          <AppCard key={index} app={app} />
-        ))}
-      </Grid>
+      {viewMode === 'grid' ? (
+        <Grid>
+          {apps.map((app, index) => (
+            <AppCard key={index} app={app} viewMode={viewMode} />
+          ))}
+        </Grid>
+      ) : (
+        <List>
+          {apps.map((app, index) => (
+            <AppCard key={index} app={app} viewMode={viewMode} />
+          ))}
+        </List>
+      )}
     </GridContainer>
   );
 };

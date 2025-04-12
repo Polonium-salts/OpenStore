@@ -9,20 +9,55 @@ export const fetchAppsFromSources = async () => {
 
     const sources = JSON.parse(sourcesJson);
     const enabledSources = sources.filter(source => source.enabled);
+    
+    console.log('正在加载启用的软件源:', enabledSources.map(s => s.name));
 
     // 从每个启用的软件源获取应用列表
     const appsPromises = enabledSources.map(async source => {
       try {
         let apps;
+        
+        // 检查并处理Github URL
+        let sourceUrl = source.url;
+        
+        // 检查是否为GitHub链接但尚未转换为raw链接
+        if (sourceUrl.includes('github.com') && !sourceUrl.includes('raw.githubusercontent.com')) {
+          const githubRegex = /github\.com\/([^\/]+)\/([^\/]+)\/blob\/(main|master)\/(.+\.json)/i;
+          const match = sourceUrl.match(githubRegex);
+          
+          if (match) {
+            // 将GitHub普通链接转换为raw链接
+            sourceUrl = `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${match[3]}/${match[4]}`;
+            console.log(`自动转换GitHub链接: ${source.url} -> ${sourceUrl}`);
+          }
+        }
+        
         if (source.isLocalBlob && source.blobSourceId) {
           // 如果是本地源，从 localStorage 获取数据
+          console.log(`正在加载本地源: ${source.name} (ID: ${source.blobSourceId})`);
           const blobSources = JSON.parse(localStorage.getItem('blobSources') || '[]');
           const blobSource = blobSources.find(bs => bs.id === source.blobSourceId);
-          apps = blobSource ? blobSource.data : [];
+          
+          if (blobSource) {
+            console.log(`找到本地源数据: ${source.name}, 包含 ${blobSource.data ? blobSource.data.length : 0} 个应用`);
+            apps = blobSource.data || [];
+          } else {
+            console.error(`未找到本地源数据: ${source.name} (ID: ${source.blobSourceId})`);
+            apps = [];
+          }
         } else {
           // 如果是远程源，从 URL 获取数据
-          const response = await fetch(source.url);
-          apps = await response.json();
+          console.log(`正在从URL加载: ${sourceUrl}`);
+          const response = await fetch(sourceUrl);
+          const responseData = await response.json();
+          
+          if (Array.isArray(responseData)) {
+            console.log(`成功从 ${source.name} 加载了 ${responseData.length} 个应用`);
+            apps = responseData;
+          } else {
+            console.error(`从 ${source.name} 获取的数据不是数组:`, responseData);
+            apps = [];
+          }
         }
 
         // 为每个应用添加来源信息
@@ -42,6 +77,8 @@ export const fetchAppsFromSources = async () => {
     // 等待所有请求完成并合并结果
     const appsArrays = await Promise.all(appsPromises);
     const allApps = appsArrays.flat();
+    
+    console.log('合并后的应用总数:', allApps.length);
 
     // 按应用ID去重
     const uniqueApps = allApps.reduce((acc, current) => {
@@ -52,6 +89,8 @@ export const fetchAppsFromSources = async () => {
         return acc;
       }
     }, []);
+    
+    console.log('去重后的应用总数:', uniqueApps.length);
 
     return uniqueApps;
   } catch (error) {
