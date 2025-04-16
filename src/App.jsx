@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
+import { useTranslation } from 'react-i18next';
+import { useTranslationContext } from './components/TranslationProvider';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Settings from './components/Settings';
@@ -263,6 +265,8 @@ const ViewButton = styled.button`
 `;
 
 const App = () => {
+  const { t } = useTranslation();
+  const { currentLanguage, changeLanguage } = useTranslationContext();
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'light';
   });
@@ -397,20 +401,7 @@ const App = () => {
 
   const handleDownload = (app) => {
     try {
-      // 首先尝试使用下载管理器引用
-      if (downloadManagerRef.current) {
-        console.log('使用下载管理器引用启动下载');
-        downloadManagerRef.current.startDownload({
-          name: app.name,
-          downloadUrl: app.downloadUrl
-        });
-      } else {
-        // 如果引用不可用，直接使用TauriDownloaderUtil
-        console.log('下载管理器引用不可用，使用备用方法');
-        TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
-      }
-      
-      // 可以添加一个小提示，让用户知道下载已开始
+      // Show immediate feedback to the user
       const toast = document.createElement('div');
       toast.style.position = 'fixed';
       toast.style.bottom = '20px';
@@ -421,21 +412,39 @@ const App = () => {
       toast.style.borderRadius = '4px';
       toast.style.zIndex = '9999';
       toast.style.transition = 'opacity 0.5s ease';
-      toast.textContent = `正在下载: ${app.name}`;
+      toast.textContent = `${t('downloadManager.starting')}: ${app.name}`;
       
       document.body.appendChild(toast);
       
-      // 3秒后消失
+      // First try using the download manager reference
+      if (downloadManagerRef.current) {
+        console.log(t('downloadManager.starting'));
+        downloadManagerRef.current.startDownload({
+          name: app.name,
+          downloadUrl: app.downloadUrl
+        });
+      } else {
+        // If reference is not available, use TauriDownloaderUtil directly
+        console.log(t('downloadManager.downloading'));
+        TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
+      }
+      
+      // 3 seconds later, update the toast to say downloading is in progress
       setTimeout(() => {
-        toast.style.opacity = '0';
+        toast.textContent = `${t('downloadManager.downloading')}: ${app.name}`;
+        
+        // 3 more seconds later, make the toast disappear
         setTimeout(() => {
-          document.body.removeChild(toast);
-        }, 500);
-      }, 3000);
+          toast.style.opacity = '0';
+          setTimeout(() => {
+            document.body.removeChild(toast);
+          }, 500);
+        }, 3000);
+      }, 1000);
       
     } catch (error) {
-      console.error('下载启动失败:', error);
-      alert(`下载 ${app.name} 失败: ${error.message || '未知错误'}`);
+      console.error(t('downloadManager.failed'), error);
+      alert(`${t('downloadManager.failed')}: ${app.name} - ${error.message || t('errors.unknownError')}`);
     }
   };
 
@@ -463,16 +472,21 @@ const App = () => {
     localStorage.setItem('viewMode', viewMode);
   }, [viewMode]);
 
+  // Handle language change
+  const handleLanguageChange = useCallback((language) => {
+    changeLanguage(language);
+  }, [changeLanguage]);
+
   // 使用useMemo缓存设置组件
   const settingsComponent = useMemo(() => {
     if (currentCategory === 'settings') {
       return (
         <Settings 
           theme={theme} 
-          language="zh-CN"
+          language={currentLanguage}
           viewMode={viewMode}
           onThemeChange={handleThemeChange}
-          onLanguageChange={() => {}}
+          onLanguageChange={handleLanguageChange}
           onViewModeChange={handleViewModeChange}
           backgroundImage={backgroundImage}
           onBackgroundImageChange={handleBackgroundImageChange}
@@ -480,7 +494,7 @@ const App = () => {
       );
     }
     return null;
-  }, [currentCategory, theme, viewMode, backgroundImage, handleThemeChange, handleViewModeChange, handleBackgroundImageChange]);
+  }, [currentCategory, theme, currentLanguage, viewMode, backgroundImage, handleThemeChange, handleLanguageChange, handleViewModeChange, handleBackgroundImageChange]);
 
   // 渲染网格视图
   const renderGridView = useCallback(() => {
@@ -498,26 +512,26 @@ const App = () => {
               </AppIcon>
               <AppInfo>
                 <AppName>{app.name}</AppName>
-                <AppDeveloper theme={theme}>{app.developer || '未知开发者'}</AppDeveloper>
+                <AppDeveloper theme={theme}>{app.developer || t('app.noDescription')}</AppDeveloper>
               </AppInfo>
             </AppHeader>
             <AppDescription theme={theme}>{app.description}</AppDescription>
             <AppFooter>
-              <AppPrice theme={theme}>{app.price === 0 ? '免费' : `￥${app.price}`}</AppPrice>
+              <AppPrice theme={theme}>{app.price === 0 ? '' : `￥${app.price}`}</AppPrice>
               <DownloadButton 
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDownload(app);
                 }}
               >
-                下载
+                {t('app.download')}
               </DownloadButton>
             </AppFooter>
           </AppCard>
         ))}
       </AppGrid>
     );
-  }, [filteredApps, theme, handleAppClick, handleDownload]);
+  }, [filteredApps, theme, handleAppClick, handleDownload, t]);
 
   // 渲染列表视图
   const renderListView = useCallback(() => {
@@ -535,12 +549,12 @@ const App = () => {
             <ListAppInfo>
               <ListAppContent>
                 <ListAppName>{app.name}</ListAppName>
-                <ListAppDeveloper theme={theme}>{app.developer || '未知开发者'}</ListAppDeveloper>
+                <ListAppDeveloper theme={theme}>{app.developer || t('app.noDescription')}</ListAppDeveloper>
                 <ListAppDescription theme={theme}>{app.description}</ListAppDescription>
               </ListAppContent>
               <ListAppActions>
                 <AppPrice theme={theme} style={{ marginRight: '12px' }}>
-                  {app.price === 0 ? '免费' : `￥${app.price}`}
+                  {app.price === 0 ? '' : `￥${app.price}`}
                 </AppPrice>
                 <DownloadButton 
                   onClick={(e) => {
@@ -548,7 +562,7 @@ const App = () => {
                     handleDownload(app);
                   }}
                 >
-                  下载
+                  {t('app.download')}
                 </DownloadButton>
               </ListAppActions>
             </ListAppInfo>
@@ -556,7 +570,7 @@ const App = () => {
         ))}
       </AppList>
     );
-  }, [filteredApps, theme, handleAppClick, handleDownload]);
+  }, [filteredApps, theme, handleAppClick, handleDownload, t]);
 
   // 使用useMemo缓存内容区域
   const renderContent = useCallback(() => {
@@ -588,15 +602,15 @@ const App = () => {
     }
 
     if (loading) {
-      return <div>加载中...</div>;
+      return <div>{t('common.loading')}</div>;
     }
 
     if (filteredApps.length === 0 && searchTerm) {
-      return <div>没有找到匹配的应用</div>;
+      return <div>{t('common.noResults')}</div>;
     }
 
     if (filteredApps.length === 0) {
-      return <div>没有找到应用，请添加软件源</div>;
+      return <div>{t('sourceManager.addSource')}</div>;
     }
 
     // 根据视图模式选择不同的渲染方式
@@ -614,7 +628,8 @@ const App = () => {
     renderGridView,
     renderListView,
     handleBackToList,
-    handleDownload
+    handleDownload,
+    t
   ]);
 
   // 使用useMemo缓存sidebar和header组件
@@ -642,21 +657,21 @@ const App = () => {
     />
   ), [theme, handleSearch, handleToggleDownloadManager, isDownloadManagerVisible, backgroundImage, backgroundOpacity, viewMode, handleViewModeChange]);
 
-  const getCategoryTitle = () => {
+  const getCategoryTitle = useCallback(() => {
     if (selectedApp) {
-      return '应用详情';
+      return t('app.description');
     }
     
     switch (currentCategory) {
-      case 'dev-tools': return '所有应用';
-      case 'software': return '软件';
-      case 'games': return '游戏';
-      case 'ai-models': return 'AI大模型';
-      case 'settings': return '设置';
-      case 'sources': return '软件源';
-      default: return isDownloadManagerVisible ? '下载日志' : '';
+      case 'dev-tools': return t('categories.all');
+      case 'software': return t('categories.utilities');
+      case 'games': return t('categories.games');
+      case 'ai-models': return 'AI Models';
+      case 'settings': return t('settings.title');
+      case 'sources': return t('sourceManager.title');
+      default: return isDownloadManagerVisible ? t('downloadManager.title') : '';
     }
-  };
+  }, [currentCategory, isDownloadManagerVisible, selectedApp, t]);
 
   // 确保下载管理器在组件挂载时初始化
   useEffect(() => {
@@ -665,13 +680,13 @@ const App = () => {
       if (!downloadManagerRef.current && isDownloadManagerVisible) {
         // 如果需要显示下载管理器，下一帧会创建它，确保引用可用
         setTimeout(() => {
-          console.log('下载管理器初始化状态:', !!downloadManagerRef.current);
+          console.log(t('downloadManager.title'), !!downloadManagerRef.current);
         }, 100);
       }
     };
     
     initDownloadManager();
-  }, [isDownloadManagerVisible]);
+  }, [isDownloadManagerVisible, t]);
 
   return (
     <AppContainer theme={theme} backgroundImage={backgroundImage} backgroundOpacity={backgroundOpacity}>
@@ -686,9 +701,9 @@ const App = () => {
       
       {/* 全局下载管理器组件，处理后台下载任务 */}
       <TauriDownloader 
-        onDownloadStart={(download) => console.log('下载开始:', download.name)}
-        onDownloadComplete={(download) => console.log('下载完成:', download.name)}
-        onDownloadError={(download, error) => console.error('下载错误:', download.name, error)}
+        onDownloadStart={(download) => console.log(t('downloadManager.starting'), download.name)}
+        onDownloadComplete={(download) => console.log(t('downloadManager.completed'), download.name)}
+        onDownloadError={(download, error) => console.error(t('downloadManager.failed'), download.name, error)}
       />
     </AppContainer>
   );

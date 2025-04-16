@@ -70,3 +70,68 @@ OpenStore/
 ## License
 
 MIT
+
+# OpenStore Proxy Server
+
+A simple proxy server for handling CORS and API requests in the OpenStore application.
+
+## Setup
+
+1. Install dependencies:
+```bash
+npm install
+```
+
+2. Start the server:
+```bash
+# Development mode with auto-reload
+npm run dev
+
+# Production mode
+npm start
+```
+
+The server will start on port 3001 by default.
+
+## API Endpoints
+
+### Health Check
+```
+GET /health
+```
+Returns server status.
+
+### Proxy Request
+```
+POST /proxy
+```
+Body parameters:
+- `url` (required): The target URL to proxy the request to
+- `method` (optional): HTTP method (default: 'GET')
+- `headers` (optional): Custom headers to include
+- `data` (optional): Request body data
+
+Example request:
+```javascript
+fetch('http://localhost:3001/proxy', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    url: 'https://api.example.com/data',
+    method: 'GET',
+    headers: {
+      'Authorization': 'Bearer token'
+    }
+  })
+})
+```
+
+## Error Handling
+
+The server includes error handling middleware that will return appropriate error responses with status codes and messages.
+
+## License
+
+MIT
