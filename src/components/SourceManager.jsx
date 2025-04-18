@@ -204,6 +204,33 @@ const EmptyMessage = styled.div`
   font-size: 14px;
 `;
 
+const ProgressContainer = styled.div`
+  margin-top: 8px;
+  width: 100%;
+`;
+
+const ProgressBar = styled.div`
+  width: 100%;
+  height: 4px;
+  background-color: ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'};
+  border-radius: 2px;
+  overflow: hidden;
+`;
+
+const ProgressFill = styled.div`
+  height: 100%;
+  background-color: #0066CC;
+  width: ${props => props.progress}%;
+  transition: width 0.3s ease;
+`;
+
+const ProgressText = styled.div`
+  font-size: 12px;
+  color: ${props => props.theme === 'dark' ? '#999' : '#666'};
+  margin-top: 4px;
+  text-align: center;
+`;
+
 const SourceManager = ({ theme, onSourcesChange }) => {
   const [sources, setSources] = useState([]);
   const [newSource, setNewSource] = useState({ name: '', url: '' });
@@ -213,6 +240,7 @@ const SourceManager = ({ theme, onSourcesChange }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
   const { t } = useTranslation();
+  const [importProgress, setImportProgress] = useState({ progress: 0, status: '' });
 
   useEffect(() => {
     // 从本地存储加载软件源
@@ -231,20 +259,47 @@ const SourceManager = ({ theme, onSourcesChange }) => {
     setSources(updatedSources);
   };
 
+  // 添加超时控制的fetch函数
+  const fetchWithTimeout = async (url, timeout = 10000) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error('请求超时，请检查网络连接');
+      }
+      throw error;
+    }
+  };
+
+  // 更新进度的辅助函数
+  const updateProgress = (progress, status) => {
+    setImportProgress({ progress, status });
+  };
+
   // 验证软件源URL
   const validateSourceUrl = async (url) => {
     try {
-      // 检查并转换GitHub链接为raw链接 - 更全面的处理
+      updateProgress(10, '正在验证URL格式...');
+      
+      // 检查并转换GitHub链接为raw链接
       if (url.includes('github.com') && !url.includes('raw.githubusercontent.com')) {
+        updateProgress(20, '正在处理GitHub链接...');
         // 处理普通文件浏览视图的链接
         const githubRegex = /github\.com\/([^\/]+)\/([^\/]+)\/blob\/([^\/]+)\/(.+\.json)/i;
         const match = url.match(githubRegex);
         
         if (match) {
           // 将GitHub普通链接转换为raw链接
-          const rawUrl = `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${match[3]}/${match[4]}`;
-          console.log('已将GitHub链接转换为raw链接:', rawUrl);
-          url = rawUrl;
+          url = `https://raw.githubusercontent.com/${match[1]}/${match[2]}/${match[3]}/${match[4]}`;
+          console.log('已将GitHub链接转换为raw链接:', url);
         }
 
         // 处理直接指向代码库的链接 (没有/blob/)
@@ -254,47 +309,80 @@ const SourceManager = ({ theme, onSourcesChange }) => {
         if (repoMatch) {
           // 尝试默认main分支下的apps.json
           const possibleRawUrl = `https://raw.githubusercontent.com/${repoMatch[1]}/${repoMatch[2]}/main/apps.json`;
-          console.log('尝试访问默认位置的JSON:', possibleRawUrl);
           
           // 测试这个URL是否可访问
           try {
-            const testResponse = await fetch(possibleRawUrl);
+            const testResponse = await fetchWithTimeout(possibleRawUrl, 5000);
             if (testResponse.ok) {
               url = possibleRawUrl;
               console.log('找到有效的默认JSON位置:', url);
             }
           } catch (e) {
-            console.log('默认位置不可访问，尝试其他位置');
+            console.log('默认位置不可访问，尝试master分支');
             // 尝试master分支
-            const alternatePossibleRawUrl = `https://raw.githubusercontent.com/${repoMatch[1]}/${repoMatch[2]}/master/apps.json`;
-            url = alternatePossibleRawUrl;
+            url = `https://raw.githubusercontent.com/${repoMatch[1]}/${repoMatch[2]}/master/apps.json`;
           }
         }
       }
 
-      console.log(t('sourceManager.validating'), url);
-      const response = await fetch(url);
+      updateProgress(30, '正在连接到软件源...');
+      console.log('正在验证软件源:', url);
+      const response = await fetchWithTimeout(url, 15000); // 设置15秒超时
+      
       if (!response.ok) {
-        throw new Error(`${t('errors.fetchFailed')}: ${response.status} ${response.statusText}`);
+        throw new Error(`请求失败: ${response.status} ${response.statusText}`);
       }
       
-      const data = await response.json();
-      console.log('获取到软件源数据', data);
+      updateProgress(40, '正在检查文件大小...');
+      // 限制响应大小为10MB
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) {
+        throw new Error('软件源文件过大，请确保小于10MB');
+      }
+      
+      updateProgress(50, '正在下载软件源数据...');
+      const text = await response.text();
+      let data;
+      
+      try {
+        updateProgress(60, '正在解析JSON数据...');
+        data = JSON.parse(text);
+      } catch (error) {
+        throw new Error('JSON格式无效，请检查软件源文件格式');
+      }
       
       // 验证JSON结构
+      updateProgress(70, '正在验证数据结构...');
       if (!Array.isArray(data)) {
-        throw new Error(t('sourceManager.invalidJson'));
+        throw new Error('软件源格式无效，应为JSON数组');
       }
       
-      if (!data.every(app => 
-        app.id && app.name && app.description && 
-        typeof app.price !== 'undefined' && app.downloadUrl
-      )) {
-        throw new Error(t('sourceManager.invalidJson'));
+      // 验证数组不为空且长度合理
+      if (data.length === 0) {
+        throw new Error('软件源为空');
       }
       
+      if (data.length > 1000) {
+        throw new Error('软件源包含的应用数量过多，请确保少于1000个');
+      }
+      
+      // 验证必要字段
+      const invalidApps = data.filter(app => 
+        !app.id || !app.name || !app.description || 
+        typeof app.price === 'undefined' || !app.downloadUrl
+      );
+      
+      if (invalidApps.length > 0) {
+        throw new Error(`发现 ${invalidApps.length} 个无效应用，请确保所有应用都包含必要字段`);
+      }
+      
+      updateProgress(80, '正在处理应用数据...');
       // 增强应用数据，添加分类和智能图标
-      const processedData = await Promise.all(data.map(async (app) => {
+      const processedData = await Promise.all(data.map(async (app, index) => {
+        // 更新处理进度
+        const processProgress = 80 + (index / data.length) * 15;
+        updateProgress(processProgress, `正在处理应用 ${index + 1}/${data.length}...`);
+        
         let enhancedApp = { ...app };
         
         // 添加默认类别
@@ -317,11 +405,14 @@ const SourceManager = ({ theme, onSourcesChange }) => {
         return enhancedApp;
       }));
       
+      updateProgress(95, '正在完成处理...');
+      
       // 如果需要处理数据，可以先保存到localStorage
       if (JSON.stringify(data) !== JSON.stringify(processedData)) {
         const blob = new Blob([JSON.stringify(processedData, null, 2)], { type: 'application/json' });
         const processedUrl = URL.createObjectURL(blob);
         
+        updateProgress(100, '处理完成！');
         return { 
           isValid: true, 
           needsProcessing: true, 
@@ -330,10 +421,12 @@ const SourceManager = ({ theme, onSourcesChange }) => {
         };
       }
       
+      updateProgress(100, '验证完成！');
       return { isValid: true, needsProcessing: false };
     } catch (err) {
-      console.error(t('sourceManager.invalidJson'), err);
-      throw new Error(`${t('sourceManager.invalidUrl')}: ${err.message}`);
+      console.error('验证软件源失败:', err);
+      setImportProgress({ progress: 0, status: '' });
+      throw new Error(`验证失败: ${err.message}`);
     }
   };
 
@@ -343,12 +436,13 @@ const SourceManager = ({ theme, onSourcesChange }) => {
     
     if (!newSource.name || !newSource.url) {
       setError(t('sourceManager.enterUrl'));
-      // 短暂显示错误后自动清除
       setTimeout(() => setError(''), 1500);
       return;
     }
 
     try {
+      setImportProgress({ progress: 0, status: '准备导入...' });
+      
       // 检查是否为GitHub链接
       const isGithubUrl = newSource.url.includes('github.com') && !newSource.url.includes('raw.githubusercontent.com');
       const originalUrl = isGithubUrl ? newSource.url : null;
@@ -405,7 +499,7 @@ const SourceManager = ({ theme, onSourcesChange }) => {
       }
     } catch (err) {
       setError(err.message);
-      // 短暂显示错误后自动清除
+      setImportProgress({ progress: 0, status: '' });
       setTimeout(() => setError(''), 1500);
     }
   };
@@ -915,8 +1009,19 @@ const SourceManager = ({ theme, onSourcesChange }) => {
               <HintText theme={theme}>{t('sourceManager.githubSupport')}</HintText>
             </FormGroup>
             
+            {importProgress.progress > 0 && (
+              <ProgressContainer>
+                <ProgressBar theme={theme}>
+                  <ProgressFill progress={importProgress.progress} />
+                </ProgressBar>
+                <ProgressText theme={theme}>
+                  {importProgress.status}
+                </ProgressText>
+              </ProgressContainer>
+            )}
+            
             <ButtonGroup>
-              <Button type="submit" variant="primary">
+              <Button type="submit" variant="primary" disabled={importProgress.progress > 0}>
                 {t('sourceManager.addSource')}
               </Button>
               <Button 
@@ -925,6 +1030,7 @@ const SourceManager = ({ theme, onSourcesChange }) => {
                   setActiveTab('editor');
                   setEditorData([]);
                 }}
+                disabled={importProgress.progress > 0}
               >
                 {t('sourceManager.createNew')}
               </Button>

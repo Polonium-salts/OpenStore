@@ -36,14 +36,31 @@ const HeaderContainer = styled.div`
   display: flex;
   align-items: center;
   padding: 12px 20px;
-  background-color: ${props => getBackgroundColor(props, '#2a2a2d', 'white')};
-  border-bottom: 1px solid ${props => getBorderColor(props, '#3a3a3d', '#e8e8ed')};
+  --header-opacity: ${props => props.backgroundOpacity || 0.8};
+  --dark-bg-color: rgba(42, 42, 45, var(--header-opacity));
+  --light-bg-color: rgba(255, 255, 255, var(--header-opacity));
+  --dark-border-color: rgba(58, 58, 61, ${props => Math.min((props.backgroundOpacity || 0.8) + 0.1, 1)});
+  --light-border-color: rgba(232, 232, 237, ${props => Math.min((props.backgroundOpacity || 0.8) + 0.1, 1)});
+  
+  background-color: ${props => {
+    if (props.hasBackgroundImage) {
+      return props.theme === 'dark' ? 'var(--dark-bg-color)' : 'var(--light-bg-color)';
+    }
+    return props.theme === 'dark' ? '#2a2a2d' : 'white';
+  }};
+  border-bottom: 1px solid ${props => {
+    if (props.hasBackgroundImage) {
+      return props.theme === 'dark' ? 'var(--dark-border-color)' : 'var(--light-border-color)';
+    }
+    return props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed';
+  }};
   height: 64px;
   position: relative;
   z-index: 10;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   will-change: transform, opacity;
+  transition: background-color 0.15s ease-out, border-color 0.15s ease-out;
 `;
 
 const LogoSection = styled.div`
