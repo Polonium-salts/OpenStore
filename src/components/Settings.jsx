@@ -483,7 +483,10 @@ const Settings = React.memo(({
 }) => {
   const { t } = useTranslation();
   const [customBgUrl, setCustomBgUrl] = useState('');
-  const [customBgPreviewUrl, setCustomBgPreviewUrl] = useState('');
+  const [customBgPreviewUrl, setCustomBgPreviewUrl] = useState(() => {
+    // 从localStorage加载自定义背景
+    return localStorage.getItem('customBackgroundImage') || '';
+  });
   const [opacity, setOpacity] = useState(() => {
     // 从localStorage获取值，如果没有则使用默认值0.8
     return parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');

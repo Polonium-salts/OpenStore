@@ -371,6 +371,12 @@ const LazyAppDetails = lazy(() => {
   );
 });
 
+const LazyDownloadPage = lazy(() => {
+  return new Promise(resolve => 
+    setTimeout(() => resolve(import('./components/DownloadPage')), 100)
+  );
+});
+
 const App = () => {
   const { t } = useTranslation();
   const { currentLanguage, changeLanguage } = useTranslationContext();
@@ -378,7 +384,18 @@ const App = () => {
     return localStorage.getItem('theme') || 'light';
   });
   const [backgroundImage, setBackgroundImage] = useState(() => {
-    return localStorage.getItem('backgroundImage') || '';
+    // 首先尝试获取常规背景图片
+    const savedBackground = localStorage.getItem('backgroundImage');
+    // 然后检查是否有自定义背景图片
+    const customBackground = localStorage.getItem('customBackgroundImage');
+    
+    // 如果有自定义背景，优先使用自定义背景
+    if (customBackground) {
+      return customBackground;
+    }
+    
+    // 否则返回常规背景或空字符串
+    return savedBackground || '';
   });
   const [backgroundOpacity, setBackgroundOpacity] = useState(() => {
     return parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
@@ -400,6 +417,13 @@ const App = () => {
   
   // 使用防抖，避免频繁更新localStorage
   const debounceTimeoutRef = useRef(null);
+  
+  // 添加Toast通知状态
+  const [toast, setToast] = useState({
+    show: false,
+    message: '',
+    type: ''
+  });
   
   // 节流保存 - 只有当值真正改变时才执行存储
   const saveToLocalStorage = useCallback((key, value, prevValue) => {
@@ -673,52 +697,65 @@ const App = () => {
     setIsDownloadManagerVisible(!isDownloadManagerVisible);
   }, [isDownloadManagerVisible]);
 
+  // 处理应用下载
   const handleDownload = (app) => {
     try {
-      // Show immediate feedback to the user
-      const toast = document.createElement('div');
-      toast.style.position = 'fixed';
-      toast.style.bottom = '20px';
-      toast.style.right = '20px';
-      toast.style.padding = '10px 20px';
-      toast.style.backgroundColor = '#0066CC';
-      toast.style.color = 'white';
-      toast.style.borderRadius = '4px';
-      toast.style.zIndex = '9999';
-      toast.style.transition = 'opacity 0.5s ease';
-      toast.textContent = `${t('downloadManager.starting')}: ${app.name}`;
+      // 显示通知，告知用户下载开始
+      setToast({
+        show: true,
+        message: t('common.downloadStarting'),
+        type: 'info'
+      });
       
-      document.body.appendChild(toast);
+      // 切换到下载管理页面
+      setCurrentCategory('downloads');
       
-      // First try using the download manager reference
-      if (downloadManagerRef.current) {
-        console.log(t('downloadManager.starting'));
-        downloadManagerRef.current.startDownload({
-          name: app.name,
-          downloadUrl: app.downloadUrl
-        });
+      // 生成唯一ID用于跟踪此次下载
+      const downloadId = Date.now();
+      
+      // 确保文件名包含正确的扩展名
+      let fileName = app.name;
+      // 如果应用名称没有扩展名，根据下载URL或平台添加扩展名
+      if (fileName && !fileName.includes('.')) {
+        const downloadUrl = app.downloadUrl || '';
+        if (downloadUrl.includes('.exe') || downloadUrl.toLowerCase().includes('windows')) {
+          fileName += '.exe';
+        } else if (downloadUrl.includes('.dmg') || downloadUrl.toLowerCase().includes('macos')) {
+          fileName += '.dmg';
+        } else if (downloadUrl.includes('.apk')) {
+          fileName += '.apk';
+        } else if (downloadUrl.includes('.zip')) {
+          fileName += '.zip';
+        } else if (downloadUrl.includes('.msi')) {
+          fileName += '.msi';
       } else {
-        // If reference is not available, use TauriDownloaderUtil directly
-        console.log(t('downloadManager.downloading'));
-        TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
+          // 默认为可执行文件
+          fileName += '.exe';
+        }
       }
       
-      // 3 seconds later, update the toast to say downloading is in progress
-      setTimeout(() => {
-        toast.textContent = `${t('downloadManager.downloading')}: ${app.name}`;
+      // 将下载信息存储到sessionStorage中，以便下载页面组件获取并处理
+      sessionStorage.setItem('pendingDownload', JSON.stringify({
+        downloadUrl: app.downloadUrl,
+        fileName: fileName, // 使用处理后的文件名
+        appInfo: app
+      }));
         
-        // 3 more seconds later, make the toast disappear
+      // 3秒后淡出通知
         setTimeout(() => {
-          toast.style.opacity = '0';
-          setTimeout(() => {
-            document.body.removeChild(toast);
-          }, 500);
+        setToast({
+          show: false,
+          message: '',
+          type: ''
+        });
         }, 3000);
-      }, 1000);
-      
     } catch (error) {
-      console.error(t('downloadManager.failed'), error);
-      alert(`${t('downloadManager.failed')}: ${app.name} - ${error.message || t('errors.unknownError')}`);
+      console.error('下载失败:', error);
+      setToast({
+        show: true,
+        message: t('common.downloadFailed'),
+        type: 'error'
+      });
     }
   };
 
@@ -745,6 +782,26 @@ const App = () => {
         // 批量更新状态减少重渲染
         if (imageUrl !== backgroundImage) {
           setBackgroundImage(imageUrl);
+          // 检查是否是默认背景之一
+          const isDefaultBackground = [
+            'https://cdn.pixabay.com/photo/2020/10/27/08/00/mountains-5689938_1280.png',
+            'https://cdn.pixabay.com/photo/2012/08/27/14/19/mountains-55067_1280.png',
+            'https://media.istockphoto.com/id/1145054673/zh/%E5%90%91%E9%87%8F/%E6%B5%B7%E7%81%98.jpg'
+          ].includes(imageUrl);
+          
+          if (imageUrl === '') {
+            // 如果是空值（无背景）
+            localStorage.removeItem('customBackgroundImage');
+            localStorage.removeItem('backgroundImage');
+          } else if (isDefaultBackground) {
+            // 如果是默认背景，则只保存到backgroundImage
+            localStorage.removeItem('customBackgroundImage');
+            localStorage.setItem('backgroundImage', imageUrl);
+          } else {
+            // 否则假定为自定义背景，保存到customBackgroundImage
+            localStorage.setItem('customBackgroundImage', imageUrl);
+            localStorage.setItem('backgroundImage', ''); // 清空常规背景
+          }
         }
         
         if (opacity !== undefined && Math.abs(opacity - backgroundOpacity) >= 0.01) {
@@ -919,6 +976,16 @@ const App = () => {
         <Suspense fallback={<PageLoader>加载源管理器...</PageLoader>}>
           <FadeIn>
             <LazySourceManager theme={theme} onSourcesChange={() => loadApps(currentCategory)} />
+          </FadeIn>
+        </Suspense>
+      );
+    }
+    
+    if (currentCategory === 'downloads') {
+      return (
+        <Suspense fallback={<PageLoader>加载下载页面...</PageLoader>}>
+          <FadeIn>
+            <LazyDownloadPage theme={theme} />
           </FadeIn>
         </Suspense>
       );
@@ -1115,6 +1182,28 @@ const App = () => {
         onDownloadComplete={(download) => console.log(t('downloadManager.completed'), download.name)}
         onDownloadError={(download, error) => console.error(t('downloadManager.failed'), download.name, error)}
       />
+      
+      {/* Toast通知组件 */}
+      {toast.show && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '20px',
+            right: '20px',
+            padding: '10px 20px',
+            backgroundColor: toast.type === 'error' ? '#d32f2f' : 
+                             toast.type === 'success' ? '#388e3c' : 
+                             toast.type === 'warning' ? '#f57c00' : '#0066CC',
+            color: 'white',
+            borderRadius: '4px',
+            zIndex: '9999',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+            transition: 'opacity 0.3s ease',
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
     </AppContainer>
   );
 };

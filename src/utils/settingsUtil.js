@@ -28,6 +28,135 @@ const setLocalStorageItem = (key, value) => {
 // 下载设置相关
 const ACCELERATED_DOWNLOAD_KEY = 'useAcceleratedDownload';
 const DOWNLOAD_SETTINGS_KEY = 'downloadSettings';
+const NATIVE_DOWNLOAD_KEY = 'useNativeDownload';
+const NATIVE_DOWNLOAD_SETTINGS_KEY = 'nativeDownloadSettings';
+
+/**
+ * 获取下载设置
+ * @returns {Object} 下载设置对象
+ */
+export const getNativeDownloadSettings = async () => {
+  try {
+    // 尝试从本地存储获取设置
+    const settingsJson = localStorage.getItem('downloadSettings');
+    
+    if (settingsJson) {
+      return JSON.parse(settingsJson);
+    }
+    
+    // 默认设置
+    const defaultSettings = {
+      downloadPath: null, // 使用应用数据目录
+      useNativeDownload: true,
+      autoRun: false,
+      autoExtract: false,
+      useAcceleratedDownload: false,
+      notifyOnCompletion: true
+    };
+    
+    // 存储默认设置
+    localStorage.setItem('downloadSettings', JSON.stringify(defaultSettings));
+    
+    return defaultSettings;
+  } catch (error) {
+    console.error('获取下载设置失败:', error);
+    
+    // 返回基本默认设置
+    return {
+      downloadPath: null,
+      useNativeDownload: true
+    };
+  }
+};
+
+/**
+ * 获取下载是否启用原生下载
+ * @returns {boolean} 是否启用
+ */
+export const isNativeDownloadEnabled = () => {
+  try {
+    const settingsJson = localStorage.getItem('downloadSettings');
+    if (settingsJson) {
+      const settings = JSON.parse(settingsJson);
+      return settings.useNativeDownload !== false;
+    }
+    
+    return true; // 默认启用
+  } catch (error) {
+    console.error('检查原生下载设置失败:', error);
+    return true; // 出错时默认启用
+  }
+};
+
+/**
+ * 保存下载设置
+ * @param {Object} settings 要保存的设置对象
+ * @returns {boolean} 是否保存成功
+ */
+export const saveNativeDownloadSettings = (settings) => {
+  try {
+    const currentSettingsJson = localStorage.getItem('downloadSettings');
+    const currentSettings = currentSettingsJson ? JSON.parse(currentSettingsJson) : {};
+    
+    // 合并设置
+    const newSettings = {
+      ...currentSettings,
+      ...settings
+    };
+    
+    localStorage.setItem('downloadSettings', JSON.stringify(newSettings));
+    return true;
+  } catch (error) {
+    console.error('保存下载设置失败:', error);
+    return false;
+  }
+};
+
+/**
+ * 获取下载目录
+ * @returns {string|null} 下载目录路径，如果未设置返回null
+ */
+export const getDownloadDirectory = () => {
+  try {
+    const settingsJson = localStorage.getItem('downloadSettings');
+    if (settingsJson) {
+      const settings = JSON.parse(settingsJson);
+      return settings.downloadPath;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('获取下载目录失败:', error);
+    return null;
+  }
+};
+
+/**
+ * 获取下载设置
+ * @returns {Object} 下载设置
+ */
+export const getDownloadSettings = () => {
+  try {
+    const settingsJson = localStorage.getItem('downloadSettings');
+    if (settingsJson) {
+      return JSON.parse(settingsJson);
+    }
+    
+    // 默认设置
+    return {
+      downloadPath: null,
+      useProxy: false,
+      proxyUrl: null
+    };
+  } catch (error) {
+    console.error('获取下载设置失败:', error);
+    return {
+      downloadPath: null,
+      useProxy: false,
+      proxyUrl: null
+    };
+  }
+};
 
 /**
  * 检查是否启用加速下载
@@ -47,43 +176,24 @@ export const setAcceleratedDownloadEnabled = async (enabled) => {
 };
 
 /**
- * 获取下载设置
- * @returns {Promise<Object>} 下载设置对象
- */
-export const getDownloadSettings = async () => {
-  return getLocalStorageItem(DOWNLOAD_SETTINGS_KEY, {
-    useProxy: true,
-    proxyUrl: 'http://localhost:3000/proxy-download',
-    retryCount: 3,
-    timeout: 30000,
-    cacheEnabled: true
-  });
-};
-
-/**
- * 设置下载配置
- * @param {Object} settings - 下载设置对象
+ * 设置原生下载状态
+ * @param {boolean} enabled - 是否启用原生下载
  * @returns {Promise<boolean>} 设置是否成功
  */
-export const setDownloadSettings = async (settings) => {
-  const currentSettings = await getDownloadSettings();
-  return setLocalStorageItem(DOWNLOAD_SETTINGS_KEY, {
-    ...currentSettings,
-    ...settings
-  });
+export const setNativeDownloadEnabled = async (enabled) => {
+  return setLocalStorageItem(NATIVE_DOWNLOAD_KEY, enabled);
 };
 
 /**
- * 重置下载设置为默认值
- * @returns {Promise<boolean>} 重置是否成功
+ * 设置原生下载配置
+ * @param {Object} settings - 原生下载设置对象
+ * @returns {Promise<boolean>} 设置是否成功
  */
-export const resetDownloadSettings = async () => {
-  return setLocalStorageItem(DOWNLOAD_SETTINGS_KEY, {
-    useProxy: true,
-    proxyUrl: 'http://localhost:3000/proxy-download',
-    retryCount: 3,
-    timeout: 30000,
-    cacheEnabled: true
+export const setNativeDownloadSettings = async (settings) => {
+  const currentSettings = await getNativeDownloadSettings();
+  return setLocalStorageItem(NATIVE_DOWNLOAD_SETTINGS_KEY, {
+    ...currentSettings,
+    ...settings
   });
 };
 
@@ -135,15 +245,71 @@ export const setPerformanceSettings = async (settings) => {
   });
 };
 
+/**
+ * 设置下载配置
+ * @param {Object} settings - 下载设置对象
+ * @returns {boolean} 设置是否成功
+ */
+export const setDownloadSettings = (settings) => {
+  try {
+    const currentSettingsJson = localStorage.getItem('downloadSettings');
+    const currentSettings = currentSettingsJson ? JSON.parse(currentSettingsJson) : {};
+    
+    // 合并设置
+    const newSettings = {
+      ...currentSettings,
+      ...settings
+    };
+    
+    localStorage.setItem('downloadSettings', JSON.stringify(newSettings));
+    return true;
+  } catch (error) {
+    console.error('保存下载设置失败:', error);
+    return false;
+  }
+};
+
+/**
+ * 重置下载设置为默认值
+ * @returns {boolean} 重置是否成功
+ */
+export const resetDownloadSettings = () => {
+  try {
+    // 默认设置
+    const defaultSettings = {
+      downloadPath: null,
+      useNativeDownload: true,
+      autoRun: false,
+      autoExtract: false,
+      useAcceleratedDownload: false,
+      notifyOnCompletion: true,
+      useProxy: false,
+      proxyUrl: null
+    };
+    
+    localStorage.setItem('downloadSettings', JSON.stringify(defaultSettings));
+    return true;
+  } catch (error) {
+    console.error('重置下载设置失败:', error);
+    return false;
+  }
+};
+
 // 导出统一的设置接口
 export default {
   isAcceleratedDownloadEnabled,
   setAcceleratedDownloadEnabled,
   getDownloadSettings,
-  setDownloadSettings,
-  resetDownloadSettings,
+  isNativeDownloadEnabled,
+  setNativeDownloadEnabled,
+  getNativeDownloadSettings,
+  setNativeDownloadSettings,
+  saveNativeDownloadSettings,
+  getDownloadDirectory,
   getTheme,
   setTheme,
   getPerformanceSettings,
-  setPerformanceSettings
+  setPerformanceSettings,
+  setDownloadSettings,
+  resetDownloadSettings
 }; 

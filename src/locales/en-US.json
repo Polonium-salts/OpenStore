@@ -10,7 +10,8 @@
     "noResults": "No results found",
     "error": "Error",
     "success": "Success",
-    "edit": "Edit"
+    "edit": "Edit",
+    "optional": "Optional"
   },
   "categories": {
     "title": "Categories",
@@ -78,19 +79,32 @@
     "processError": "Failed to process file"
   },
   "downloadManager": {
-    "title": "Downloads",
-    "starting": "Starting download...",
+    "title": "Download Manager",
+    "pageTitle": "File Downloads",
+    "newDownload": "New Download",
+    "downloadList": "Download List",
+    "startDownload": "Start Download",
     "downloading": "Downloading",
+    "downloadAddress": "Download URL",
+    "fileName": "File Name",
+    "autoGetFileName": "Leave empty to auto-detect from URL",
+    "savePath": "Save Path",
+    "filePath": "File Path",
+    "fileType": "File Type",
+    "fileSize": "File Size",
+    "status": "Status",
+    "pending": "Pending",
     "completed": "Download completed",
     "failed": "Download failed",
     "canceled": "Download canceled",
-    "noDownloads": "No active downloads",
+    "noDownloads": "No download history",
     "downloadsInProgress": "downloads in progress",
     "logsCleared": "Logs cleared",
     "initialized": "Download manager initialized",
     "settings": "Download Settings",
     "autoRun": "Auto run after download",
     "autoExtract": "Auto extract archives",
+    "clearCompleted": "Clear Completed",
     "clearLogs": "Clear logs",
     "fileProcessing": "File Processing",
     "extracting": "Extracting",
@@ -105,7 +119,13 @@
     "downloadSpeed": "Download speed",
     "downloadProgress": "Download progress",
     "threadCount": "Thread count",
-    "singleThreadFallback": "Single thread fallback"
+    "singleThreadFallback": "Single thread fallback",
+    "useNativeDownload": "Use Tauri native download",
+    "nativeDownloadDesc": "Uses Tauri plugins for downloads, providing better system integration",
+    "downloadPathDesc": "Set download file save location, leave empty to use app data directory",
+    "autoOpenDesc": "Automatically open file after download",
+    "notifyOnCompletionDesc": "Show notification when download completes",
+    "starting": "Starting download..."
   },
   "errors": {
     "fetchFailed": "Failed to fetch data",
@@ -123,6 +143,7 @@
   },
   "sidebar": {
     "expand": "Expand menu",
-    "collapse": "Collapse menu"
+    "collapse": "Collapse menu",
+    "downloads": "Download Manager"
   }
 } 
