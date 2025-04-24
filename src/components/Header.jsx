@@ -344,18 +344,7 @@ const Header = ({
   // 使用useMemo缓存按钮部分
   const headerActions = useMemo(() => (
     <HeaderActions>
-      {/* 现有按钮 */}
-      <MemoizedHeaderButton 
-        title="日志管理"
-        theme={theme}
-        active={isDownloadManagerVisible}
-        onClick={onToggleDownloadManager}
-        backgroundOpacity={backgroundOpacity}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-        </svg>
-      </MemoizedHeaderButton>
+      {/* 通知按钮 */}
       <MemoizedHeaderButton 
         title="通知"
         theme={theme}
@@ -366,7 +355,7 @@ const Header = ({
         </svg>
       </MemoizedHeaderButton>
     </HeaderActions>
-  ), [theme, isDownloadManagerVisible, onToggleDownloadManager, backgroundOpacity]);
+  ), [theme, backgroundOpacity]);
 
   // 使用useMemo缓存Logo部分
   const logoSection = useMemo(() => (

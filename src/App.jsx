@@ -694,8 +694,19 @@ const App = () => {
   }, [theme]);
 
   const handleToggleDownloadManager = useCallback(() => {
-    setIsDownloadManagerVisible(!isDownloadManagerVisible);
-  }, [isDownloadManagerVisible]);
+    // 如果下载管理器当前不可见，则显示它并切换到downloads分类
+    if (!isDownloadManagerVisible) {
+      setCurrentCategory('downloads');
+      setIsDownloadManagerVisible(true);
+    } else {
+      // 如果当前已在downloads分类，则隐藏下载管理器并返回到之前的分类
+      if (currentCategory === 'downloads') {
+        // 返回到默认分类或之前的分类
+        setCurrentCategory('dev-tools');
+      }
+      setIsDownloadManagerVisible(false);
+    }
+  }, [isDownloadManagerVisible, currentCategory]);
 
   // 处理应用下载
   const handleDownload = (app) => {
@@ -991,18 +1002,6 @@ const App = () => {
       );
     }
 
-    if (isDownloadManagerVisible) {
-      return (
-        <Suspense fallback={<PageLoader>加载下载管理器...</PageLoader>}>
-          <FadeIn>
-            <div className="download-log-container">
-              <LazySimpleDownloadManager ref={downloadManagerRef} theme={theme} />
-            </div>
-          </FadeIn>
-        </Suspense>
-      );
-    }
-
     if (selectedApp) {
       return (
         <Suspense fallback={<PageLoader>加载应用详情...</PageLoader>}>
@@ -1049,7 +1048,6 @@ const App = () => {
     currentLanguage,
     viewMode,
     backgroundImage,
-    isDownloadManagerVisible, 
     selectedApp, 
     loading, 
     filteredApps, 
@@ -1082,14 +1080,12 @@ const App = () => {
     <Header
       theme={theme}
       onSearch={handleSearch}
-      onToggleDownloadManager={handleToggleDownloadManager}
-      isDownloadManagerVisible={isDownloadManagerVisible}
       hasBackgroundImage={!!backgroundImage}
       backgroundOpacity={uiBackgroundOpacity}
       viewMode={viewMode}
       onViewModeChange={handleViewModeChange}
     />
-  ), [theme, handleSearch, handleToggleDownloadManager, isDownloadManagerVisible, backgroundImage, uiBackgroundOpacity, viewMode, handleViewModeChange]);
+  ), [theme, handleSearch, backgroundImage, uiBackgroundOpacity, viewMode, handleViewModeChange]);
 
   const getCategoryTitle = useCallback(() => {
     if (selectedApp) {
@@ -1103,9 +1099,10 @@ const App = () => {
       case 'ai-models': return 'AI Models';
       case 'settings': return t('settings.title');
       case 'sources': return t('sourceManager.title');
-      default: return isDownloadManagerVisible ? t('downloadManager.title') : '';
+      case 'downloads': return t('downloadManager.title');
+      default: return '';
     }
-  }, [currentCategory, isDownloadManagerVisible, selectedApp, t]);
+  }, [currentCategory, selectedApp, t]);
 
   // 确保下载管理器在组件挂载时初始化
   useEffect(() => {
@@ -1142,7 +1139,6 @@ const App = () => {
     currentLanguage,
     viewMode,
     backgroundImage,
-    isDownloadManagerVisible, 
     selectedApp, 
     loading, 
     filteredApps, 

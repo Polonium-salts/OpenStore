@@ -242,109 +242,13 @@ const triggerEvent = (event, data) => {
   }
 };
 
-const getFileSize = async (url) => {
-  console.log(`尝试获取文件大小: ${url}`);
-  
-  try {
-    // 先尝试使用HEAD请求获取Content-Length
-    const headResponse = await fetch(url, {
-      method: 'HEAD',
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    });
-    
-    if (headResponse.ok) {
-      const contentLength = headResponse.headers.get('content-length');
-      if (contentLength) {
-        const size = parseInt(contentLength, 10);
-        if (!isNaN(size) && size > 0) {
-          console.log(`HEAD请求获取到文件大小: ${formatFileSize(size)}`);
-          return size;
-        }
-      }
-    }
-    
-    // 如果HEAD请求失败，尝试使用Range请求获取文件大小
-    const rangeResponse = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Range': 'bytes=0-0',
-        'Cache-Control': 'no-cache'
-      }
-    });
-    
-    if (rangeResponse.ok || rangeResponse.status === 206) {
-      const contentRange = rangeResponse.headers.get('content-range');
-      if (contentRange) {
-        const match = contentRange.match(/bytes 0-0\/(\d+)/);
-        if (match && match[1]) {
-          const size = parseInt(match[1], 10);
-          if (!isNaN(size) && size > 0) {
-            console.log(`Range请求获取到文件大小: ${formatFileSize(size)}`);
-            return size;
-          }
-        }
-      }
-    }
-    
-    // 尝试调用Tauri获取文件大小
-    try {
-      const result = await invoke('get_remote_file_size', { url })
-        .catch(() => ({ size: 0 }));
-      
-      if (result && result.size && result.size > 0) {
-        console.log(`Tauri API获取到文件大小: ${formatFileSize(result.size)}`);
-        return result.size;
-      }
-    } catch (e) {
-      console.log('Tauri API获取文件大小失败:', e);
-    }
-    
-    console.log('无法获取准确的文件大小，尝试推断大小');
-    
-    // 尝试从URL或文件名推断文件大小
-    const fileName = getFileNameFromUrl(url).toLowerCase();
-    
-    // 基于文件类型的估计大小
-    if (fileName.endsWith('.exe') || fileName.endsWith('.msi')) {
-      if (url.includes('chrome') || url.includes('browser')) {
-        return 100 * 1024 * 1024; // Chrome浏览器约100MB
-      } else if (url.includes('firefox')) {
-        return 80 * 1024 * 1024; // Firefox约80MB
-      } else if (url.includes('java') || url.includes('jdk') || url.includes('jre')) {
-        return 150 * 1024 * 1024; // Java运行时约150MB
-      } else {
-        return 80 * 1024 * 1024; // 一般应用约80MB
-      }
-    } else if (fileName.endsWith('.dmg')) {
-      return 200 * 1024 * 1024; // macOS应用约200MB
-    } else if (fileName.endsWith('.apk')) {
-      return 50 * 1024 * 1024; // Android应用约50MB
-    } else if (fileName.endsWith('.zip') || fileName.endsWith('.7z') || fileName.endsWith('.rar')) {
-      return 100 * 1024 * 1024; // 压缩文件约100MB
-    } else if (fileName.endsWith('.iso')) {
-      return 1024 * 1024 * 1024; // ISO镜像约1GB
-    }
-    
-    // 未知文件类型的默认大小
-    return 30 * 1024 * 1024; // 默认约30MB
-  } catch (error) {
-    console.error('获取文件大小时出错:', error);
-    return 30 * 1024 * 1024; // 出错时使用30MB作为默认值
-  }
-};
-
-const downloadFile = async (url, fileName, savePath = null, appInfo = null) => {
+const downloadFile = async (url, fileName, savePath = null, appInfo = null, previousProgress = null) => {
   let downloadStartTime = Date.now();
   let isPaused = false;
   let pauseResolve = null;
   let downloadController = new AbortController();
   
-  // 初始化下载进度状态
+  // 初始化下载进度状态，如果是恢复下载则使用之前的进度
   const downloadState = {
     id: Date.now(),
     url,
@@ -353,12 +257,14 @@ const downloadFile = async (url, fileName, savePath = null, appInfo = null) => {
     appInfo,
     startTime: downloadStartTime,
     status: 'downloading',
-    progress: 0,
-    downloadedSize: 0,
-    totalSize: 0,
+    progress: previousProgress ? previousProgress.progress : 0,
+    downloadedSize: previousProgress ? previousProgress.downloadedSize : 0,
+    totalSize: previousProgress ? previousProgress.totalSize : 0,
     speed: 0,
     remainingTime: 0,
-    lastUpdated: downloadStartTime
+    lastUpdated: downloadStartTime,
+    isResumed: !!previousProgress,
+    previouslyDownloaded: previousProgress ? previousProgress.previouslyDownloaded : false
   };
   
   const pausePromise = new Promise(resolve => {
@@ -376,13 +282,6 @@ const downloadFile = async (url, fileName, savePath = null, appInfo = null) => {
   addDownloadListener('onPause', handlePause);
   
   try {
-    // 获取文件大小
-    const fileSize = await getFileSize(url);
-    if (fileSize > 0) {
-      downloadState.totalSize = fileSize;
-      console.log(`设置文件大小: ${formatFileSize(fileSize)}`);
-    }
-    
     // 处理文件扩展名
     if (fileName && !fileName.includes('.')) {
       if (url.includes('.exe') || url.toLowerCase().includes('windows')) {
@@ -414,6 +313,35 @@ const downloadFile = async (url, fileName, savePath = null, appInfo = null) => {
     }
     
     downloadState.savePath = finalSavePath;
+    
+    // 尝试在下载前获取文件大小
+    try {
+      const headRequest = await fetch(url, { 
+        method: 'HEAD',
+        cache: 'no-cache',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      
+      const contentLength = headRequest.headers.get('content-length');
+      if (contentLength) {
+        const fileSize = parseInt(contentLength, 10);
+        if (!isNaN(fileSize) && fileSize > 0) {
+          downloadState.totalSize = fileSize;
+          console.log(`文件大小获取成功: ${formatFileSize(fileSize)}`);
+        }
+      }
+    } catch (err) {
+      console.log(`无法通过HEAD请求获取文件大小: ${err}`);
+    }
+    
+    // 如果HEAD请求失败，使用默认预估值
+    if (downloadState.totalSize <= 0) {
+      downloadState.totalSize = 50 * 1024 * 1024; // 50MB默认大小
+      console.log(`使用预估文件大小: ${formatFileSize(downloadState.totalSize)}`);
+    }
     
     // 初始通知下载开始
     triggerEvent('onStart', downloadState);
@@ -485,15 +413,36 @@ const downloadFile = async (url, fileName, savePath = null, appInfo = null) => {
       const timeSinceLastUpdate = now - downloadState.lastUpdated;
       
       if (timeSinceLastUpdate > 2000 && !downloadState.isRealProgress && totalElapsedSeconds > 0) {
-        // 使用估算进度
-        const estimatedProgress = Math.min(
-          85, // 最多85%
-          Math.sqrt(totalElapsedSeconds) * 8 // 较缓慢的曲线
-        );
+        // 使用估算进度，对于恢复的下载要考虑之前的进度
+        let estimatedProgress;
         
+        if (downloadState.isResumed && downloadState.progress > 0) {
+          // 恢复下载时，从当前进度开始，缓慢增加
+          estimatedProgress = Math.min(
+            95, // 最多95%
+            downloadState.progress + (Math.sqrt(totalElapsedSeconds) * 2) // 较缓慢的增加曲线
+          );
+        } else {
+          // 新下载时使用标准估算
+          estimatedProgress = Math.min(
+            85, // 最多85%
+            Math.sqrt(totalElapsedSeconds) * 8 // 较缓慢的曲线
+          );
+        }
+        
+        // 确保进度不会后退
         if (estimatedProgress > downloadState.progress) {
+          // 计算基于进度的下载大小
+          let estimatedDownloadedSize;
+          if (downloadState.isResumed && downloadState.downloadedSize > 0) {
+            estimatedDownloadedSize = downloadState.downloadedSize + 
+              ((estimatedProgress - downloadState.progress) / 100) * downloadState.totalSize;
+          } else {
+            estimatedDownloadedSize = Math.floor((estimatedProgress / 100) * downloadState.totalSize);
+          }
+          
           downloadState.progress = estimatedProgress;
-          downloadState.downloadedSize = Math.floor((estimatedProgress / 100) * downloadState.totalSize);
+          downloadState.downloadedSize = estimatedDownloadedSize;
           downloadState.speed = downloadState.downloadedSize / totalElapsedSeconds;
           
           const remainingBytes = downloadState.totalSize - downloadState.downloadedSize;
@@ -660,7 +609,66 @@ const getFileType = (fileName) => {
   }
 };
 
-const FileIcon = ({ fileName, theme }) => {
+const FileIcon = ({ fileName, theme, appInfo }) => {
+  // 首先验证appInfo是否是有效对象
+  const hasValidAppInfo = appInfo && typeof appInfo === 'object';
+  
+  // 如果有应用信息且包含图标URL，则显示应用图标
+  if (hasValidAppInfo && appInfo.icon) {
+    return (
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '32px',
+        height: '32px',
+        marginRight: '12px',
+        overflow: 'hidden',
+        borderRadius: '4px'
+      }}>
+        <img 
+          src={appInfo.icon} 
+          alt={appInfo.name || fileName}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain'
+          }}
+          onError={(e) => {
+            console.warn('应用图标加载失败:', e);
+            e.target.style.display = 'none';
+            e.target.parentNode.innerText = appInfo.name ? appInfo.name[0].toUpperCase() : '?';
+          }}
+        />
+      </div>
+    );
+  }
+  
+  // 如果有应用名称但没有图标，使用应用名首字母作为图标
+  if (hasValidAppInfo && appInfo.name) {
+    const firstLetter = appInfo.name.charAt(0).toUpperCase();
+    const bgColor = stringToColor(appInfo.name);
+    
+    return (
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '32px',
+        height: '32px',
+        marginRight: '12px',
+        borderRadius: '4px',
+        backgroundColor: bgColor,
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: '16px'
+      }}>
+        {firstLetter}
+      </div>
+    );
+  }
+  
+  // 没有应用信息时，使用文件类型图标
   const type = getFileType(fileName);
   
   let icon = '📄';
@@ -676,6 +684,29 @@ const FileIcon = ({ fileName, theme }) => {
   return (
     <FileTypeIcon type={type} theme={theme}>{icon}</FileTypeIcon>
   );
+};
+
+const stringToColor = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  const colors = [
+    '#4285F4', // Google Blue
+    '#EA4335', // Google Red
+    '#FBBC05', // Google Yellow
+    '#34A853', // Google Green
+    '#FF9800', // Orange
+    '#9C27B0', // Purple
+    '#795548', // Brown
+    '#607D8B', // Blue Grey
+    '#E91E63', // Pink
+    '#3F51B5', // Indigo
+  ];
+  
+  // 使用hash值选择一个颜色
+  return colors[Math.abs(hash) % colors.length];
 };
 
 const formatSize = (bytes) => {
@@ -791,55 +822,75 @@ const DownloadPage = ({ theme = 'light' }) => {
   const activeDownloads = React.useRef(new Set());
   
   // Define startDownload first
-  const startDownload = useCallback(async (url, fileName, downloadId, appInfo = null) => {
+  const startDownload = useCallback(async (url, fileName, downloadId, appInfo = null, previousProgress = null) => {
     try {
-      // 防止重复下载
-      if (activeDownloads.current.has(url)) {
+      // 改进防止重复下载的逻辑
+      // 检查是否有相同URL或ID的下载任务已经在下载列表中
+      const existingDownload = downloadList.find(d => 
+        (d.url === url && (d.status === 'downloading' || d.status === 'pending')) || 
+        (d.id === downloadId && (d.status === 'downloading' || d.status === 'pending'))
+      );
+      
+      if (existingDownload) {
         console.log('下载已在进行中，跳过:', url);
+        // 更新现有项而不是添加新项
+        setDownloadList(prevList => {
+          const updatedList = prevList.map(d => {
+            if ((d.url === url && (d.status === 'downloading' || d.status === 'pending')) || d.id === downloadId) {
+              return {
+                ...d,
+                appInfo: appInfo || d.appInfo // 保留应用信息或使用新的
+              };
+            }
+            return d;
+          });
+          saveDownloadList(updatedList);
+          return updatedList;
+        });
         return;
+      }
+      
+      // 从活跃集合中移除任何相同URL的旧下载
+      if (activeDownloads.current.has(url)) {
+        activeDownloads.current.delete(url);
       }
       
       // 记录活跃下载
       activeDownloads.current.add(url);
       
-      // 获取文件大小
-      let fileSize = 0;
-      try {
-        // 尝试获取准确的文件大小
-        fileSize = await getFileSize(url);
-        console.log(`开始下载前获取到文件大小: ${formatFileSize(fileSize)}`);
-      } catch (e) {
-        console.error('获取文件大小失败:', e);
-      }
+      // 防抖动时间范围，限制太频繁的更新
+      const progressUpdateThrottleTime = 500; // 毫秒
+      const lastProgressUpdate = { current: 0 };
       
-      // 初始化下载项
+      // 初始化下载项，如果是恢复下载，使用之前的进度信息
       const newDownload = {
         id: downloadId,
         url,
         fileName,
         status: 'pending',
-        progress: 0,
+        progress: previousProgress ? previousProgress.progress : 0,
         startTime: Date.now(),
         appInfo,
-        downloadedSize: 0,
-        totalSize: fileSize > 0 ? fileSize : 30 * 1024 * 1024, // 使用获取到的文件大小或默认值
+        downloadedSize: previousProgress ? previousProgress.downloadedSize : 0,
+        totalSize: previousProgress ? previousProgress.totalSize : 0,
         speed: 0,
-        remainingTime: 0
+        remainingTime: 0,
+        isResumed: !!previousProgress,
+        previouslyDownloaded: previousProgress ? previousProgress.previouslyDownloaded : false,
+        lastUpdated: Date.now()
       };
       
-      // 检查是否已存在
-      const alreadyExists = downloadList.some(d => 
-        d.url === url && d.fileName === fileName && d.id === downloadId
-      );
+      // 移除具有相同URL的任何旧下载项
+      setDownloadList(prevList => {
+        const filteredList = prevList.filter(d => 
+          !(d.url === url && (d.status === 'failed' || d.status === 'paused'))
+        );
+        
+        const updatedList = [newDownload, ...filteredList];
+        saveDownloadList(updatedList);
+        return updatedList;
+      });
       
-      if (!alreadyExists) {
-        setDownloadList(prevList => {
-          const updatedList = [newDownload, ...prevList];
-          saveDownloadList(updatedList);
-          return updatedList;
-        });
-      }
-
       // 处理文件扩展名
       let finalFileName = fileName;
       if (finalFileName && !finalFileName.includes('.')) {
@@ -875,9 +926,9 @@ const DownloadPage = ({ theme = 'light' }) => {
             status: 'downloading', 
             savePath,
             fileName: finalFileName,
-            progress: 0,
-            downloadedSize: 0,
-            totalSize: fileSize > 0 ? fileSize : d.totalSize || 30 * 1024 * 1024, // 使用获取到的文件大小
+            progress: d.isResumed ? d.progress : 0,
+            downloadedSize: d.isResumed ? d.downloadedSize : 0,
+            totalSize: d.isResumed ? d.totalSize : 0,
             speed: 0,
             lastUpdated: Date.now()
           } : d
@@ -892,35 +943,82 @@ const DownloadPage = ({ theme = 'light' }) => {
         if (progressData.id === downloadId || 
             (progressData.url === url && (progressData.fileName === finalFileName || progressData.fileName === fileName))) {
           
+          // 获取当前下载状态
+          const currentDownload = downloadList.find(d => d.id === downloadId);
+          if (!currentDownload) return; // 如果找不到下载项，不进行更新
+          
+          const isResumed = currentDownload.isResumed;
+          const previouslyDownloaded = currentDownload.previouslyDownloaded;
+          
+          // 添加节流逻辑，避免过于频繁的更新
+          const now = Date.now();
+          if (lastProgressUpdate.current && (now - lastProgressUpdate.current < progressUpdateThrottleTime)) {
+            // 如果距离上次更新时间太短，则忽略本次更新
+            if (!progressData.downloadedSize ||
+                !currentDownload.downloadedSize ||
+                (progressData.downloadedSize - currentDownload.downloadedSize) < 102400) { // 除非下载增加了至少100KB
+              return;
+            }
+          }
+          
+          // 标记此次更新时间
+          lastProgressUpdate.current = now;
+          
           // 验证进度数据有效性
-          if (progressData.totalSize > 0 && 
-              progressData.downloadedSize >= 0 && 
+          if (typeof progressData.totalSize === 'number' && progressData.totalSize > 0 && 
+              typeof progressData.downloadedSize === 'number' && progressData.downloadedSize >= 0 && 
               progressData.downloadedSize <= progressData.totalSize) {
             
             console.log(`收到进度: ${formatFileSize(progressData.downloadedSize)}/${formatFileSize(progressData.totalSize)}`);
             
+            // 对于恢复的下载，防止进度跳跃
+            let effectiveProgress = { ...progressData };
+            
+            // 如果是恢复下载且有之前的进度数据
+            if (isResumed && previouslyDownloaded) {
+              // 确保下载进度不会回退
+              if (progressData.downloadedSize < currentDownload.downloadedSize) {
+                effectiveProgress.downloadedSize = currentDownload.downloadedSize;
+              }
+              
+              // 确保总大小合理
+              if (progressData.totalSize < currentDownload.totalSize) {
+                effectiveProgress.totalSize = currentDownload.totalSize;
+              }
+            }
+            
             // 更新下载列表中的进度
             setDownloadList(prevList => {
-              return prevList.map(d => {
-                if (d.id === downloadId) {
-                  // 计算正确的进度百分比
-                  const progressPercent = Math.min(99, Math.floor((progressData.downloadedSize / progressData.totalSize) * 100));
+              const updatedList = prevList.map(d => {
+                if (d.id === downloadId && (d.status === 'downloading' || d.status === 'pending')) {
+                  // 计算正确的进度百分比，确保不超过99%
+                  const progressPercent = Math.min(99, Math.floor((effectiveProgress.downloadedSize / effectiveProgress.totalSize) * 100));
+                  
+                  // 确保进度不会后退
+                  const finalProgress = Math.max(progressPercent, d.progress || 0);
+                  const finalDownloadedSize = Math.max(effectiveProgress.downloadedSize, d.downloadedSize || 0);
                   
                   return {
                     ...d,
                     status: 'downloading',
-                    progress: progressPercent,
-                    downloadedSize: progressData.downloadedSize,
-                    totalSize: progressData.totalSize,
-                    speed: progressData.speed || d.speed,
-                    remainingTime: progressData.remainingTime || d.remainingTime,
-                    lastUpdated: Date.now(),
-                    isRealProgress: progressData.isRealProgress || false,
-                    isEstimatedProgress: progressData.isEstimatedProgress || false
+                    progress: finalProgress,
+                    downloadedSize: finalDownloadedSize,
+                    totalSize: effectiveProgress.totalSize,
+                    speed: effectiveProgress.speed || d.speed,
+                    remainingTime: effectiveProgress.remainingTime || d.remainingTime,
+                    lastUpdated: now,
+                    isRealProgress: true
                   };
                 }
                 return d;
               });
+              
+              // 只有当有实际更新时才保存
+              if (JSON.stringify(updatedList) !== JSON.stringify(prevList)) {
+                saveDownloadList(updatedList);
+              }
+              
+              return updatedList;
             });
           }
         }
@@ -931,7 +1029,7 @@ const DownloadPage = ({ theme = 'light' }) => {
       
       // 开始下载
       console.log(`开始下载 ${url} 到 ${savePath}`);
-      const result = await downloadFile(url, finalFileName, savePath, appInfo);
+      const result = await downloadFile(url, finalFileName, savePath, appInfo, previousProgress);
       
       // 移除进度监听
       removeDownloadListener('onProgress', handleProgress);
@@ -968,33 +1066,20 @@ const DownloadPage = ({ theme = 'light' }) => {
         setTimeout(() => {
           setToast({ show: false, message: '', type: '' });
         }, 3000);
-      } else if (result && result.paused) {
-        // 处理暂停状态
-        console.log(`下载已暂停: ${finalFileName}`);
         
-        setDownloadList(prevList => {
-          const updatedList = prevList.map(d => 
-            d.id === downloadId ? { 
-              ...d, 
-              status: 'paused',
-              progress: result.progress || d.progress,
-              downloadedSize: result.downloadedSize || d.downloadedSize,
-              totalSize: result.totalSize || d.totalSize
-            } : d
-          );
-          saveDownloadList(updatedList);
-          return updatedList;
-        });
+        // 在完成时从活跃下载中移除
+        activeDownloads.current.delete(url);
       } else {
-        // 处理失败状态
-        console.log(`下载失败: ${finalFileName}`);
+        // 处理下载失败
+        console.error('下载失败:', result ? result.error : '未知错误');
         
+        // 更新UI为失败状态
         setDownloadList(prevList => {
           const updatedList = prevList.map(d => 
             d.id === downloadId ? { 
               ...d, 
-              status: 'failed', 
-              error: result?.error || 'Download failed' 
+              status: 'failed',
+              error: result ? result.error : t('downloadManager.unknownError', '未知错误')
             } : d
           );
           saveDownloadList(updatedList);
@@ -1011,6 +1096,9 @@ const DownloadPage = ({ theme = 'light' }) => {
         setTimeout(() => {
           setToast({ show: false, message: '', type: '' });
         }, 3000);
+        
+        // 在失败时从活跃下载中移除
+        activeDownloads.current.delete(url);
       }
     } catch (error) {
       console.error('下载过程中发生异常:', error);
@@ -1034,9 +1122,6 @@ const DownloadPage = ({ theme = 'light' }) => {
       setTimeout(() => {
         setToast({ show: false, message: '', type: '' });
       }, 3000);
-    } finally {
-      // 清理活跃下载记录
-      activeDownloads.current.delete(url);
     }
   }, [downloadSettings, downloadList, t]);
   
@@ -1156,77 +1241,50 @@ const DownloadPage = ({ theme = 'light' }) => {
   }, [downloadList, handleStartDownload]);
   
   useEffect(() => {
-    // 修改Tauri下载进度事件监听
-    console.log('设置主进度监听器');
+    console.log('设置Tauri HTTP进度监听器');
     
-    // 监听Tauri下载进度事件
+    // 监听Tauri HTTP插件发送的下载进度事件
     const unlistenFn = listen('download-progress', (event) => {
       const progress = event.payload;
       
       // 验证进度数据有效性
       if (progress && 
           typeof progress.downloaded === 'number' && 
-          typeof progress.total === 'number' && 
-          progress.total > 0 && 
-          progress.downloaded <= progress.total) {
+          typeof progress.total === 'number') {
         
-        console.log(`全局进度事件: ${formatFileSize(progress.downloaded)}/${formatFileSize(progress.total)}`);
+        // 提取速度和预计剩余时间
+        const speed = progress.speed || 0;
+        const eta = progress.eta || 0;
         
-        // 查找所有正在下载的任务
+        console.log(`接收HTTP进度: ${formatFileSize(progress.downloaded)}/${formatFileSize(progress.total)} - 速度: ${formatSpeed(speed)} - 剩余: ${formatTime(eta)}`);
+        
+        // 查找正在下载的任务
         setDownloadList(prevList => {
+          // 如果没有活跃下载，不进行操作
           const activeDownloads = prevList.filter(d => d.status === 'downloading');
           if (activeDownloads.length === 0) return prevList;
           
-          // 计算精确的进度百分比
+          // 计算准确的进度百分比
           const progressPercent = Math.min(99, Math.floor((progress.downloaded / progress.total) * 100));
           
-          // 如果只有一个下载任务，确保更新它
+          // 如果只有一个下载任务，直接更新它，但确保进度不会回退
           if (activeDownloads.length === 1) {
             const download = activeDownloads[0];
             
             return prevList.map(d => {
               if (d.id === download.id) {
-                // 如果总大小与当前显示的不同且有效，则更新
-                const newTotalSize = (progress.total > 0 && (!d.totalSize || progress.total !== d.totalSize)) 
-                  ? progress.total 
-                  : d.totalSize;
-                
-                // 计算实时下载速度
-                const currentTime = Date.now();
-                const elapsedTime = currentTime - d.lastUpdated;
-                let downloadSpeed = d.speed;
-                
-                // 只有在有足够的时间差时才更新速度
-                if (elapsedTime > 500) {
-                  const bytesDownloaded = progress.downloaded - (d.downloadedSize || 0);
-                  
-                  if (bytesDownloaded > 0) {
-                    const instantSpeed = (bytesDownloaded / elapsedTime) * 1000;
-                    
-                    // 平滑速度计算
-                    if (d.speed > 0) {
-                      downloadSpeed = 0.7 * d.speed + 0.3 * instantSpeed;
-                    } else {
-                      downloadSpeed = instantSpeed;
-                    }
-                  }
-                }
-                
-                // 计算剩余时间
-                let remainingTime = 0;
-                if (downloadSpeed > 0) {
-                  const remainingBytes = newTotalSize - progress.downloaded;
-                  remainingTime = remainingBytes / downloadSpeed;
-                }
+                // 确保进度和下载大小不会回退
+                const finalProgress = Math.max(progressPercent, d.progress || 0);
+                const finalDownloadedSize = Math.max(progress.downloaded, d.downloadedSize || 0);
                 
                 return {
                   ...d,
-                  progress: progressPercent,
-                  downloadedSize: progress.downloaded,
-                  totalSize: newTotalSize,
-                  speed: downloadSpeed,
-                  remainingTime: remainingTime,
-                  lastUpdated: currentTime,
+                  progress: finalProgress,
+                  downloadedSize: finalDownloadedSize,
+                  totalSize: progress.total,
+                  speed: speed,
+                  remainingTime: eta,
+                  lastUpdated: Date.now(),
                   isRealProgress: true
                 };
               }
@@ -1234,18 +1292,22 @@ const DownloadPage = ({ theme = 'light' }) => {
             });
           }
           
-          // 多个下载任务时，查找匹配的下载
-          // 注意：这是近似处理，无法确保100%匹配正确的下载
+          // 多个下载任务时，为每个活跃下载应用相同的逻辑，确保进度不会回退
           return prevList.map(d => {
             if (d.status === 'downloading') {
-              const currentTime = Date.now();
-              // 简单更新进度，不处理复杂的速度计算
+              // 确保进度和下载大小不会回退
+              const finalProgress = Math.max(progressPercent, d.progress || 0);
+              const finalDownloadedSize = Math.max(progress.downloaded, d.downloadedSize || 0);
+              
               return {
                 ...d,
-                progress: progressPercent,
-                downloadedSize: progress.downloaded,
-                totalSize: progress.total,
-                lastUpdated: currentTime
+                progress: finalProgress,
+                downloadedSize: finalDownloadedSize,
+                totalSize: progress.total > d.totalSize ? progress.total : d.totalSize,
+                speed: speed,
+                remainingTime: eta,
+                lastUpdated: Date.now(),
+                isRealProgress: true
               };
             }
             return d;
@@ -1254,49 +1316,8 @@ const DownloadPage = ({ theme = 'light' }) => {
       }
     });
     
-    // 设置定时刷新下载信息
-    const refreshInterval = setInterval(() => {
-      setDownloadList(prevList => {
-        // 只处理正在下载的任务
-        const hasActiveDownloads = prevList.some(d => d.status === 'downloading');
-        if (!hasActiveDownloads) return prevList;
-        
-        // 更新所有下载项的实时速度和剩余时间
-        const currentTime = Date.now();
-        
-        return prevList.map(d => {
-          if (d.status === 'downloading') {
-            // 计算总下载时间
-            const totalElapsedSeconds = (currentTime - d.startTime) / 1000;
-            
-            // 如果有下载数据，更新平均速度
-            if (totalElapsedSeconds > 0 && d.downloadedSize > 0) {
-              const avgSpeed = d.downloadedSize / totalElapsedSeconds;
-              
-              // 计算剩余时间
-              let remainingTime = 0;
-              if (avgSpeed > 0 && d.totalSize > d.downloadedSize) {
-                const remainingBytes = d.totalSize - d.downloadedSize;
-                remainingTime = remainingBytes / avgSpeed;
-              }
-              
-              // 只更新计算值，不更新进度
-              return {
-                ...d,
-                speed: d.speed || avgSpeed,
-                remainingTime: d.remainingTime || remainingTime,
-                lastRefreshed: currentTime
-              };
-            }
-          }
-          return d;
-        });
-      });
-    }, 1000);
-    
     return () => {
       unlistenFn.then(unlisten => unlisten());
-      clearInterval(refreshInterval);
     };
   }, []);
   
@@ -1453,7 +1474,13 @@ const DownloadPage = ({ theme = 'light' }) => {
   
   const handleResumeDownload = useCallback(async (download) => {
     try {
-      // Mark the download as pending in the UI
+      // 确保下载在暂停状态
+      if (download.status !== 'paused') {
+        console.log('只能恢复已暂停的下载, 当前状态:', download.status);
+        return;
+      }
+      
+      // 标记下载为挂起状态
       setDownloadList(prevList => {
         const updatedList = prevList.map(d => 
           d.id === download.id ? { ...d, status: 'pending' } : d
@@ -1462,28 +1489,57 @@ const DownloadPage = ({ theme = 'light' }) => {
         return updatedList;
       });
       
-      // Create a new download ID to ensure a fresh download process
+      // 创建新的下载ID确保下载流程是全新的
       const newDownloadId = Date.now();
       
-      // Remove the old download before starting a new one
+      // 保存原始appInfo和下载进度信息以确保恢复时不会出现进度跳跃
+      const originalAppInfo = download.appInfo;
+      const previousProgress = {
+        downloadedSize: download.downloadedSize || 0,
+        totalSize: download.totalSize || 0,
+        progress: download.progress || 0,
+        previouslyDownloaded: true
+      };
+      
+      // 移除旧的下载前开始一个新的
       setDownloadList(prevList => {
         const filteredList = prevList.filter(d => d.id !== download.id);
         saveDownloadList(filteredList);
         return filteredList;
       });
       
-      // Start a new download with the same file information
-      await startDownload(download.url, download.fileName, newDownloadId, download.appInfo);
-    } catch (error) {
-      console.error('Failed to resume download:', error);
+      // 开始一个新的下载，使用相同的文件信息和之前的进度状态
+      await startDownload(
+        download.url, 
+        download.fileName, 
+        newDownloadId, 
+        originalAppInfo, 
+        previousProgress
+      );
       
-      // Restore the paused state if resuming fails
+      // 显示成功提示
+      setToast({
+        show: true,
+        message: t('downloadManager.resuming', '正在继续下载'),
+        type: 'info'
+      });
+      
+      setTimeout(() => {
+        setToast({ show: false, message: '', type: '' });
+      }, 3000);
+    } catch (error) {
+      console.error('恢复下载失败:', error);
+      
+      // 如果恢复失败，恢复暂停状态
       setDownloadList(prevList => {
-        const updatedList = prevList.map(d => 
-          d.id === download.id ? { ...d, status: 'paused' } : d
-        );
-        saveDownloadList(updatedList);
-        return updatedList;
+        // 检查是否仍然需要恢复原始下载项
+        const exists = prevList.some(d => d.id === download.id);
+        if (!exists) {
+          const updatedList = [...prevList, {...download, status: 'paused'}];
+          saveDownloadList(updatedList);
+          return updatedList;
+        }
+        return prevList;
       });
       
       setToast({
@@ -1583,9 +1639,15 @@ const DownloadPage = ({ theme = 'light' }) => {
                 <DownloadItem key={download.id} theme={theme}>
                   <DownloadInfo>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <FileIcon fileName={download.fileName} theme={theme} />
+                      <FileIcon 
+                        fileName={download.fileName} 
+                        theme={theme} 
+                        appInfo={download.appInfo}
+                      />
                       <div>
-                        <FileName theme={theme}>{download.fileName}</FileName>
+                        <FileName theme={theme}>
+                          {download.appInfo && download.appInfo.name ? download.appInfo.name : download.fileName}
+                        </FileName>
                         <DownloadURL theme={theme}>{download.url}</DownloadURL>
                       </div>
                     </div>
@@ -1630,14 +1692,12 @@ const DownloadPage = ({ theme = 'light' }) => {
                             <>
                               <div style={{ marginRight: '10px' }}>
                                 <span>
-                                  {download.isEstimatedProgress ? '预估速度: ' : '速度: '}
-                                  {formatSpeed(download.speed || 0)}
+                                  速度: {formatSpeed(download.speed || 0)}
                                 </span>
                               </div>
                               <div>
                                 <span>
-                                  {download.isEstimatedProgress ? '预估剩余: ' : '剩余: '}
-                                  {formatTime(download.remainingTime || 0)}
+                                  剩余: {formatTime(download.remainingTime || 0)}
                                 </span>
                               </div>
                             </>
@@ -1645,9 +1705,8 @@ const DownloadPage = ({ theme = 'light' }) => {
                           
                           <div style={{ width: '100%', marginTop: '4px' }}>
                             <span>
-                              {typeof download.downloadedSize !== 'undefined' ? 
-                                `${formatFileSize(download.downloadedSize)} / ${formatFileSize(download.totalSize || 0)}` + 
-                                (download.isEstimatedProgress ? ' (预估)' : '') : 
+                              {typeof download.downloadedSize !== 'undefined' && download.totalSize ? 
+                                `${formatFileSize(download.downloadedSize)} / ${formatFileSize(download.totalSize)}` : 
                                 '大小计算中...'
                               }
                             </span>
