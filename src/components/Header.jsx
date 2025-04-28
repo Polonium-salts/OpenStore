@@ -295,6 +295,7 @@ const Header = ({
   onViewModeChange,
   isDownloadManagerVisible,
   viewMode = 'grid',
+  currentCategory = '',
   hasBackgroundImage = false, 
   backgroundOpacity = 0.8 
 }) => {
@@ -342,9 +343,28 @@ const Header = ({
   ), [theme]);
 
   // 使用useMemo缓存按钮部分
-  const headerActions = useMemo(() => (
+  const headerActions = useMemo(() => {
+    // 确定当前页面是否应该显示视图切换按钮
+    const showViewModeButtons = ['dev-tools', 'software', 'games', 'ai-models'].includes(currentCategory);
+    
+    return (
     <HeaderActions>
-      {/* 通知按钮 */}
+        {/* 视图模式切换按钮代码已移除 */}
+        
+        {/* 下载管理器按钮 */}
+      <MemoizedHeaderButton 
+          title="下载管理"
+        theme={theme}
+        active={isDownloadManagerVisible}
+        onClick={onToggleDownloadManager}
+        backgroundOpacity={backgroundOpacity}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+        </svg>
+      </MemoizedHeaderButton>
+        
+        {/* 通知按钮 */}
       <MemoizedHeaderButton 
         title="通知"
         theme={theme}
@@ -355,7 +375,8 @@ const Header = ({
         </svg>
       </MemoizedHeaderButton>
     </HeaderActions>
-  ), [theme, backgroundOpacity]);
+    );
+  }, [theme, backgroundOpacity, isDownloadManagerVisible, onToggleDownloadManager]);
 
   // 使用useMemo缓存Logo部分
   const logoSection = useMemo(() => (

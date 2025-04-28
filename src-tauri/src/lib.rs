@@ -116,11 +116,11 @@ async fn download_file_with_progress(
     _can_abort: Option<bool>,
     window: Window,
 ) -> Result<DownloadResult, String> {
+    use futures_util::StreamExt;
     use std::fs::File;
     use std::io::Write;
-    use tauri_plugin_http::reqwest;
-    use futures_util::StreamExt;
     use std::time::{Duration, Instant};
+    use tauri_plugin_http::reqwest;
 
     println!("开始下载文件: {} -> {}", url, save_path);
 
@@ -135,10 +135,7 @@ async fn download_file_with_progress(
 
     // 检查请求是否成功
     if !response.status().is_success() {
-        return Err(format!(
-            "文件下载失败: 状态码 {}",
-            response.status()
-        ));
+        return Err(format!("文件下载失败: 状态码 {}", response.status()));
     }
 
     // 获取内容长度（如果可用）
@@ -167,42 +164,42 @@ async fn download_file_with_progress(
     let mut last_emit_time = Instant::now();
     let mut last_downloaded: u64 = 0;
     let mut current_speed: f64 = 0.0;
-    
+
     // 获取流式响应
     let mut stream = response.bytes_stream();
-    
+
     // 逐块下载并写入文件
     while let Some(item) = stream.next().await {
         let chunk = match item {
             Ok(chunk) => chunk,
             Err(err) => return Err(format!("读取数据块失败: {}", err)),
         };
-        
+
         // 写入文件
         if let Err(err) = file.write_all(&chunk) {
             return Err(format!("写入文件失败: {}", err));
         }
-        
+
         // 更新已下载的量
         downloaded += chunk.len() as u64;
-        
+
         // 计算当前进度
         let percent = if total_size > 0 {
             (downloaded as f32 / total_size as f32) * 100.0
         } else {
             0.0
         };
-        
+
         // 每200毫秒发送一次进度更新，避免发送太多事件
         let now = Instant::now();
         if now.duration_since(last_emit_time) >= Duration::from_millis(200) {
             // 计算下载速度 (bytes/second)
             let time_diff = now.duration_since(last_emit_time).as_secs_f64();
             let bytes_diff = (downloaded - last_downloaded) as f64;
-            
+
             if time_diff > 0.0 {
                 let instant_speed = bytes_diff / time_diff;
-                
+
                 // 平滑速度计算 (加权平均)
                 if current_speed > 0.0 {
                     current_speed = current_speed * 0.7 + instant_speed * 0.3;
@@ -210,19 +207,19 @@ async fn download_file_with_progress(
                     current_speed = instant_speed;
                 }
             }
-            
+
             // 创建进度对象
             let progress = DownloadProgress {
                 downloaded,
                 total: total_size,
                 percent,
             };
-            
+
             // 附加额外信息
             let mut payload = serde_json::to_value(progress).unwrap_or_default();
             if let serde_json::Value::Object(ref mut map) = payload {
                 map.insert("speed".into(), serde_json::json!(current_speed as u64));
-                
+
                 // 计算剩余时间 (秒)
                 if current_speed > 0.0 && total_size > downloaded {
                     let remaining_bytes = total_size - downloaded;
@@ -230,30 +227,34 @@ async fn download_file_with_progress(
                     map.insert("eta".into(), serde_json::json!(remaining_time as u64));
                 }
             }
-            
+
             // 发送进度事件到前端
             if let Err(_) = window.emit("download-progress", &payload) {
                 println!("发送进度事件失败");
             }
-            
+
             // 更新最后发射时间和下载量
             last_emit_time = now;
             last_downloaded = downloaded;
         }
     }
-    
+
     // 发送最终的100%进度更新
     let final_progress = DownloadProgress {
         downloaded,
-        total: if total_size > 0 { total_size } else { downloaded },
+        total: if total_size > 0 {
+            total_size
+        } else {
+            downloaded
+        },
         percent: 100.0,
     };
-    
+
     // 发送完成事件
     if let Err(_) = window.emit("download-progress", &final_progress) {
         println!("发送最终进度事件失败");
     }
-    
+
     // 计算平均下载速度
     let total_time = start.elapsed().as_secs_f64();
     let avg_speed = if total_time > 0.0 {
@@ -261,8 +262,11 @@ async fn download_file_with_progress(
     } else {
         0
     };
-    
-    println!("下载完成: {} 字节，平均速度: {} 字节/秒", downloaded, avg_speed);
+
+    println!(
+        "下载完成: {} 字节，平均速度: {} 字节/秒",
+        downloaded, avg_speed
+    );
 
     // 验证文件大小
     let file_size = match std::fs::metadata(&save_path) {

@@ -10,6 +10,7 @@ import SimpleDownloadManager from './components/SimpleDownloadManager';
 import AppDetails from './components/AppDetails';
 import { TauriDownloader, TauriDownloaderUtil } from './components/TauriDownloader';
 import { fetchAppsFromSources, fetchAppsByCategory } from './services/sourceService';
+import usePerformanceTracker from './hooks/usePerformanceTracker';
 
 const AppContainer = styled.div`
   display: flex;
@@ -28,6 +29,11 @@ const AppContainer = styled.div`
   --bg-color-dark: rgba(29, 29, 31, var(--bg-opacity));
   --bg-color-light: rgba(245, 245, 247, var(--bg-opacity));
   
+  /* Hardware acceleration and animation optimizations */
+  will-change: background-color, color;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
   &::before {
     content: '';
     position: absolute;
@@ -38,8 +44,13 @@ const AppContainer = styled.div`
     background-color: var(--app-overlay-color);
     z-index: 0;
     pointer-events: none;
-    will-change: opacity, transform, background-color;
+    will-change: opacity, background-color;
     transition: background-color 0.15s ease-out;
+    
+    /* Hardware acceleration */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
   }
 `;
 
@@ -290,20 +301,44 @@ const preloadImage = (url) => {
     return imageCache.get(url);
   }
   
+  // 使用Interaction Observer API检查浏览器是否处于空闲状态
+  const lowPriority = 'requestIdleCallback' in window;
+  
   // 创建新的加载Promise并缓存
   const promise = new Promise((resolve, reject) => {
+    // 创建一个新图像元素
     const img = new Image();
+    
+    // 优化图像加载
+    img.decoding = 'async'; // 异步解码
+    img.fetchPriority = lowPriority ? 'low' : 'high'; // 如果浏览器支持，设置获取优先级
+    
     img.onload = () => {
       // 成功后添加到缓存
       imageCache.set(url, Promise.resolve());
-      resolve();
+      resolve(img);
     };
-    img.onerror = reject;
-    img.src = url;
-  }).catch(err => {
+    
+    img.onerror = (err) => {
     // 加载失败时从缓存中移除
     imageCache.delete(url);
+      reject(err);
+    };
+    
+    // 开始加载
+    if (lowPriority) {
+      // 如果浏览器支持requestIdleCallback，在浏览器空闲时加载
+      window.requestIdleCallback(() => {
+        img.src = url;
+      }, { timeout: 1000 }); // 设置1秒超时，防止无限期等待
+    } else {
+      // 否则直接加载
+      img.src = url;
+    }
+  }).catch(err => {
     console.warn(`Failed to preload image: ${url}`, err);
+    imageCache.delete(url);
+    return Promise.reject(err);
   });
   
   // 存储Promise到缓存
@@ -377,9 +412,58 @@ const LazyDownloadPage = lazy(() => {
   );
 });
 
+// 添加一个隐藏的后台图片预加载容器
+const BackgroundPreloader = styled.div`
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+`;
+
+// 预加载主题样式，减少首次切换时的卡顿
+const preloadThemes = () => {
+  // 创建一个隐藏的容器来预渲染两种主题
+  const styleContainer = document.createElement('div');
+  styleContainer.style.position = 'absolute';
+  styleContainer.style.width = '0';
+  styleContainer.style.height = '0';
+  styleContainer.style.overflow = 'hidden';
+  styleContainer.style.visibility = 'hidden';
+  
+  // 创建暗色主题的元素
+  const darkElement = document.createElement('div');
+  darkElement.style.backgroundColor = '#1d1d1f';
+  darkElement.style.color = '#f5f5f7';
+  
+  // 创建亮色主题的元素
+  const lightElement = document.createElement('div');
+  lightElement.style.backgroundColor = '#f5f5f7';
+  lightElement.style.color = '#1d1d1f';
+  
+  // 将它们添加到容器
+  styleContainer.appendChild(darkElement);
+  styleContainer.appendChild(lightElement);
+  
+  // 添加到DOM并在微任务中移除
+  document.body.appendChild(styleContainer);
+  setTimeout(() => {
+    document.body.removeChild(styleContainer);
+  }, 1000);
+};
+
+// 在main.jsx或其他入口文件中调用
+if (typeof window !== 'undefined') {
+  // 页面加载后预加载主题
+  window.addEventListener('load', preloadThemes);
+}
+
 const App = () => {
   const { t } = useTranslation();
   const { currentLanguage, changeLanguage } = useTranslationContext();
+  const { trackOperation, trackStart, trackEnd } = usePerformanceTracker();
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'light';
   });
@@ -413,6 +497,11 @@ const App = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDownloadManagerVisible, setIsDownloadManagerVisible] = useState(false);
   const [selectedApp, setSelectedApp] = useState(null);
+  // 添加页面加载状态
+  const [pageReady, setPageReady] = useState(false);
+  const [contentLoading, setContentLoading] = useState(true);
+  const prevCategoryRef = useRef(null);
+  
   const downloadManagerRef = useRef(null);
   
   // 使用防抖，避免频繁更新localStorage
@@ -498,46 +587,77 @@ const App = () => {
     });
   }, []);
   
-  // 优化初始加载 - 使用优先级队列加载资源
+  // 应用初始化
   useEffect(() => {
-    if (!isInitialRender.current) return;
+    // 设置初始主题类
+    const initialTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.classList.add(`${initialTheme}-theme`);
+    document.documentElement.setAttribute('data-theme', initialTheme);
     
-    const loadPriority1 = () => {
-      // 高优先级：预加载主题和UI关键资源
-      preloadThemeVariables(theme);
-      debouncedCssVarUpdate('--app-bg-opacity', backgroundOpacity);
-    };
-    
-    const loadPriority2 = () => {
-      // 中优先级：当前背景图
-      if (backgroundImage) {
-        return preloadImage(backgroundImage);
+    // 添加硬件加速类到主要元素
+    const acceleratedElements = document.querySelectorAll('.app-container, .background-overlay');
+    acceleratedElements.forEach(el => {
+      if (el) {
+        el.classList.add('gpu-accelerated');
       }
-      return Promise.resolve();
-    };
-    
-    const loadPriority3 = () => {
-      // 低优先级：预加载默认背景图片和其他资源
-      const defaultBackgrounds = [
-        'https://cdn.pixabay.com/photo/2020/10/27/08/00/mountains-5689938_1280.png',
-        'https://cdn.pixabay.com/photo/2012/08/27/14/19/mountains-55067_1280.png',
-        'https://media.istockphoto.com/id/1145054673/zh/%E5%90%91%E9%87%8F/%E6%B5%B7%E7%81%98.jpg'
-      ];
-      
-      // 使用Promise.all但不等待结果，允许在后台加载
-      Promise.all(defaultBackgrounds.map(preloadImage))
-        .catch(() => console.log('Some background images failed to preload'));
-    };
-    
-    // 顺序执行优先级加载
-    loadPriority1();
-    loadPriority2().finally(() => {
-      // 不管结果如何，继续加载低优先级资源
-      loadPriority3();
-      // 标记初始渲染完成
-      isInitialRender.current = false;
     });
-  }, [theme, backgroundImage, backgroundOpacity, debouncedCssVarUpdate]);
+    
+    // 使用IntersectionObserver优化页面渲染
+    const initIntersectionObserver = () => {
+      const options = {
+        root: null,
+        rootMargin: '0px',
+        threshold: 0.1
+      };
+      
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, options);
+      
+      // 监视关键元素
+      document.querySelectorAll('.app-card, .list-app-card').forEach(el => {
+        observer.observe(el);
+      });
+    };
+    
+    // 延迟初始化不那么关键的功能
+    setTimeout(() => {
+      initIntersectionObserver();
+    }, 500);
+    
+    // 页面加载完成
+    setPageReady(true);
+  }, []);
+    
+  // 优化初始渲染，仅当DOM准备好时才执行后续初始化
+  useEffect(() => {
+    if (pageReady) {
+      // 加载优先级1内容（关键路径渲染）
+    loadPriority1();
+      
+      // 使用requestIdleCallback加载较低优先级内容
+      if (window.requestIdleCallback) {
+        requestIdleCallback(() => {
+          loadPriority2();
+          
+          requestIdleCallback(() => {
+      loadPriority3();
+          }, { timeout: 2000 });
+        }, { timeout: 1000 });
+      } else {
+        // 备用方案
+        setTimeout(() => {
+          loadPriority2();
+          setTimeout(loadPriority3, 1000);
+        }, 500);
+      }
+    }
+  }, [pageReady]);
 
   // 优化应用加载
   const loadApps = useCallback(async (category) => {
@@ -671,27 +791,79 @@ const App = () => {
     };
   }, [theme, backgroundOpacity]);
 
-  // Optimize handleThemeChange to use CSS variables
+  // 优化批量更新CSS变量
+  const batchUpdateCssVariables = useCallback((variablesObject) => {
+    if (!variablesObject || Object.keys(variablesObject).length === 0) return;
+    
+    // 创建批处理更新，在下一帧执行
+    requestAnimationFrame(() => {
+      const root = document.documentElement;
+      
+      // 创建CSS文本，一次性应用所有变量
+      let cssText = root.style.cssText || '';
+      
+      // 添加所有CSS变量
+      Object.entries(variablesObject).forEach(([key, value]) => {
+        // 确保key有--前缀
+        const cssKey = key.startsWith('--') ? key : `--${key}`;
+        cssText += ` ${cssKey}: ${value};`;
+      });
+      
+      // 应用所有变量
+      root.style.cssText = cssText;
+    });
+  }, []);
+  
+  // 使用新的CSS类切换方式优化主题切换
   const handleThemeChange = useCallback((newTheme) => {
     if (newTheme !== theme) {
-      // Update theme immediately through CSS variables
-      const root = document.documentElement;
-      if (newTheme === 'dark') {
-        root.style.setProperty('--app-bg-color', '#1d1d1f');
-        root.style.setProperty('--app-text-color', '#f5f5f7');
-        root.style.setProperty('--app-overlay-color', 'var(--bg-color-dark)');
-      } else {
-        root.style.setProperty('--app-bg-color', '#f5f5f7');
-        root.style.setProperty('--app-text-color', '#1d1d1f');
-        root.style.setProperty('--app-overlay-color', 'var(--bg-color-light)');
-      }
+      trackStart('theme-change');
       
-      // Update React state after visual change
+      // 保存用户设置偏好
+      localStorage.setItem('theme', newTheme);
+      
+      // 为HTML元素添加新的主题类，使用CSS类选择器处理主题切换
+      // 而不是直接修改每个CSS变量
+      const documentElement = document.documentElement;
+      
+      // 为避免卡顿，推迟DOM操作到下一帧
+      if (window.requestIdleCallback) {
+        requestIdleCallback(() => {
+          // 完全禁用过渡效果，然后快速切换主题
+          documentElement.classList.add('theme-switch-in-progress');
+          
+          // 移除旧主题类和设置新主题类
+          documentElement.classList.remove('light-theme', 'dark-theme');
+          documentElement.classList.add(`${newTheme}-theme`);
+          documentElement.setAttribute('data-theme', newTheme);
+          
+          // 立即更新React状态
+          setTheme(newTheme);
+          
+          // 在微任务中移除过渡禁用类，允许后续过渡效果
+          setTimeout(() => {
+            documentElement.classList.remove('theme-switch-in-progress');
+            trackEnd('theme-change');
+          }, 50);
+        }, { timeout: 30 });
+      } else {
+        // 备用方案 - 使用requestAnimationFrame
       requestAnimationFrame(() => {
+          documentElement.classList.add('theme-switch-in-progress');
+          documentElement.classList.remove('light-theme', 'dark-theme');
+          documentElement.classList.add(`${newTheme}-theme`);
+          documentElement.setAttribute('data-theme', newTheme);
+          
         setTheme(newTheme);
+          
+          setTimeout(() => {
+            documentElement.classList.remove('theme-switch-in-progress');
+            trackEnd('theme-change');
+          }, 50);
       });
     }
-  }, [theme]);
+    }
+  }, [theme, trackStart, trackEnd]);
 
   const handleToggleDownloadManager = useCallback(() => {
     // 如果下载管理器当前不可见，则显示它并切换到downloads分类
@@ -770,59 +942,187 @@ const App = () => {
     }
   };
 
-  // 优化背景图片切换
-  const handleBackgroundImageChange = useCallback((imageUrl, opacity) => {
-    // 如果新值与当前值相同，跳过更新
-    if (imageUrl === backgroundImage && 
-        opacity !== undefined && 
-        Math.abs(opacity - backgroundOpacity) < 0.01) {
+  // 使用Offscreen Canvas API或Web Worker处理透明度变更
+  const handleOpacityChange = useCallback((newOpacity) => {
+    // 安全地转换为数字并保留两位小数
+    const numericOpacity = parseFloat(Number(newOpacity).toFixed(2));
+    
+    // 有效性检查
+    if (isNaN(numericOpacity) || numericOpacity < 0 || numericOpacity > 1) {
+      console.warn('无效的透明度值:', newOpacity);
       return;
     }
     
-    // 准备加载新图片（如果有）
-    const imageLoadPromise = imageUrl ? preloadImage(imageUrl) : Promise.resolve();
-    
-    // 立即更新CSS变量以提供视觉反馈
-    if (opacity !== undefined) {
-      debouncedCssVarUpdate('--app-bg-opacity', opacity);
+    // 如果新值与当前值相同，跳过更新
+    if (Math.abs(numericOpacity - backgroundOpacity) < 0.01) {
+      return;
     }
     
-    // 等待图片加载完成后更新状态
-    imageLoadPromise.then(() => {
-      batchedStateUpdate(() => {
-        // 批量更新状态减少重渲染
-        if (imageUrl !== backgroundImage) {
-          setBackgroundImage(imageUrl);
-          // 检查是否是默认背景之一
-          const isDefaultBackground = [
-            'https://cdn.pixabay.com/photo/2020/10/27/08/00/mountains-5689938_1280.png',
-            'https://cdn.pixabay.com/photo/2012/08/27/14/19/mountains-55067_1280.png',
-            'https://media.istockphoto.com/id/1145054673/zh/%E5%90%91%E9%87%8F/%E6%B5%B7%E7%81%98.jpg'
-          ].includes(imageUrl);
-          
-          if (imageUrl === '') {
-            // 如果是空值（无背景）
-            localStorage.removeItem('customBackgroundImage');
-            localStorage.removeItem('backgroundImage');
-          } else if (isDefaultBackground) {
-            // 如果是默认背景，则只保存到backgroundImage
-            localStorage.removeItem('customBackgroundImage');
-            localStorage.setItem('backgroundImage', imageUrl);
-          } else {
-            // 否则假定为自定义背景，保存到customBackgroundImage
-            localStorage.setItem('customBackgroundImage', imageUrl);
-            localStorage.setItem('backgroundImage', ''); // 清空常规背景
+    // 创建唯一标识符追踪当前更新
+    const updateId = Date.now();
+    handleOpacityChange.lastUpdateId = updateId;
+    
+    // 降低更新频率，使用更长的防抖时间
+    if (handleOpacityChange.updateTimer) {
+      clearTimeout(handleOpacityChange.updateTimer);
+    }
+    
+    // 直接更新DOM变量，立即反馈效果
+    document.documentElement.style.setProperty('--app-bg-opacity', numericOpacity);
+    
+    // 延迟React状态更新和持久化
+    handleOpacityChange.updateTimer = setTimeout(() => {
+      // 确保这是最新的更新请求
+      if (handleOpacityChange.lastUpdateId !== updateId) return;
+      
+      // 仅当确实是最新操作时才持久化到本地存储
+      localStorage.setItem('backgroundOpacity', numericOpacity.toString());
+      
+      // 分批更新React状态
+      requestAnimationFrame(() => {
+        // 再次确认是最新操作
+        if (handleOpacityChange.lastUpdateId !== updateId) return;
+        
+        setBackgroundOpacity(numericOpacity);
+        setUiBackgroundOpacity(numericOpacity);
+        
+        // 清理
+        handleOpacityChange.updateTimer = null;
+      });
+    }, 150); // 增加延迟以减少更新频率
+  }, [backgroundOpacity]);
+  
+  // 初始化静态属性
+  handleOpacityChange.updateTimer = null;
+  handleOpacityChange.lastUpdateId = 0;
+
+  // 修复自定义背景图片切换
+  const handleBackgroundImageChange = useCallback((imageUrl, opacity) => {
+    // 如果同时提供了透明度，单独处理透明度
+        if (opacity !== undefined && Math.abs(opacity - backgroundOpacity) >= 0.01) {
+      handleOpacityChange(opacity);
+    }
+    
+    // 如果没有图片变化，直接返回
+    if (imageUrl === backgroundImage) {
+      return;
+    }
+    
+    trackStart('background-change');
+    
+    // 创建一个标识当前更改的唯一ID
+    const changeId = Date.now();
+    handleBackgroundImageChange.lastChangeId = changeId;
+    
+    // 添加过渡类减少闪烁
+    document.body.classList.add('bg-changing');
+    
+    // 处理背景图变化
+    // 如果新图片为空，则立即更新
+    if (!imageUrl) {
+      setBackgroundImage('');
+      localStorage.removeItem('customBackgroundImage');
+      localStorage.removeItem('backgroundImage');
+      
+      // 使用RAF确保视觉上平滑
+      requestAnimationFrame(() => {
+        // 确保这是最新的更改
+        if (handleBackgroundImageChange.lastChangeId !== changeId) return;
+        
+        document.body.classList.remove('bg-changing');
+        trackEnd('background-change');
+      });
+      return;
+    }
+    
+    // 预加载图片，使用浏览器缓存
+    const img = new Image();
+    
+    // 设置解码策略优先渲染质量
+    img.decoding = 'async';
+    
+    // 预加载图片并防止闪烁
+    img.onload = () => {
+      // 如果不是最新操作，则忽略
+      if (handleBackgroundImageChange.lastChangeId !== changeId) return;
+      
+      // 先检查是否为默认背景之一
+      const defaultBackgrounds = [
+        'https://cdn.pixabay.com/photo/2020/10/27/08/00/mountains-5689938_1280.png',
+        'https://cdn.pixabay.com/photo/2012/08/27/14/19/mountains-55067_1280.png',
+        'https://media.istockphoto.com/id/1145054673/zh/%E5%90%91%E9%87%8F/%E6%B5%B7%E7%81%98.jpg'
+      ];
+      const isDefaultBackground = defaultBackgrounds.includes(imageUrl);
+      
+      // 创建内存中的CSS变量更新批量应用
+      requestAnimationFrame(() => {
+        // 再次确认是最新操作
+        if (handleBackgroundImageChange.lastChangeId !== changeId) return;
+        
+        // 使用Image API将图片分辨率降低到适合屏幕大小，减少内存使用
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 计算适合的分辨率（不超过屏幕分辨率的1.5倍）
+        const maxWidth = Math.min(window.innerWidth * 1.5, img.width);
+        const maxHeight = Math.min(window.innerHeight * 1.5, img.height);
+        
+        // 保持宽高比
+        const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
+        canvas.width = img.width * ratio;
+        canvas.height = img.height * ratio;
+        
+        // 绘制优化后的图像
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // 使用优化的图像URL更新状态
+        let optimizedImageUrl = imageUrl;
+        
+        // 只对非默认背景执行优化
+        if (!isDefaultBackground) {
+          try {
+            optimizedImageUrl = canvas.toDataURL('image/jpeg', 0.85);
+          } catch (e) {
+            console.warn('Cannot optimize background image', e);
           }
         }
         
-        if (opacity !== undefined && Math.abs(opacity - backgroundOpacity) >= 0.01) {
-          setBackgroundOpacity(opacity);
-          setUiBackgroundOpacity(opacity);
-          localStorage.setItem('backgroundOpacity', opacity.toString());
+        // 更新背景图
+        setBackgroundImage(optimizedImageUrl);
+        
+        // 更新localStorage - 修复自定义背景图保存问题
+        if (isDefaultBackground) {
+          // 如果是默认背景，保存到backgroundImage
+          localStorage.removeItem('customBackgroundImage');
+          localStorage.setItem('backgroundImage', imageUrl);
+        } else {
+          // 自定义背景 - 确保保存到customBackgroundImage
+          localStorage.setItem('customBackgroundImage', imageUrl);
+          // 同时更新backgroundImage为空，明确区分自定义背景
+          localStorage.removeItem('backgroundImage');
         }
+        
+        // 移除过渡类
+        setTimeout(() => {
+          document.body.classList.remove('bg-changing');
+          trackEnd('background-change');
+        }, 50);
       });
-    });
-  }, [backgroundImage, backgroundOpacity, batchedStateUpdate, debouncedCssVarUpdate]);
+    };
+    
+    // 图片加载失败时的处理
+    img.onerror = () => {
+      console.warn('背景图片加载失败:', imageUrl);
+      document.body.classList.remove('bg-changing');
+      trackEnd('background-change');
+    };
+    
+    // 开始加载图片
+    img.src = imageUrl;
+  }, [backgroundImage, backgroundOpacity, trackStart, trackEnd, handleOpacityChange]);
+  
+  // 初始化静态属性
+  handleBackgroundImageChange.lastChangeId = 0;
   
   // 使用useCallback优化handleViewModeChange函数
   const handleViewModeChange = useCallback((mode) => {
@@ -839,11 +1139,6 @@ const App = () => {
   const handleLanguageChange = useCallback((language) => {
     changeLanguage(language);
   }, [changeLanguage]);
-
-  // 添加页面加载状态
-  const [pageReady, setPageReady] = useState(false);
-  const [contentLoading, setContentLoading] = useState(true);
-  const prevCategoryRef = useRef(null);
   
   // 处理页面切换
   useEffect(() => {
@@ -991,7 +1286,7 @@ const App = () => {
         </Suspense>
       );
     }
-    
+
     if (currentCategory === 'downloads') {
       return (
         <Suspense fallback={<PageLoader>加载下载页面...</PageLoader>}>
@@ -1084,8 +1379,11 @@ const App = () => {
       backgroundOpacity={uiBackgroundOpacity}
       viewMode={viewMode}
       onViewModeChange={handleViewModeChange}
+      onToggleDownloadManager={handleToggleDownloadManager}
+      isDownloadManagerVisible={isDownloadManagerVisible}
+      currentCategory={currentCategory}
     />
-  ), [theme, handleSearch, backgroundImage, uiBackgroundOpacity, viewMode, handleViewModeChange]);
+  ), [theme, handleSearch, backgroundImage, uiBackgroundOpacity, viewMode, handleViewModeChange, handleToggleDownloadManager, isDownloadManagerVisible, currentCategory]);
 
   const getCategoryTitle = useCallback(() => {
     if (selectedApp) {
@@ -1155,8 +1453,61 @@ const App = () => {
     t
   ]);
 
+  // 添加优先级加载函数
+  const loadPriority1 = () => {
+    // 高优先级：预加载主题和UI关键资源
+    const currentTheme = localStorage.getItem('theme') || 'light';
+    const isDarkTheme = currentTheme === 'dark';
+    
+    // 设置主题数据属性
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    document.documentElement.classList.add(`${currentTheme}-theme`);
+  };
+
+  const loadPriority2 = () => {
+    // 中优先级：处理当前背景图
+    // 首先检查自定义背景
+    const customBg = localStorage.getItem('customBackgroundImage');
+    // 然后检查默认背景
+    const defaultBg = localStorage.getItem('backgroundImage');
+    
+    const currentBg = customBg || defaultBg || '';
+    
+    // 预加载背景图
+    if (currentBg) {
+      const img = new Image();
+      img.src = currentBg;
+    }
+    
+    return Promise.resolve();
+  };
+
+  const loadPriority3 = () => {
+    // 低优先级：预加载默认背景图片和其他资源
+    const defaultBackgrounds = [
+      'https://cdn.pixabay.com/photo/2020/10/27/08/00/mountains-5689938_1280.png',
+      'https://cdn.pixabay.com/photo/2012/08/27/14/19/mountains-55067_1280.png',
+      'https://media.istockphoto.com/id/1145054673/zh/%E5%90%91%E9%87%8F/%E6%B5%B7%E7%81%98.jpg'
+    ];
+    
+    // 预加载背景图片
+    defaultBackgrounds.forEach(url => {
+      const img = new Image();
+      img.src = url;
+    });
+  };
+
   // 在渲染中使用优化后的内容
   return (
+    <>
+      {/* 背景图片预加载容器 */}
+      <BackgroundPreloader>
+        {/* 预加载默认背景图片 */}
+        <img src="https://cdn.pixabay.com/photo/2020/10/27/08/00/mountains-5689938_1280.png" alt="" />
+        <img src="https://cdn.pixabay.com/photo/2012/08/27/14/19/mountains-55067_1280.png" alt="" />
+        <img src="https://media.istockphoto.com/id/1145054673/zh/%E5%90%91%E9%87%8F/%E6%B5%B7%E7%81%98.jpg" alt="" />
+      </BackgroundPreloader>
+      
     <AppContainer 
       theme={theme} 
       backgroundImage={backgroundImage} 
@@ -1178,29 +1529,30 @@ const App = () => {
         onDownloadComplete={(download) => console.log(t('downloadManager.completed'), download.name)}
         onDownloadError={(download, error) => console.error(t('downloadManager.failed'), download.name, error)}
       />
-      
-      {/* Toast通知组件 */}
-      {toast.show && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            padding: '10px 20px',
-            backgroundColor: toast.type === 'error' ? '#d32f2f' : 
-                             toast.type === 'success' ? '#388e3c' : 
-                             toast.type === 'warning' ? '#f57c00' : '#0066CC',
-            color: 'white',
-            borderRadius: '4px',
-            zIndex: '9999',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-            transition: 'opacity 0.3s ease',
-          }}
-        >
-          {toast.message}
-        </div>
-      )}
+        
+        {/* Toast通知组件 */}
+        {toast.show && (
+          <div
+            style={{
+              position: 'fixed',
+              bottom: '20px',
+              right: '20px',
+              padding: '10px 20px',
+              backgroundColor: toast.type === 'error' ? '#d32f2f' : 
+                               toast.type === 'success' ? '#388e3c' : 
+                               toast.type === 'warning' ? '#f57c00' : '#0066CC',
+              color: 'white',
+              borderRadius: '4px',
+              zIndex: '9999',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+              transition: 'opacity 0.3s ease',
+            }}
+          >
+            {toast.message}
+          </div>
+        )}
     </AppContainer>
+    </>
   );
 };
 
