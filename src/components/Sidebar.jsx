@@ -352,7 +352,7 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
       hasBackgroundImage={hasBackgroundImage}
       backgroundOpacity={backgroundOpacity}
     >
-      <StoreTitle collapsed={collapsed} theme={theme}>OpenStore</StoreTitle>
+      <StoreTitle collapsed={collapsed} theme={theme}>{/* 删除OpenStore文本 */}</StoreTitle>
       {collapseButton}
       {categorySections}
     </SidebarContainer>

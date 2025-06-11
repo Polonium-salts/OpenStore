@@ -344,9 +344,9 @@ const Header = ({
   // 使用useMemo缓存按钮部分
   const headerActions = useMemo(() => (
     <HeaderActions>
-      {/* 现有按钮 */}
+      {/* 下载管理按钮 */}
       <MemoizedHeaderButton 
-        title="日志管理"
+        title="下载管理"
         theme={theme}
         active={isDownloadManagerVisible}
         onClick={onToggleDownloadManager}

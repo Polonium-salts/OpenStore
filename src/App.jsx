@@ -928,7 +928,7 @@ const App = () => {
       return (
         <Suspense fallback={<PageLoader>加载下载管理器...</PageLoader>}>
           <FadeIn>
-            <div className="download-log-container">
+            <div className="download-manager-container">
               <LazySimpleDownloadManager ref={downloadManagerRef} theme={theme} />
             </div>
           </FadeIn>

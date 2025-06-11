@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import { useTranslation } from 'react-i18next';
-import { isAcceleratedDownloadEnabled, toggleAcceleratedDownload } from './TauriDownloader';
 
 const SettingsContainer = styled.div`
   padding: 20px;
@@ -336,6 +335,7 @@ const FastSlider = React.memo(({ value, min, max, step, onChange, theme }) => {
   const sliderRef = useRef(null);
   const [localValue, setLocalValue] = useState(value);
   const isFirstRender = useRef(true);
+  const isDraggingRef = useRef(false);
   
   // 使用RAF优化视觉更新
   const updateVisualStyle = useCallback((newValue) => {
@@ -359,27 +359,40 @@ const FastSlider = React.memo(({ value, min, max, step, onChange, theme }) => {
     }
   }, [value, updateVisualStyle]);
   
-  // 当外部value变化时同步
+  // 当外部value变化时同步，但不在拖动过程中同步
   useEffect(() => {
-    if (Math.abs(value - localValue) > 0.01) {
+    if (!isDraggingRef.current && Math.abs(value - localValue) > 0.01) {
       setLocalValue(value);
       updateVisualStyle(value);
     }
   }, [value, localValue, updateVisualStyle]);
   
-  // 处理滑块变化 - 使用防抖优化
+  // 保存值到localStorage的防抖函数
+  const saveValueDebounced = useCallback((val) => {
+    localStorage.setItem('backgroundOpacity', val.toString());
+  }, []);
+  
+  // 处理滑块变化
   const handleChange = useCallback((event) => {
     const newValue = parseFloat(event.target.value);
-    if (Math.abs(newValue - localValue) > 0.01) {
+    if (!isNaN(newValue) && Math.abs(newValue - localValue) > 0.01) {
+      isDraggingRef.current = true;
       setLocalValue(newValue);
       updateVisualStyle(newValue);
     }
   }, [localValue, updateVisualStyle]);
   
+  // 滑动开始时
+  const handleDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+  }, []);
+  
   // 滑动结束时通知父组件
   const handleChangeEnd = useCallback(() => {
+    isDraggingRef.current = false;
+    saveValueDebounced(localValue);
     onChange(localValue);
-  }, [onChange, localValue]);
+  }, [onChange, localValue, saveValueDebounced]);
   
   return (
     <div ref={sliderRef} className="fast-slider">
@@ -395,8 +408,11 @@ const FastSlider = React.memo(({ value, min, max, step, onChange, theme }) => {
         step={step}
         value={localValue}
         onChange={handleChange}
+        onMouseDown={handleDragStart}
+        onTouchStart={handleDragStart}
         onMouseUp={handleChangeEnd}
         onTouchEnd={handleChangeEnd}
+        onBlur={handleChangeEnd}
         theme={theme}
       />
     </div>
@@ -470,7 +486,6 @@ const OptimizedBackgroundPreview = React.memo(({
   );
 });
 
-// 使用 React.lazy 和 Suspense 优化组件加载
 const Settings = React.memo(({ 
   theme, 
   language,
@@ -482,6 +497,7 @@ const Settings = React.memo(({
   onBackgroundImageChange
 }) => {
   const { t } = useTranslation();
+  const [bgId, setBgId] = useState('default');
   const [customBgUrl, setCustomBgUrl] = useState('');
   const [customBgPreviewUrl, setCustomBgPreviewUrl] = useState('');
   const [opacity, setOpacity] = useState(() => {
@@ -495,6 +511,75 @@ const Settings = React.memo(({
   
   const fileInputRef = useRef(null);
   const opacityUpdateTimeoutRef = useRef(null);
+  
+  // 处理背景变更函数 - 提前定义，避免引用错误
+  const handleBackgroundChange = (backgroundId, url) => {
+    // If it's the custom background
+    if (backgroundId === 'custom') {
+      // 使用当前opacity值
+      onBackgroundImageChange(customBgPreviewUrl, opacity);
+      return;
+    }
+    
+    // 使用当前opacity值
+    onBackgroundImageChange(url, opacity);
+  };
+  
+  // 选择文件上传
+  const handleUploadClick = () => {
+    fileInputRef.current.click();
+  };
+  
+  // 处理URL输入
+  const handleUrlChange = (e) => {
+    setCustomBgUrl(e.target.value);
+  };
+  
+  // 清除自定义背景
+  const handleRemoveCustomBackground = () => {
+    setCustomBgPreviewUrl('');
+    localStorage.removeItem('customBackgroundImage');
+    
+    // 如果当前正在使用自定义背景，则重置为无背景
+    if (backgroundImage === customBgPreviewUrl) {
+      handleBackgroundChange('none', '');
+    }
+  };
+
+  // 通过URL加载图片
+  const handleLoadUrlImage = () => {
+    if (!customBgUrl) {
+      alert('请输入图片URL');
+      return;
+    }
+
+    // 检查URL格式
+    try {
+      new URL(customBgUrl);
+    } catch (e) {
+      alert('请输入有效的URL地址');
+      return;
+    }
+
+    // 尝试加载图片
+    const img = new Image();
+    img.onload = () => {
+      setCustomBgPreviewUrl(customBgUrl);
+      localStorage.setItem('customBackgroundImage', customBgUrl);
+      handleBackgroundChange('custom', customBgUrl);
+      setCustomBgUrl(''); // 清空输入框
+    };
+    img.onerror = () => {
+      alert('无法加载图片，请检查URL是否正确');
+    };
+    img.src = customBgUrl;
+  };
+  
+  const handleThemeChange = (value) => {
+    if (onThemeChange) {
+      onThemeChange(value);
+    }
+  };
   
   // 主题相关CSS变量初始化
   useEffect(() => {
@@ -523,9 +608,16 @@ const Settings = React.memo(({
   // 优化初始化加载
   useEffect(() => {
     // 预加载默认背景图片（优先级低）
-    requestIdleCallback(() => {
+    const loadBackgrounds = () => {
       preloadBackgrounds(DEFAULT_BACKGROUNDS);
-    });
+    };
+    
+    // 使用requestIdleCallback如果可用，否则使用setTimeout
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(loadBackgrounds);
+    } else {
+      setTimeout(loadBackgrounds, 100);
+    }
     
     // 获取当前CSS变量值
     const computedStyle = getComputedStyle(document.documentElement);
@@ -533,8 +625,7 @@ const Settings = React.memo(({
     
     if (currentOpacity) {
       const opacityValue = parseFloat(currentOpacity);
-      if (!isNaN(opacityValue) && Math.abs(opacityValue - localOpacity) > 0.01) {
-        setLocalOpacity(opacityValue);
+      if (!isNaN(opacityValue) && Math.abs(opacityValue - opacity) > 0.01) {
         setOpacity(opacityValue);
       }
     }
@@ -544,8 +635,7 @@ const Settings = React.memo(({
   useEffect(() => {
     // 这里我们只需要更新本地UI状态
     const savedOpacity = parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
-    if (Math.abs(savedOpacity - localOpacity) > 0.01) {
-      setLocalOpacity(savedOpacity);
+    if (Math.abs(savedOpacity - opacity) > 0.01) {
       setOpacity(savedOpacity);
     }
   }, [backgroundImage, theme]);
@@ -644,53 +734,6 @@ const Settings = React.memo(({
     };
   }, []);
 
-  // Download settings states
-  const [acceleratedDownload, setAcceleratedDownload] = useState(() => {
-    return isAcceleratedDownloadEnabled();
-  });
-  const [autoRun, setAutoRun] = useState(() => {
-    return localStorage.getItem('autoRunDownloads') === 'true';
-  });
-  const [autoExtract, setAutoExtract] = useState(() => {
-    return localStorage.getItem('autoExtractDownloads') === 'true';
-  });
-
-  const handleThemeChange = (value) => {
-    if (onThemeChange) {
-      onThemeChange(value);
-    }
-  };
-  
-  // 处理背景变更 - 将此函数提前到backgroundSelector之前定义
-  const handleBackgroundChange = (backgroundId, url) => {
-    // If it's the custom background
-    if (backgroundId === 'custom') {
-      // 使用当前opacity值
-      onBackgroundImageChange(customBgPreviewUrl, opacity);
-      return;
-    }
-    
-    // 使用当前opacity值
-    onBackgroundImageChange(url, opacity);
-  };
-  
-  // 选择文件上传
-  const handleUploadClick = () => {
-    fileInputRef.current.click();
-  };
-
-  // 修复backgroundImage undefined错误 - 移动到组件内部
-  const handleOpacityChange = useCallback((newOpacity) => {
-    // 更新本地状态
-    setLocalOpacity(newOpacity);
-    setOpacity(newOpacity);
-    
-    // 触发背景更新 - 确保传入正确的backgroundImage参数
-    if (typeof onBackgroundImageChange === 'function') {
-      onBackgroundImageChange(backgroundImage || '', newOpacity);
-    }
-  }, [backgroundImage, onBackgroundImageChange]);
-  
   // 默认背景图片列表
   const DEFAULT_BACKGROUNDS = [
     { id: 'none', url: '', label: '无背景' },
@@ -739,13 +782,25 @@ const Settings = React.memo(({
           min={0.1}
           max={1}
           step={0.05}
-          value={localOpacity}
-          onChange={handleOpacityChange}
+          value={opacity}
+          onChange={(newOpacity) => {
+            // 先更新本地状态
+            setOpacity(newOpacity);
+            setLocalOpacity(newOpacity);
+            
+            // 更新本地存储
+            localStorage.setItem('backgroundOpacity', newOpacity.toString());
+            
+            // 更新背景
+            if (typeof onBackgroundImageChange === 'function') {
+              onBackgroundImageChange(backgroundImage || '', newOpacity);
+            }
+          }}
           theme={theme}
         />
       </SliderContainer>
     )
-  ), [backgroundImage, localOpacity, theme, handleOpacityChange, t]);
+  ), [backgroundImage, opacity, theme, onBackgroundImageChange, t]);
 
   // 为视图模式切换添加样式组件
   const ViewModeContainer = styled.div`
@@ -782,82 +837,8 @@ const Settings = React.memo(({
     }
   `;
 
-  // 清除自定义背景
-  const handleRemoveCustomBackground = () => {
-    setCustomBgPreviewUrl('');
-    localStorage.removeItem('customBackgroundImage');
-    
-    // 如果当前正在使用自定义背景，则重置为无背景
-    if (backgroundImage === customBgPreviewUrl) {
-      handleBackgroundChange('none', '');
-    }
-  };
-
-  // 处理URL输入
-  const handleUrlChange = (e) => {
-    setCustomBgUrl(e.target.value);
-  };
-
-  // 通过URL加载图片
-  const handleLoadUrlImage = () => {
-    if (!customBgUrl) {
-      alert('请输入图片URL');
-      return;
-    }
-
-    // 检查URL格式
-    try {
-      new URL(customBgUrl);
-    } catch (e) {
-      alert('请输入有效的URL地址');
-      return;
-    }
-
-    // 尝试加载图片
-    const img = new Image();
-    img.onload = () => {
-      setCustomBgPreviewUrl(customBgUrl);
-      localStorage.setItem('customBackgroundImage', customBgUrl);
-      handleBackgroundChange('custom', customBgUrl);
-      setCustomBgUrl(''); // 清空输入框
-    };
-    img.onerror = () => {
-      alert('无法加载图片，请检查URL是否正确');
-    };
-    img.src = customBgUrl;
-  };
-
-  // Download settings handlers
-  const handleAcceleratedDownloadToggle = () => {
-    const newValue = !acceleratedDownload;
-    
-    // Save to localStorage and update the internal state
-    localStorage.setItem('useAcceleratedDownload', newValue.toString());
-    setAcceleratedDownload(newValue);
-    
-    // Explicitly call the utility function to ensure it's properly toggled
-    toggleAcceleratedDownload(newValue);
-    
-    // Log for debugging
-    console.log(`多线程加速下载模式: ${newValue ? '已启用' : '已禁用'}`);
-  };
-
-  const handleAutoRunToggle = () => {
-    const newValue = !autoRun;
-    setAutoRun(newValue);
-    localStorage.setItem('autoRunDownloads', newValue);
-  };
-
-  const handleAutoExtractToggle = () => {
-    const newValue = !autoExtract;
-    setAutoExtract(newValue);
-    localStorage.setItem('autoExtractDownloads', newValue);
-  };
-
   return (
     <SettingsContainer theme={theme}>
-      <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
-      
       <SettingsSection theme={theme}>
         <SectionTitle theme={theme}>{t('settings.appearance') || '外观设置'}</SectionTitle>
         
@@ -975,62 +956,6 @@ const Settings = React.memo(({
           
           {/* 透明度滑块 */}
           {opacitySlider}
-        </OptionGroup>
-      </SettingsSection>
-
-      {/* Download Settings - New Section */}
-      <SettingsSection theme={theme}>
-        <SectionTitle theme={theme}>{t('downloadManager.settings') || '下载设置'}</SectionTitle>
-        
-        <OptionGroup>
-          <OptionLabel theme={theme}>{t('downloadManager.acceleratedDownload') || '加速下载'}</OptionLabel>
-          <OptionDescription theme={theme}>
-            {t('settings.acceleratedDownloadDesc') || '使用多线程加速下载，可提高下载速度，但可能增加服务器负载'}
-          </OptionDescription>
-          <RadioGroup>
-            <RadioLabel theme={theme} selected={acceleratedDownload}>
-              <RadioInput 
-                type="checkbox" 
-                checked={acceleratedDownload} 
-                onChange={handleAcceleratedDownloadToggle} 
-              />
-              {t('settings.enable') || '启用'}
-            </RadioLabel>
-          </RadioGroup>
-        </OptionGroup>
-
-        <OptionGroup>
-          <OptionLabel theme={theme}>{t('downloadManager.autoRun') || '自动运行'}</OptionLabel>
-          <OptionDescription theme={theme}>
-            {t('settings.autoRunDesc') || '下载完成后自动运行可执行文件（仅适用于可执行文件）'}
-          </OptionDescription>
-          <RadioGroup>
-            <RadioLabel theme={theme} selected={autoRun}>
-              <RadioInput 
-                type="checkbox" 
-                checked={autoRun} 
-                onChange={handleAutoRunToggle} 
-              />
-              {t('settings.enable') || '启用'}
-            </RadioLabel>
-          </RadioGroup>
-        </OptionGroup>
-
-        <OptionGroup>
-          <OptionLabel theme={theme}>{t('downloadManager.autoExtract') || '自动解压'}</OptionLabel>
-          <OptionDescription theme={theme}>
-            {t('settings.autoExtractDesc') || '下载完成后自动解压压缩文件（支持zip、rar等常见格式）'}
-          </OptionDescription>
-          <RadioGroup>
-            <RadioLabel theme={theme} selected={autoExtract}>
-              <RadioInput 
-                type="checkbox" 
-                checked={autoExtract} 
-                onChange={handleAutoExtractToggle} 
-              />
-              {t('settings.enable') || '启用'}
-            </RadioLabel>
-          </RadioGroup>
         </OptionGroup>
       </SettingsSection>
     </SettingsContainer>

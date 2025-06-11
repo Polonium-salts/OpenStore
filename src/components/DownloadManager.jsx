@@ -2,9 +2,6 @@ import React, { useState, forwardRef, useImperativeHandle, useEffect, useRef, us
 import styled from 'styled-components';
 import { TauriDownloaderUtil } from './TauriDownloader';
 import { Badge, Button, Form } from 'react-bootstrap';
-import { Switch, Slider } from '@arco-design/web-react';
-import Tooltip from '@arco-design/web-react/es/Tooltip';
-import { isAcceleratedDownloadEnabled, setAcceleratedDownloadEnabled, getDownloadSettings, setDownloadSettings } from '../utils/settingsUtil';
 import { formatDateTime, formatDuration } from '../utils/timeUtils';
 
 const Container = styled.div`
@@ -150,7 +147,6 @@ const ErrorMessage = styled.div`
   font-size: 12px;
 `;
 
-// Add CSS for new UI elements
 const DownloadManagerStyles = styled.div`
   .download-manager {
     position: fixed;
@@ -200,47 +196,6 @@ const DownloadManagerStyles = styled.div`
     margin-left: 10px;
     padding: 0 5px;
   }
-`;
-
-const StyledSwitch = styled(Switch)`
-  margin-right: 8px;
-`;
-
-const StyledTooltip = styled(Tooltip)`
-  cursor: help;
-`;
-
-const InfoIcon = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background-color: #8c8c8c;
-  color: white;
-  font-size: 12px;
-  font-weight: bold;
-  cursor: help;
-`;
-
-// 添加缓存控制组件
-const CacheControl = styled.div`
-  margin-top: 10px;
-  padding: 10px;
-  border-top: 1px solid ${props => props.theme === 'dark' ? '#333' : '#eee'};
-`;
-
-const SliderContainer = styled.div`
-  margin: 10px 0;
-`;
-
-const SliderLabel = styled.div`
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: ${props => props.theme === 'dark' ? '#999' : '#666'};
-  margin-bottom: 5px;
 `;
 
 const DownloadManager = forwardRef((props, ref) => {
