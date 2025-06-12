@@ -26,10 +26,11 @@ const Title = styled.div`
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
 `;
 
-const DownloadsList = styled.div`
+const LogContainer = styled.div`
   max-height: 600px;
   overflow-y: auto;
   padding: 16px;
+  font-family: monospace;
   background-color: ${props => props.theme === 'dark' ? '#1a1a1a' : '#f0f0f0'};
 `;
 
@@ -40,51 +41,24 @@ const EmptyState = styled.div`
   font-size: 14px;
 `;
 
-const DownloadItem = styled.div`
-  margin-bottom: 16px;
-  padding: 12px;
-  background-color: ${props => props.theme === 'dark' ? '#333' : '#fff'};
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-`;
-
-const DownloadName = styled.div`
-  font-weight: 500;
-  margin-bottom: 8px;
-  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-`;
-
-const DownloadStatus = styled.div`
-  font-size: 12px;
-  margin-bottom: 8px;
+const LogEntry = styled.div`
+  padding: 4px 0;
+  font-size: 13px;
+  border-bottom: 1px solid ${props => props.theme === 'dark' ? '#333' : '#e0e0e0'};
   color: ${props => {
-    switch (props.status) {
-      case 'completed': return '#34C759';
+    switch (props.type) {
+      case 'info': return props.theme === 'dark' ? '#4CADEB' : '#0066CC';
+      case 'success': return '#34C759';
       case 'error': return '#FF3B30';
-      case 'downloading': return props.theme === 'dark' ? '#4CADEB' : '#0066CC';
+      case 'warning': return '#FFCC00';
       default: return props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f';
     }
   }};
 `;
 
-const ProgressBar = styled.div`
-  height: 4px;
-  background-color: ${props => props.theme === 'dark' ? '#444' : '#e0e0e0'};
-  border-radius: 2px;
-  margin: 8px 0;
-  overflow: hidden;
-`;
-
-const Progress = styled.div`
-  height: 100%;
-  width: ${props => props.progress}%;
-  background-color: #0066CC;
-`;
-
-const SpeedLabel = styled.span`
-  font-size: 12px;
-  color: ${props => props.theme === 'dark' ? '#4CADEB' : '#0066CC'};
-  margin-left: 8px;
+const Timestamp = styled.span`
+  color: ${props => props.theme === 'dark' ? '#777' : '#999'};
+  margin-right: 8px;
 `;
 
 const ButtonContainer = styled.div`
@@ -122,9 +96,15 @@ const formatTime = (date) => {
   });
 };
 
+const SpeedLabel = styled.span`
+  font-size: 12px;
+  color: ${props => props.theme === 'dark' ? '#4CADEB' : '#0066CC'};
+  margin-left: 8px;
+`;
+
 const SimpleDownloadManager = forwardRef(({ theme }, ref) => {
   const { t } = useTranslation();
-  const [downloads, setDownloads] = useState([]);
+  const [logs, setLogs] = useState([]);
   const [activeDownloads, setActiveDownloads] = useState([]);
   const [completedDownloads, setCompletedDownloads] = useState([]);
   const [autoRun, setAutoRun] = useState(() => {
@@ -137,7 +117,7 @@ const SimpleDownloadManager = forwardRef(({ theme }, ref) => {
     return isAcceleratedDownloadEnabled();
   });
   const [currentSpeed, setCurrentSpeed] = useState('');
-  const downloadsContainerRef = React.useRef(null);
+  const logContainerRef = React.useRef(null);
   
   // Sync with localStorage when settings change
   useEffect(() => {
@@ -161,25 +141,24 @@ const SimpleDownloadManager = forwardRef(({ theme }, ref) => {
     }
   }, [acceleratedDownload]);
   
+  // 滚动到日志底部
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [logs]);
+  
+  // 添加日志条目
+  const addLogEntry = (message, type = 'info') => {
+    const timestamp = new Date();
+    setLogs(prev => [...prev, { id: Date.now(), message, type, timestamp }]);
+  };
+  
   // 监听下载进度事件
   useEffect(() => {
     const handleDownloadProgress = (data) => {
-      if (data && data.id) {
-        setDownloads(prev => 
-          prev.map(download => 
-            download.id === data.id ? 
-            { 
-              ...download, 
-              progress: data.progress || 0,
-              speed: data.speed || download.speed
-            } : 
-            download
-          )
-        );
-        
-        if (data.progress && data.progress.speed) {
-          setCurrentSpeed(data.progress.speed);
-        }
+      if (data.progress && data.progress.speed) {
+        setCurrentSpeed(data.progress.speed);
       }
     };
     
@@ -195,141 +174,158 @@ const SimpleDownloadManager = forwardRef(({ theme }, ref) => {
     // 如果未启用自动运行和自动解压，则跳过处理
     if (!autoRun && !autoExtract) return;
     
+    addLogEntry(`准备处理文件: ${download.name}`, 'info');
+    
     try {
       const result = await processDownloadedFile(
         download, 
-        { autoRun, autoExtract }
+        { autoRun, autoExtract },
+        (message, type) => addLogEntry(message, type)
       );
+      
+      if (result.success) {
+        if (result.executed) {
+          addLogEntry(`已自动运行: ${download.name}`, 'success');
+        }
+        
+        if (result.extractPath) {
+          addLogEntry(`已解压到: ${result.extractPath}`, 'success');
+        }
+      }
     } catch (error) {
-      console.error(`处理文件失败: ${error.message}`);
+      addLogEntry(`处理文件失败: ${error.message}`, 'error');
     }
   };
   
   // 设置下载事件监听器
   useEffect(() => {
+    // 下载开始事件
     const handleDownloadStart = (download) => {
-      const newDownload = {
-        ...download,
-        progress: 0,
-        speed: '0 KB/s',
-        status: 'downloading',
-        startTime: new Date()
-      };
+      // Check the current accelerated download setting
+      const isAccelerated = isAcceleratedDownloadEnabled();
+      setAcceleratedDownload(isAccelerated);
       
-      setDownloads(prev => [...prev, newDownload]);
-      setActiveDownloads(prev => [...prev, newDownload]);
+      addLogEntry(`开始下载: ${download.name}`, 'info');
+      if (isAccelerated) {
+        addLogEntry(`使用多线程加速下载，线程数: 8`, 'info');
+      } else {
+        addLogEntry(`使用标准单线程下载模式`, 'info');
+      }
+      
+      setActiveDownloads(prev => [...prev, download.id]);
     };
     
+    // 下载完成事件
     const handleDownloadComplete = async (download) => {
-      const completedDownload = {
-        ...download,
-        progress: 100,
-        status: 'completed',
-        endTime: new Date()
-      };
+      setCurrentSpeed('');
+      addLogEntry(`下载完成: ${download.name}`, 'success');
+      setActiveDownloads(prev => prev.filter(id => id !== download.id));
       
-      setDownloads(prev => 
-        prev.map(d => d.id === download.id ? completedDownload : d)
-      );
-      
-      setActiveDownloads(prev => prev.filter(d => d.id !== download.id));
-      setCompletedDownloads(prev => [...prev, completedDownload]);
+      // 添加到已完成下载列表
+      setCompletedDownloads(prev => [...prev, download]);
       
       // 处理下载完成的文件
-      await handleFileProcessing(completedDownload);
+      await handleFileProcessing(download);
     };
     
+    // 下载错误事件
     const handleDownloadError = (data) => {
-      const { download, error } = data;
-      
-      const errorDownload = {
-        ...download,
-        status: 'error',
-        error: error.message || '下载失败',
-        endTime: new Date()
-      };
-      
-      setDownloads(prev => 
-        prev.map(d => d.id === download.id ? errorDownload : d)
-      );
-      
-      setActiveDownloads(prev => prev.filter(d => d.id !== download.id));
+      setCurrentSpeed('');
+      addLogEntry(`下载失败: ${data.download.name} - ${data.error?.message || '未知错误'}`, 'error');
+      setActiveDownloads(prev => prev.filter(id => id !== data.download.id));
     };
     
+    // 添加事件监听器
     TauriDownloaderUtil.addDownloadListener('onStart', handleDownloadStart);
     TauriDownloaderUtil.addDownloadListener('onComplete', handleDownloadComplete);
     TauriDownloaderUtil.addDownloadListener('onError', handleDownloadError);
     
+    // 初始化日志
+    addLogEntry(t('downloadManager.initialized') || '下载日志初始化完成', 'info');
+    
+    // 清理事件监听器
     return () => {
       TauriDownloaderUtil.removeDownloadListener('onStart', handleDownloadStart);
       TauriDownloaderUtil.removeDownloadListener('onComplete', handleDownloadComplete);
       TauriDownloaderUtil.removeDownloadListener('onError', handleDownloadError);
     };
-  }, [autoRun, autoExtract, handleFileProcessing]);
+  }, [autoRun, autoExtract, t]);
   
-  // 导出供父组件调用的方法
   useImperativeHandle(ref, () => ({
-    startDownload: (app) => {
-      TauriDownloaderUtil.download(app.downloadUrl, app.name);
+    startDownload: async (app) => {
+      addLogEntry(`准备下载应用: ${app.name}`, 'info');
+      
+      try {
+        // 检查下载URL
+        if (!app.downloadUrl) {
+          throw new Error('下载链接为空');
+        }
+        
+        addLogEntry(`解析下载链接: ${app.downloadUrl}`, 'info');
+        
+        // 在开始下载前获取最新设置
+        const isAccelerated = isAcceleratedDownloadEnabled();
+        setAcceleratedDownload(isAccelerated);
+        
+        // 使用 TauriDownloaderUtil 进行下载
+        if (isAccelerated) {
+          addLogEntry(`启动多线程加速下载: ${app.name}`, 'info');
+        } else {
+          addLogEntry(`启动常规下载: ${app.name}`, 'info');
+        }
+        
+        TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
+      } catch (error) {
+        addLogEntry(`下载初始化失败: ${error.message}`, 'error');
+      }
     }
   }));
-  
-  const clearCompleted = () => {
-    setDownloads(prev => prev.filter(download => download.status !== 'completed'));
-    setCompletedDownloads([]);
+
+  const clearLogs = () => {
+    setLogs([]);
+    addLogEntry(t('downloadManager.logsCleared') || '日志已清空', 'info');
   };
 
-  // 渲染下载列表
   return (
     <Container theme={theme}>
       <Header theme={theme}>
         <Title theme={theme}>
-          {t('downloadManager.title') || '下载管理'}
-          {activeDownloads.length > 0 && 
-            ` (${activeDownloads.length} ${t('downloadManager.downloadsInProgress') || '个下载进行中'})`
-          }
+          {t('downloadManager.title') || '下载日志'} 
+          {activeDownloads.length > 0 ? 
+            ` (${activeDownloads.length} ${t('downloadManager.downloadsInProgress') || '个下载进行中'})` : 
+            ''}
+          {currentSpeed && <SpeedLabel theme={theme}>{currentSpeed}</SpeedLabel>}
         </Title>
-        {currentSpeed && <SpeedLabel theme={theme}>{currentSpeed}</SpeedLabel>}
       </Header>
       
-      <DownloadsList theme={theme} ref={downloadsContainerRef}>
-        {downloads.length === 0 ? (
+      <LogContainer theme={theme} ref={logContainerRef}>
+        {logs.length === 0 ? (
           <EmptyState theme={theme}>
-            {t('downloadManager.noDownloads') || '暂无下载项目'}
+            {t('downloadManager.noDownloads') || '暂无下载日志'}
           </EmptyState>
         ) : (
-          downloads.map(download => (
-            <DownloadItem key={download.id} theme={theme}>
-              <DownloadName theme={theme}>{download.name}</DownloadName>
-              <DownloadStatus theme={theme} status={download.status}>
-                {download.status === 'downloading' && '下载中...'}
-                {download.status === 'completed' && '下载完成'}
-                {download.status === 'error' && `下载失败: ${download.error}`}
-              </DownloadStatus>
-              
-              {download.status === 'downloading' && (
-                <>
-                  <ProgressBar theme={theme}>
-                    <Progress progress={download.progress || 0} />
-                  </ProgressBar>
-                  <div>{download.progress?.toFixed(1) || 0}% - {download.speed}</div>
-                </>
-              )}
-              
-              {download.status === 'completed' && (
-                <div>完成于: {formatTime(download.endTime)}</div>
-              )}
-            </DownloadItem>
+          logs.map(log => (
+            <LogEntry key={log.id} type={log.type} theme={theme}>
+              <Timestamp theme={theme}>[{formatTime(log.timestamp)}]</Timestamp>
+              {log.message}
+            </LogEntry>
           ))
         )}
-      </DownloadsList>
+      </LogContainer>
       
-      <ButtonContainer>
-        {completedDownloads.length > 0 && (
-          <Button onClick={clearCompleted}>
-            {t('downloadManager.clearCompleted') || '清除已完成'}
-          </Button>
-        )}
+      <ButtonContainer theme={theme}>
+        <Button 
+          onClick={clearLogs} 
+          variant="secondary"
+          disabled={logs.length === 0}
+        >
+          {t('downloadManager.clearLogs') || '清空日志'}
+        </Button>
+        <span style={{ color: theme === 'dark' ? '#999' : '#666', fontSize: '12px' }}>
+          {activeDownloads.length > 0 ? 
+            `${activeDownloads.length} ${t('downloadManager.downloadsInProgress') || '个下载进行中'}` : 
+            ''}
+        </span>
       </ButtonContainer>
     </Container>
   );
