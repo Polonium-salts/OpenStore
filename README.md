@@ -135,3 +135,4 @@ The server includes error handling middleware that will return appropriate error
 ## License
 
 MIT
+请修复无法显示下载进度和下载进度百分比的问题和文件大小信息不正确的问题

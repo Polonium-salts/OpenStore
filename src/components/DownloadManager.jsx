@@ -1,826 +1,644 @@
-import React, { useState, forwardRef, useImperativeHandle, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import styled from 'styled-components';
-import { TauriDownloaderUtil } from './TauriDownloader';
-import { Badge, Button, Form } from 'react-bootstrap';
-import { Switch, Slider } from '@arco-design/web-react';
-import Tooltip from '@arco-design/web-react/es/Tooltip';
-import { isAcceleratedDownloadEnabled, setAcceleratedDownloadEnabled, getDownloadSettings, setDownloadSettings } from '../utils/settingsUtil';
-import { formatDateTime, formatDuration } from '../utils/timeUtils';
 
-const Container = styled.div`
-  width: 100%;
-  background-color: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px ${props => props.theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)'};
-`;
-
-const Header = styled.div`
-  padding: 16px;
-  background-color: ${props => props.theme === 'dark' ? '#1d1d1f' : '#f5f5f7'};
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'};
-`;
-
-const Title = styled.div`
-  font-weight: 500;
-  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-`;
-
-const DownloadList = styled.div`
-  overflow-y: auto;
-  max-height: 400px;
-  padding: 10px;
-`;
-
-const EmptyState = styled.div`
-  text-align: center;
-  padding: 40px;
-  color: ${props => props.theme === 'dark' ? '#999' : '#666'};
-  font-size: 14px;
-`;
-
-const DownloadItem = styled.div`
-  padding: 12px;
-  border-radius: 6px;
-  background-color: ${props => props.theme === 'dark' ? '#1d1d1f' : '#f5f5f7'};
-  margin-bottom: 8px;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
+// 样式组件
+const DownloadManagerContainer = styled.div`
+  padding: 20px;
+  background: ${props => props.theme === 'dark' ? '#2a2a2d' : '#f5f5f5'};
+  border-radius: 8px;
+  margin: 20px;
 `;
 
 const DownloadHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid ${props => props.theme === 'dark' ? '#3a3a3d' : '#ddd'};
 `;
 
-const DownloadName = styled.div`
+const Title = styled.h2`
+  margin: 0;
+  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#333'};
+  font-size: 24px;
+`;
+
+const AddDownloadButton = styled.button`
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
   font-size: 14px;
-  font-weight: 500;
-  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-  max-width: 250px;
+  transition: background 0.3s;
+
+  &:hover {
+    background: #0056b3;
+  }
 `;
 
-const DownloadStatus = styled.div`
-  font-size: 12px;
-  color: ${props => {
-    switch (props.status) {
-      case 'completed': return '#34C759';
-      case 'error': 
-      case 'failed': return '#FF3B30';
-      case 'retrying': return '#FF9500';
-      case 'cancelled': return '#666';
-      default: return props.theme === 'dark' ? '#999' : '#666';
+const DownloadList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+`;
+
+const DownloadItem = styled.div`
+  background: ${props => props.theme === 'dark' ? '#1d1d1f' : 'white'};
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 4px ${props => props.theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0,0,0,0.1)'};
+  border-left: 4px solid ${props => {
+    switch(props.status) {
+      case 'Downloading': return '#007bff';
+      case 'Completed': return '#28a745';
+      case 'Failed': return '#dc3545';
+      case 'Paused': return '#ffc107';
+      case 'Cancelled': return '#6c757d';
+      default: return '#6c757d';
     }
   }};
 `;
 
-const ProgressBar = styled.div`
-  width: 100%;
-  height: 4px;
-  background-color: ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'};
-  border-radius: 2px;
-  overflow: hidden;
-  margin-bottom: 8px;
-`;
-
-const Progress = styled.div`
-  height: 100%;
-  background-color: #0066CC;
-  width: ${props => props.value}%;
-  transition: width 0.3s ease;
-`;
-
-const StyledButton = styled.button`
-  padding: 4px 12px;
-  border-radius: 4px;
-  border: 1px solid #d9d9d9;
-  background-color: white;
-  cursor: pointer;
-  font-size: 12px;
-  transition: all 0.2s;
-  
-  &:hover {
-    border-color: #165dff;
-    color: #165dff;
-  }
-`;
-
 const DownloadInfo = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 4px;
-  font-size: 12px;
-`;
-
-const InfoItem = styled.div`
-  display: flex;
+  justify-content: space-between;
   align-items: center;
+  margin-bottom: 10px;
 `;
 
-const InfoLabel = styled.span`
-  color: #8c8c8c;
-  margin-right: 4px;
-`;
-
-const InfoValue = styled.span`
-  color: #333;
-  font-weight: 500;
-`;
-
-const ErrorContainer = styled.div`
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-`;
-
-const ErrorMessage = styled.div`
-  color: #d9363e;
-  font-size: 12px;
-`;
-
-// Add CSS for new UI elements
-const DownloadManagerStyles = styled.div`
-  .download-manager {
-    position: fixed;
-    right: 20px;
-    bottom: 20px;
-    z-index: 1000;
-  }
-
-  .download-toggle {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-  }
-
-  .download-panel {
-    position: absolute;
-    bottom: 60px;
-    right: 0;
-    width: 400px;
-    background-color: ${props => props.theme === 'dark' ? '#2c2c2c' : '#fff'};
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
-    display: none;
-    flex-direction: column;
-    max-height: 500px;
-    border: 1px solid ${props => props.theme === 'dark' ? '#444' : '#e0e0e0'};
-  }
-
-  .download-panel.show {
-    display: flex;
-  }
-
-  .download-header {
-    padding: 12px 15px;
-    border-bottom: 1px solid ${props => props.theme === 'dark' ? '#444' : '#e0e0e0'};
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .download-actions {
-    display: flex;
-    align-items: center;
-  }
-
-  .close-btn {
-    margin-left: 10px;
-    padding: 0 5px;
-  }
-`;
-
-const StyledSwitch = styled(Switch)`
-  margin-right: 8px;
-`;
-
-const StyledTooltip = styled(Tooltip)`
-  cursor: help;
-`;
-
-const InfoIcon = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background-color: #8c8c8c;
-  color: white;
-  font-size: 12px;
+const FileName = styled.div`
   font-weight: bold;
-  cursor: help;
+  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#333'};
+  font-size: 16px;
 `;
 
-// 添加缓存控制组件
-const CacheControl = styled.div`
-  margin-top: 10px;
-  padding: 10px;
-  border-top: 1px solid ${props => props.theme === 'dark' ? '#333' : '#eee'};
+const DownloadStatus = styled.div`
+  color: ${props => {
+    switch(props.status) {
+      case 'Downloading': return '#007bff';
+      case 'Completed': return '#28a745';
+      case 'Failed': return '#dc3545';
+      case 'Paused': return '#ffc107';
+      case 'Cancelled': return '#6c757d';
+      default: return '#6c757d';
+    }
+  }};
+  font-weight: bold;
 `;
 
-const SliderContainer = styled.div`
+const ProgressContainer = styled.div`
   margin: 10px 0;
 `;
 
-const SliderLabel = styled.div`
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: ${props => props.theme === 'dark' ? '#999' : '#666'};
-  margin-bottom: 5px;
+const ProgressBar = styled.div`
+  width: 100%;
+  height: 8px;
+  background: ${props => props.theme === 'dark' ? '#3a3a3d' : '#e9ecef'};
+  border-radius: 4px;
+  overflow: hidden;
 `;
 
-const DownloadManager = forwardRef((props, ref) => {
+const ProgressFill = styled.div`
+  height: 100%;
+  background: ${props => {
+    switch(props.status) {
+      case 'Downloading': return '#007bff';
+      case 'Completed': return '#28a745';
+      case 'Failed': return '#dc3545';
+      case 'Paused': return '#ffc107';
+      default: return '#6c757d';
+    }
+  }};
+  width: ${props => props.progress}%;
+  transition: width 0.3s ease;
+`;
+
+const ProgressText = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  font-size: 12px;
+  color: ${props => props.theme === 'dark' ? '#999' : '#666'};
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+`;
+
+const ActionButton = styled.button`
+  padding: 5px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.3s;
+  
+  &.start {
+    background: #28a745;
+    color: white;
+    &:hover { background: #218838; }
+  }
+  
+  &.pause {
+    background: #ffc107;
+    color: #212529;
+    &:hover { background: #e0a800; }
+  }
+  
+  &.cancel {
+    background: #dc3545;
+    color: white;
+    &:hover { background: #c82333; }
+  }
+  
+  &.remove {
+    background: #6c757d;
+    color: white;
+    &:hover { background: #5a6268; }
+  }
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+`;
+
+const AddDownloadModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+`;
+
+const ModalContent = styled.div`
+  background: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
+  padding: 30px;
+  border-radius: 8px;
+  width: 500px;
+  max-width: 90vw;
+`;
+
+const ModalTitle = styled.h3`
+  margin: 0 0 20px 0;
+  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#333'};
+`;
+
+const FormGroup = styled.div`
+  margin-bottom: 15px;
+`;
+
+const Label = styled.label`
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#333'};
+`;
+
+const Input = styled.input`
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid ${props => props.theme === 'dark' ? '#444' : '#ddd'};
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+  background: ${props => props.theme === 'dark' ? '#1d1d1f' : 'white'};
+  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#333'};
+`;
+
+const ModalButtonGroup = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+`;
+
+const ModalButton = styled.button`
+  padding: 8px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  
+  &.primary {
+    background: #007bff;
+    color: white;
+    &:hover { background: #0056b3; }
+  }
+  
+  &.secondary {
+    background: #6c757d;
+    color: white;
+    &:hover { background: #5a6268; }
+  }
+`;
+
+const EmptyState = styled.div`
+  text-align: center;
+  padding: 40px;
+  color: ${props => props.theme === 'dark' ? '#999' : '#666'};
+  font-size: 16px;
+`;
+
+// 状态映射
+const statusMap = {
+  'Pending': '等待中',
+  'Downloading': '下载中',
+  'Paused': '已暂停',
+  'Completed': '已完成',
+  'Failed': '下载失败',
+  'Cancelled': '已取消'
+};
+
+// 格式化文件大小
+const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+};
+
+const DownloadManager = ({ theme = 'light' }) => {
   const [downloads, setDownloads] = useState([]);
-  const [showDownloads, setShowDownloads] = useState(false);
-  const downloadStartTimes = useRef({});
-  const downloadSpeeds = useRef({});
-  const downloadMemoryCache = useRef({});
-
-  // 使用记忆化的活动下载数量计算以避免不必要的重新渲染
-  const activeDownloadsCount = useMemo(() => {
-    return downloads.filter(d => d.status === 'downloading').length;
-  }, [downloads]);
-
-  // 使用记忆化的完成下载数量计算
-  const completedDownloadsCount = useMemo(() => {
-    return downloads.filter(d => d.status === 'completed').length;
-  }, [downloads]);
-
-  useEffect(() => {
-    // Initialize the download event handlers
-    const onDownloadStart = (event) => {
-      const { id, url, name, size } = event.detail;
-      
-      // Store start time for speed calculation
-      downloadStartTimes.current[id] = Date.now();
-      downloadSpeeds.current[id] = [];
-      
-      setDownloads(prev => [
-        {
-          id,
-          url,
-          name: name || url.split('/').pop(),
-          progress: 0,
-          status: 'downloading',
-          size: size || 0,
-          speed: '-',
-          eta: '-',
-          startTime: new Date().toLocaleTimeString()
-        },
-        ...prev
-      ]);
-    };
-
-    // 创建Web Worker处理计算以避免主线程阻塞
-    let worker = null;
-    let workerBlobURL = null;
-    
-    try {
-      // 创建Web Worker的代码
-      const workerCode = `
-        // 处理下载速度计算
-        function calculateSpeedAverage(speeds) {
-          if (!speeds || speeds.length === 0) return '-';
-          
-          // 转换所有速度为统一单位 (字节/秒)
-          const bytesPerSecArray = speeds.map(speed => {
-            let value = speed.value;
-            if (speed.unit.includes('KB')) value *= 1024;
-            else if (speed.unit.includes('MB')) value *= 1024 * 1024;
-            else if (speed.unit.includes('GB')) value *= 1024 * 1024 * 1024;
-            return value;
-          });
-          
-          // 计算平均值
-          const sum = bytesPerSecArray.reduce((acc, val) => acc + val, 0);
-          const avgBps = sum / bytesPerSecArray.length;
-          
-          // 格式化为可读格式
-          return formatSpeed(avgBps);
-        }
-        
-        // 格式化速度单位
-        function formatSpeed(bytesPerSecond) {
-          if (bytesPerSecond < 1024) {
-            return bytesPerSecond.toFixed(1) + 'B/s';
-          } else if (bytesPerSecond < 1024 * 1024) {
-            return (bytesPerSecond / 1024).toFixed(1) + 'KB/s';
-          } else if (bytesPerSecond < 1024 * 1024 * 1024) {
-            return (bytesPerSecond / (1024 * 1024)).toFixed(1) + 'MB/s';
-          } else {
-            return (bytesPerSecond / (1024 * 1024 * 1024)).toFixed(1) + 'GB/s';
-          }
-        }
-        
-        // 计算ETA (预计完成时间)
-        function calculateETA(downloadedBytes, totalBytes, currentSpeed) {
-          if (!currentSpeed || currentSpeed === '-' || !totalBytes || !downloadedBytes) {
-            return '-';
-          }
-          
-          // 解析速度值和单位
-          const speedMatch = currentSpeed.match(/([\\d.]+)\\s*(B|KB|MB|GB)\\/s/);
-          if (!speedMatch) return '-';
-          
-          const speedValue = parseFloat(speedMatch[1]);
-          const speedUnit = speedMatch[2];
-          
-          // 转换为字节/秒
-          let bytesPerSecond = speedValue;
-          if (speedUnit === 'KB') bytesPerSecond *= 1024;
-          else if (speedUnit === 'MB') bytesPerSecond *= 1024 * 1024;
-          else if (speedUnit === 'GB') bytesPerSecond *= 1024 * 1024 * 1024;
-          
-          if (bytesPerSecond <= 0) return '-';
-          
-          // 计算剩余时间
-          const remainingBytes = totalBytes - downloadedBytes;
-          const remainingSeconds = remainingBytes / bytesPerSecond;
-          
-          if (remainingSeconds < 60) {
-            return \`\${Math.round(remainingSeconds)}秒\`;
-          } else if (remainingSeconds < 3600) {
-            return \`\${Math.floor(remainingSeconds / 60)}分\${Math.round(remainingSeconds % 60)}秒\`;
-          } else {
-            return \`\${Math.floor(remainingSeconds / 3600)}时\${Math.floor((remainingSeconds % 3600) / 60)}分\`;
-          }
-        }
-        
-        // 响应主线程消息
-        self.onmessage = function(e) {
-          const { type, data } = e.data;
-          
-          switch (type) {
-            case 'calculateSpeed':
-              const avgSpeed = calculateSpeedAverage(data.speeds);
-              self.postMessage({ type: 'speedResult', id: data.id, speed: avgSpeed });
-              break;
-              
-            case 'calculateETA':
-              const eta = calculateETA(data.downloadedBytes, data.totalBytes, data.speed);
-              self.postMessage({ type: 'etaResult', id: data.id, eta });
-              break;
-              
-            default:
-              console.log('Worker received unknown message type:', type);
-          }
-        };
-      `;
-      
-      // 创建Blob和Worker
-      const blob = new Blob([workerCode], { type: 'application/javascript' });
-      workerBlobURL = URL.createObjectURL(blob);
-      worker = new Worker(workerBlobURL);
-      
-      // 处理Worker的消息
-      worker.onmessage = function(e) {
-        const { type, id, speed, eta } = e.data;
-        
-        if (type === 'speedResult') {
-          setDownloads(prev => prev.map(download => 
-            download.id === id ? { ...download, calculatedSpeed: speed } : download
-          ));
-        } else if (type === 'etaResult') {
-          setDownloads(prev => prev.map(download => 
-            download.id === id ? { ...download, calculatedEta: eta } : download
-          ));
-        }
-      };
-      
-    } catch (error) {
-      console.error('无法创建Web Worker:', error);
-    }
-    
-    const onDownloadProgress = (event) => {
-      const { id, progress, downloadedBytes, totalBytes, speed } = event.detail;
-      
-      // 仅在有Worker时使用Worker计算
-      if (worker) {
-        // 请求计算ETA
-        worker.postMessage({
-          type: 'calculateETA',
-          data: { id, downloadedBytes, totalBytes, speed }
-        });
-        
-        // 存储速度记录用于平均计算
-        if (speed && speed !== '-') {
-          const numericSpeed = parseFloat(speed.replace(/[^0-9.]/g, ''));
-          const unit = speed.replace(/[0-9.]/g, '');
-          
-          if (!isNaN(numericSpeed)) {
-            const speedsArray = downloadSpeeds.current[id] || [];
-            downloadSpeeds.current[id] = [
-              ...speedsArray.slice(-5), // 只保留最近5个速度记录
-              { value: numericSpeed, unit }
-            ];
-            
-            // 请求计算平均速度
-            worker.postMessage({
-              type: 'calculateSpeed',
-              data: { id, speeds: downloadSpeeds.current[id] }
-            });
-          }
-        }
-      }
-      
-      // 更新下载信息
-      setDownloads(prev => {
-        return prev.map(download => {
-          if (download.id === id) {
-            // 优化UI更新频率，避免过度渲染
-            const shouldUpdateDetail = 
-              !download.lastUpdateTime || 
-              (Date.now() - download.lastUpdateTime > 500); // 每500ms更新一次详细数据
-            
-            if (shouldUpdateDetail) {
-              return {
-                ...download,
-                progress: progress || 0,
-                downloadedBytes,
-                totalBytes,
-                speed: speed || download.speed,
-                lastUpdateTime: Date.now()
-              };
-            } else {
-              // 只更新进度，其他信息保持不变以减少重绘
-              return {
-                ...download,
-                progress: progress || download.progress
-              };
-            }
-          }
-          return download;
-        });
-      });
-    };
-
-    const onDownloadComplete = (event) => {
-      const { id } = event.detail;
-      const startTime = downloadStartTimes.current[id];
-      
-      setDownloads(prev => {
-        return prev.map(download => {
-          if (download.id === id) {
-            // Calculate download time
-            let downloadTime = '-';
-            if (startTime) {
-              const elapsedMs = Date.now() - startTime;
-              if (elapsedMs < 1000) {
-                downloadTime = `${elapsedMs}毫秒`;
-              } else if (elapsedMs < 60000) {
-                downloadTime = `${Math.round(elapsedMs / 1000)}秒`;
-              } else if (elapsedMs < 3600000) {
-                downloadTime = `${Math.floor(elapsedMs / 60000)}分${Math.round((elapsedMs % 60000) / 1000)}秒`;
-              } else {
-                downloadTime = `${Math.floor(elapsedMs / 3600000)}时${Math.floor((elapsedMs % 3600000) / 60000)}分`;
-              }
-            }
-            
-            // Calculate average speed
-            let averageSpeed = '-';
-            const speeds = downloadSpeeds.current[id];
-            if (speeds && speeds.length > 0) {
-              // Convert all speeds to bytes/s for averaging
-              const standardizedSpeeds = speeds.map(speed => {
-                let valueInBytes = speed.value;
-                if (speed.unit.includes('KB')) {
-                  valueInBytes *= 1024;
-                } else if (speed.unit.includes('MB')) {
-                  valueInBytes *= 1024 * 1024;
-                } else if (speed.unit.includes('GB')) {
-                  valueInBytes *= 1024 * 1024 * 1024;
-                }
-                return valueInBytes;
-              });
-              
-              // Calculate average
-              const avgBytesPerSec = standardizedSpeeds.reduce((sum, speed) => sum + speed, 0) / standardizedSpeeds.length;
-              
-              // Format back to human-readable
-              averageSpeed = formatSpeed(avgBytesPerSec);
-            }
-            
-            return {
-              ...download,
-              status: 'completed',
-              progress: 100,
-              completionTime: new Date().toLocaleTimeString(),
-              downloadTime,
-              averageSpeed
-            };
-          }
-          return download;
-        });
-      });
-    };
-
-    const onDownloadError = (event) => {
-      const { id, error } = event.detail;
-      
-      setDownloads(prev => {
-        return prev.map(download => {
-          if (download.id === id) {
-            return {
-              ...download,
-              status: 'error',
-              error: error || '下载失败，请重试'
-            };
-          }
-          return download;
-        });
-      });
-    };
-
-    // Register event listeners
-    TauriDownloaderUtil.on('download-start', onDownloadStart);
-    TauriDownloaderUtil.on('download-progress', onDownloadProgress);
-    TauriDownloaderUtil.on('download-complete', onDownloadComplete);
-    TauriDownloaderUtil.on('download-error', onDownloadError);
-
-    // Cleanup
-    return () => {
-      TauriDownloaderUtil.off('download-start', onDownloadStart);
-      TauriDownloaderUtil.off('download-progress', onDownloadProgress);
-      TauriDownloaderUtil.off('download-complete', onDownloadComplete);
-      TauriDownloaderUtil.off('download-error', onDownloadError);
-      
-      // 清理Worker资源
-      if (worker) {
-        worker.terminate();
-      }
-      
-      if (workerBlobURL) {
-        URL.revokeObjectURL(workerBlobURL);
-      }
-    };
-  }, []);
-
-  // 重写下载方法
-  const startDownload = useCallback((url, name) => {
-    try {
-      return TauriDownloaderUtil.download(url, name);
-    } catch (error) {
-      console.error('下载启动失败:', error);
-      throw error;
-    }
-  }, []);
-
-  // 监控内存使用
-  useEffect(() => {
-    const monitorMemoryUsage = async () => {
-      if ('performance' in window && 'memory' in performance) {
-        const memoryInfo = performance.memory;
-        console.log('内存使用情况:', {
-          totalJSHeapSize: memoryInfo.totalJSHeapSize / (1024 * 1024) + 'MB',
-          usedJSHeapSize: memoryInfo.usedJSHeapSize / (1024 * 1024) + 'MB',
-          jsHeapSizeLimit: memoryInfo.jsHeapSizeLimit / (1024 * 1024) + 'MB'
-        });
-      }
-    };
-    
-    // 每5秒检查一次内存使用
-    const intervalId = setInterval(monitorMemoryUsage, 5000);
-    
-    return () => clearInterval(intervalId);
-  }, []);
-
-  // 优化的重试下载函数
-  const retryDownload = useCallback((download) => {
-    try {
-      startDownload(download.url, download.name);
-      
-      // 更新下载状态
-      setDownloads(prev => prev.map(item => 
-        item.id === download.id 
-          ? { ...item, status: 'retrying', retryCount: (item.retryCount || 0) + 1 } 
-          : item
-      ));
-    } catch (error) {
-      console.error('重试下载失败:', error);
-      setDownloads(prev => prev.map(item => 
-        item.id === download.id 
-          ? { ...item, status: 'failed', error: error.message } 
-          : item
-      ));
-    }
-  }, [startDownload]);
-
-  // 清除内存缓存
-  const clearMemoryCache = useCallback(() => {
-    downloadMemoryCache.current = {};
-    if (window.gc) {
-      window.gc(); // 在一些浏览器中触发垃圾回收（仅调试模式）
-    }
-  }, []);
-
-  // 更新 clearCompleted 以同时清理内存缓存
-  const clearCompleted = useCallback(() => {
-    const completedDownloads = downloads.filter(download => download.status === 'completed');
-    setDownloads(prev => prev.filter(download => download.status !== 'completed'));
-    
-    // 清理完成下载的内存缓存
-    completedDownloads.forEach(download => {
-      if (downloadMemoryCache.current[download.id]) {
-        delete downloadMemoryCache.current[download.id];
-      }
-    });
-  }, [downloads]);
-
-  // Expose methods to parent components
-  useImperativeHandle(ref, () => ({
-    startDownload: (app) => {
-      // Create download object
-      const download = {
-        id: Date.now().toString(),
-        name: app.name,
-        url: app.downloadUrl,
-        progress: 0,
-        status: 'downloading',
-        speed: '计算中...',
-        error: null,
-        startTime: Date.now()
-      };
-
-      // Add to downloads list
-      setDownloads(prev => [...prev, download]);
-      
-      // Show downloads panel
-      setShowDownloads(true);
-      
-      // Start the download using TauriDownloader
-      try {
-        TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
-      } catch (error) {
-        console.error('Download error:', error);
-        setDownloads(prev => prev.map(d => 
-          d.url === app.downloadUrl ? { ...d, status: 'error', error: error.message } : d
-        ));
-      }
-    }
-  }));
-
-  // 清除所有下载记录
-  const clearAllDownloads = () => {
-    setDownloads([]);
-  };
-
-  // 渲染时使用React.memo优化列表渲染性能
-  const DownloadItemMemo = React.memo(({ download, theme, onRetry, onCancel }) => {
-  return (
-      <DownloadItem theme={theme}>
-              <DownloadHeader>
-          <DownloadName theme={theme} title={download.name}>
-            {download.name}
-          </DownloadName>
-                <DownloadStatus theme={theme} status={download.status}>
-                  {download.status === 'downloading' ? '下载中' :
-                   download.status === 'completed' ? '已完成' :
-             download.status === 'retrying' ? '重试中' :
-             download.status === 'cancelled' ? '已取消' :
-                   '下载失败'}
-                </DownloadStatus>
-              </DownloadHeader>
-              
-              {download.status === 'downloading' && (
-          <>
-                <ProgressBar theme={theme}>
-              <Progress value={download.progress || 0} />
-                </ProgressBar>
-            
-            <DownloadInfo theme={theme}>
-              <InfoItem>
-                <InfoLabel>进度:</InfoLabel>
-                <InfoValue>{download.progress ? download.progress.toFixed(1) : 0}%</InfoValue>
-              </InfoItem>
-              <InfoItem>
-                <InfoLabel>速度:</InfoLabel>
-                <InfoValue>{download.calculatedSpeed || download.speed || '计算中...'}</InfoValue>
-              </InfoItem>
-              {(download.calculatedEta || download.eta) && (
-                <InfoItem>
-                  <InfoLabel>剩余:</InfoLabel>
-                  <InfoValue>{download.calculatedEta || download.eta}</InfoValue>
-                </InfoItem>
-              )}
-            </DownloadInfo>
-          </>
-        )}
-        
-        {download.status === 'completed' && (
-          <DownloadInfo theme={theme}>
-            <InfoItem>
-              <InfoLabel>完成于:</InfoLabel>
-              <InfoValue>{download.completionTime || new Date().toLocaleTimeString()}</InfoValue>
-            </InfoItem>
-            {download.downloadTime && (
-              <InfoItem>
-                <InfoLabel>用时:</InfoLabel>
-                <InfoValue>{download.downloadTime}</InfoValue>
-              </InfoItem>
-            )}
-            {download.averageSpeed && (
-              <InfoItem>
-                <InfoLabel>平均速度:</InfoLabel>
-                <InfoValue>{download.averageSpeed}</InfoValue>
-              </InfoItem>
-            )}
-          </DownloadInfo>
-        )}
-        
-        {(download.status === 'error' || download.status === 'failed') && (
-          <ErrorContainer>
-            <ErrorMessage>{download.error || '下载失败'}</ErrorMessage>
-            <StyledButton onClick={() => onRetry(download)}>
-              重试
-            </StyledButton>
-          </ErrorContainer>
-              )}
-              
-              {download.status === 'downloading' && (
-          <StyledButton 
-                  variant="danger" 
-            onClick={() => onCancel(download)}
-          >
-            取消
-          </StyledButton>
-        )}
-      </DownloadItem>
-    );
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newDownload, setNewDownload] = useState({
+    url: '',
+    fileName: '',
+    downloadPath: ''
   });
 
-  return (
-    <DownloadManagerStyles theme={props.theme}>
-      <div className="download-manager">
-        <div className="download-toggle">
-          <Button 
-            variant={showDownloads ? "primary" : "outline-primary"}
-            onClick={() => setShowDownloads(!showDownloads)}
-          >
-            <i className="bi bi-download"></i>
-            {activeDownloadsCount > 0 && (
-              <Badge bg="danger">{activeDownloadsCount}</Badge>
-            )}
-                </Button>
-        </div>
+  // 加载下载任务
+  const loadDownloads = async () => {
+    try {
+      const tasks = await invoke('get_download_tasks');
+      setDownloads(tasks);
+    } catch (error) {
+      console.error('加载下载任务失败:', error);
+    }
+  };
 
-        <div className={`download-panel ${showDownloads ? 'show' : ''}`}>
-          <div className="download-header">
-            <h5>下载管理 ({downloads.length})</h5>
-            <div className="download-actions">
-              {completedDownloadsCount > 0 && (
-                <StyledButton onClick={clearCompleted}>
-                  清除已完成
-                </StyledButton>
-              )}
-              <Button 
-                variant="link" 
-                className="close-btn"
-                onClick={() => setShowDownloads(false)}
-              >
-                <i className="bi bi-x-lg"></i>
-              </Button>
-            </div>
-          </div>
-          
-          <DownloadList>
-            {downloads.length === 0 ? (
-              <EmptyState theme={props.theme}>
-                暂无下载任务
-              </EmptyState>
-            ) : (
-              downloads.map(download => (
-                <DownloadItemMemo 
-                  key={download.id} 
-                  download={download}
-                  theme={props.theme}
-                  onRetry={retryDownload}
-                  onCancel={(download) => {
-                    setDownloads(prev => prev.map(item => 
-                      item.id === download.id ? { ...item, status: 'cancelled' } : item
-                    ));
-                  }}
-                />
+  // 创建下载任务
+  const createDownload = async () => {
+    if (!newDownload.url || !newDownload.fileName) {
+      alert('请填写下载链接和文件名');
+      return;
+    }
+
+    try {
+      const taskId = await invoke('create_download_task', {
+        url: newDownload.url,
+        fileName: newDownload.fileName,
+        downloadPath: newDownload.downloadPath || null
+      });
+      
+      console.log('创建下载任务成功:', taskId);
+      setShowAddModal(false);
+      setNewDownload({ url: '', fileName: '', downloadPath: '' });
+      loadDownloads();
+    } catch (error) {
+      console.error('创建下载任务失败:', error);
+      alert('创建下载任务失败: ' + error);
+    }
+  };
+
+  // 开始下载
+  const startDownload = async (taskId) => {
+    try {
+      await invoke('start_download', { taskId });
+    } catch (error) {
+      console.error('开始下载失败:', error);
+      alert('开始下载失败: ' + error);
+    }
+  };
+
+  // 恢复下载
+  const resumeDownload = async (taskId) => {
+    try {
+      await invoke('resume_download', { taskId });
+    } catch (error) {
+      console.error('恢复下载失败:', error);
+      alert('恢复下载失败: ' + error);
+    }
+  };
+
+  // 暂停下载
+  const pauseDownload = async (taskId) => {
+    try {
+      await invoke('pause_download', { taskId });
+    } catch (error) {
+      console.error('暂停下载失败:', error);
+    }
+  };
+
+  // 取消下载
+  const cancelDownload = async (taskId) => {
+    try {
+      await invoke('cancel_download', { taskId });
+    } catch (error) {
+      console.error('取消下载失败:', error);
+    }
+  };
+
+  // 删除下载任务
+  const removeDownload = async (taskId) => {
+    try {
+      await invoke('remove_download_task', { taskId });
+      loadDownloads();
+    } catch (error) {
+      console.error('删除下载任务失败:', error);
+    }
+  };
+
+  // 创建副本下载
+  const createCopyDownload = async (originalTaskId) => {
+    const copyCount = prompt('请输入要创建的副本数量:', '1');
+    if (!copyCount || isNaN(copyCount) || parseInt(copyCount) <= 0) {
+      alert('请输入有效的副本数量');
+      return;
+    }
+
+    try {
+      const createdTaskIds = await invoke('create_copy_download', {
+        originalTaskId,
+        copyCount: parseInt(copyCount)
+      });
+      console.log('创建副本成功:', createdTaskIds);
+      loadDownloads();
+      alert(`成功创建 ${createdTaskIds.length} 个副本`);
+    } catch (error) {
+      console.error('创建副本失败:', error);
+      alert('创建副本失败: ' + error);
+    }
+  };
+
+  // 监听下载事件
+  useEffect(() => {
+    let unlistenProgress, unlistenStatusChanged, unlistenCompleted, unlistenFailed;
+    
+    const setupListeners = async () => {
+      unlistenProgress = await listen('download_progress', (event) => {
+        const updatedTask = event.payload;
+        console.log('收到下载进度更新:', updatedTask);
+        setDownloads(prev => {
+          const newDownloads = prev.map(task => 
+            task.id === updatedTask.id ? { ...task, ...updatedTask } : task
+          );
+          // 如果任务不存在，添加它
+          if (!prev.find(task => task.id === updatedTask.id)) {
+            newDownloads.push(updatedTask);
+          }
+          return newDownloads;
+        });
+      });
+
+      unlistenStatusChanged = await listen('download_status_changed', (event) => {
+        const updatedTask = event.payload;
+        console.log('收到状态变更:', updatedTask);
+        setDownloads(prev => prev.map(task => 
+          task.id === updatedTask.id ? { ...task, ...updatedTask } : task
+        ));
+      });
+
+      unlistenCompleted = await listen('download_completed', (event) => {
+        const completedTask = event.payload;
+        console.log('下载完成:', completedTask);
+        setDownloads(prev => prev.map(task => 
+          task.id === completedTask.id ? { ...task, ...completedTask } : task
+        ));
+      });
+
+      unlistenFailed = await listen('download_failed', (event) => {
+        const failedTask = event.payload;
+        console.log('下载失败:', failedTask);
+        setDownloads(prev => prev.map(task => 
+          task.id === failedTask.id ? { ...task, ...failedTask } : task
+        ));
+        // 可以在这里添加错误提示
+        alert(`下载失败: ${failedTask.file_name}`);
+      });
+    };
+
+    setupListeners();
+    loadDownloads();
+
+    return () => {
+      if (unlistenProgress) unlistenProgress();
+      if (unlistenStatusChanged) unlistenStatusChanged();
+      if (unlistenCompleted) unlistenCompleted();
+      if (unlistenFailed) unlistenFailed();
+    };
+  }, []);
+
+  // 从URL提取文件名
+  const extractFileName = (url) => {
+    try {
+      const urlObj = new URL(url);
+      const pathname = urlObj.pathname;
+      const fileName = pathname.split('/').pop();
+      return fileName || 'download';
+    } catch {
+      return 'download';
+    }
+  };
+
+  // 当URL改变时自动填充文件名
+  const handleUrlChange = (url) => {
+    setNewDownload(prev => ({
+      ...prev,
+      url,
+      fileName: prev.fileName || extractFileName(url)
+    }));
+  };
+
+  return (
+    <DownloadManagerContainer theme={theme}>
+      <DownloadHeader theme={theme}>
+        <Title theme={theme}>下载管理器</Title>
+        <AddDownloadButton onClick={() => setShowAddModal(true)}>
+          添加下载
+        </AddDownloadButton>
+      </DownloadHeader>
+
+      <DownloadList>
+        {downloads.length === 0 ? (
+          <EmptyState theme={theme}>
+            暂无下载任务
+          </EmptyState>
+        ) : (
+          downloads.map(download => (
+            <DownloadItem key={download.id} status={download.status} theme={theme}>
+              <DownloadInfo>
+                <FileName theme={theme}>{download.file_name}</FileName>
+                <DownloadStatus status={download.status}>
+                  {statusMap[download.status] || download.status}
+                </DownloadStatus>
+              </DownloadInfo>
+              
+              <ProgressContainer>
+                <ProgressBar theme={theme}>
+                  <ProgressFill 
+                    progress={download.progress || 0} 
+                    status={download.status}
+                  />
+                </ProgressBar>
+                <ProgressText theme={theme}>
+                  <span>{(download.progress || 0).toFixed(1)}%</span>
+                  <span>
+                    {formatFileSize(download.downloaded_size || 0)} / {formatFileSize(download.total_size || 0)}
+                  </span>
+                  <span>{download.speed || '0.0 B/s'}</span>
+                </ProgressText>
+              </ProgressContainer>
+
+              <ButtonGroup>
+                {download.status === 'Pending' ? (
+                  <ActionButton 
+                    className="start" 
+                    onClick={() => startDownload(download.id)}
+                  >
+                    开始
+                  </ActionButton>
+                ) : null}
+                
+                {download.status === 'Paused' ? (
+                  <ActionButton 
+                    className="start" 
+                    onClick={() => resumeDownload(download.id)}
+                  >
+                    恢复
+                  </ActionButton>
+                ) : null}
+                
+                {download.status === 'Downloading' ? (
+                  <ActionButton 
+                    className="pause" 
+                    onClick={() => pauseDownload(download.id)}
+                  >
+                    暂停
+                  </ActionButton>
+                ) : null}
+                
+                {download.status === 'Downloading' || download.status === 'Paused' ? (
+                  <ActionButton 
+                    className="cancel" 
+                    onClick={() => cancelDownload(download.id)}
+                  >
+                    取消
+                  </ActionButton>
+                ) : null}
+                
+                {download.status === 'Completed' || download.status === 'Failed' || download.status === 'Cancelled' ? (
+                  <>
+                    <ActionButton 
+                      className="start" 
+                      onClick={() => createCopyDownload(download.id)}
+                    >
+                      创建副本
+                    </ActionButton>
+                    <ActionButton 
+                      className="remove" 
+                      onClick={() => removeDownload(download.id)}
+                    >
+                      删除
+                    </ActionButton>
+                  </>
+                ) : null}
+                
+                {!download.is_copy && download.copy_count > 0 ? (
+                  <span style={{ 
+                    fontSize: '12px', 
+                    color: theme === 'dark' ? '#999' : '#666',
+                    marginLeft: '10px'
+                  }}>
+                    副本数: {download.copy_count}
+                  </span>
+                ) : null}
+                
+                {download.is_copy ? (
+                  <span style={{ 
+                    fontSize: '12px', 
+                    color: theme === 'dark' ? '#ffc107' : '#ff8c00',
+                    marginLeft: '10px'
+                  }}>
+                    副本
+                  </span>
+                ) : null}
+              </ButtonGroup>
+            </DownloadItem>
           ))
         )}
       </DownloadList>
-        </div>
-      </div>
-    </DownloadManagerStyles>
-  );
-});
 
-export default DownloadManager; 
+      {showAddModal && (
+        <AddDownloadModal>
+          <ModalContent theme={theme}>
+            <ModalTitle theme={theme}>添加新下载</ModalTitle>
+            
+            <FormGroup>
+              <Label theme={theme}>下载链接</Label>
+              <Input
+                theme={theme}
+                type="url"
+                value={newDownload.url}
+                onChange={(e) => handleUrlChange(e.target.value)}
+                placeholder="请输入下载链接"
+              />
+            </FormGroup>
+            
+            <FormGroup>
+              <Label theme={theme}>文件名</Label>
+              <Input
+                theme={theme}
+                type="text"
+                value={newDownload.fileName}
+                onChange={(e) => setNewDownload(prev => ({ ...prev, fileName: e.target.value }))}
+                placeholder="请输入文件名"
+              />
+            </FormGroup>
+            
+            <FormGroup>
+              <Label theme={theme}>下载路径 (可选)</Label>
+              <Input
+                theme={theme}
+                type="text"
+                value={newDownload.downloadPath}
+                onChange={(e) => setNewDownload(prev => ({ ...prev, downloadPath: e.target.value }))}
+                placeholder="留空使用默认下载目录"
+              />
+            </FormGroup>
+            
+            <ModalButtonGroup>
+              <ModalButton 
+                className="secondary" 
+                onClick={() => setShowAddModal(false)}
+              >
+                取消
+              </ModalButton>
+              <ModalButton 
+                className="primary" 
+                onClick={createDownload}
+              >
+                创建下载
+              </ModalButton>
+            </ModalButtonGroup>
+          </ModalContent>
+        </AddDownloadModal>
+      )}
+    </DownloadManagerContainer>
+  );
+};
+
+export default DownloadManager;

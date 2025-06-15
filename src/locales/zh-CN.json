@@ -10,8 +10,7 @@
     "noResults": "未找到结果",
     "error": "错误",
     "success": "成功",
-    "edit": "编辑",
-    "optional": "可选"
+    "edit": "编辑"
   },
   "categories": {
     "title": "分类",
@@ -83,33 +82,19 @@
     "allFailed": "所有软件源处理失败"
   },
   "downloadManager": {
-    "title": "下载管理",
-    "pageTitle": "文件下载",
-    "newDownload": "新建下载",
-    "downloadList": "下载列表",
-    "startDownload": "开始下载",
+    "title": "下载",
+    "starting": "开始下载...",
     "downloading": "下载中",
-    "downloadAddress": "下载地址",
-    "fileName": "文件名",
-    "autoGetFileName": "留空将从URL自动获取",
-    "savePath": "保存路径",
-    "filePath": "保存路径",
-    "fileType": "文件类型",
-    "fileSize": "文件大小",
-    "status": "状态",
-    "pending": "准备中",
     "completed": "下载完成",
     "failed": "下载失败",
-    "starting": "开始下载...",
     "canceled": "下载已取消",
-    "noDownloads": "暂无下载记录",
+    "noDownloads": "没有活动下载",
     "downloadsInProgress": "个下载进行中",
     "logsCleared": "日志已清空",
     "initialized": "下载管理器初始化完成",
     "settings": "下载设置",
     "autoRun": "下载完成后自动运行",
     "autoExtract": "自动解压压缩文件",
-    "clearCompleted": "清除已完成",
     "clearLogs": "清空日志",
     "fileProcessing": "文件处理",
     "extracting": "正在解压",
@@ -124,12 +109,7 @@
     "downloadSpeed": "下载速度",
     "downloadProgress": "下载进度",
     "threadCount": "线程数量",
-    "singleThreadFallback": "单线程下载回退",
-    "useNativeDownload": "使用Tauri原生下载",
-    "nativeDownloadDesc": "使用Tauri插件进行下载，提供更好的系统集成",
-    "downloadPathDesc": "设置下载文件保存位置，留空使用应用数据目录",
-    "autoOpenDesc": "下载完成后自动打开文件",
-    "notifyOnCompletionDesc": "下载完成后显示通知"
+    "singleThreadFallback": "单线程下载回退"
   },
   "errors": {
     "fetchFailed": "获取数据失败",
@@ -147,7 +127,6 @@
   },
   "sidebar": {
     "expand": "展开菜单",
-    "collapse": "收起菜单",
-    "downloads": "下载管理"
+    "collapse": "收起菜单"
   }
 } 

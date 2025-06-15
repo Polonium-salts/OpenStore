@@ -1,5 +1,6 @@
 import React, { useState, forwardRef, useImperativeHandle, useEffect } from 'react';
 import styled from 'styled-components';
+import { invoke } from "@tauri-apps/api/core";
 import { TauriDownloaderUtil, isAcceleratedDownloadEnabled, toggleAcceleratedDownload } from './TauriDownloader';
 import { useTranslation } from 'react-i18next';
 import { processDownloadedFile } from '../services/fileProcessor';
@@ -267,14 +268,52 @@ const SimpleDownloadManager = forwardRef(({ theme }, ref) => {
         const isAccelerated = isAcceleratedDownloadEnabled();
         setAcceleratedDownload(isAccelerated);
         
-        // 使用 TauriDownloaderUtil 进行下载
-        if (isAccelerated) {
-          addLogEntry(`启动多线程加速下载: ${app.name}`, 'info');
-        } else {
-          addLogEntry(`启动常规下载: ${app.name}`, 'info');
+        // 使用Tauri下载管理器进行下载
+        try {
+          addLogEntry(`开始使用Tauri下载管理器: ${app.name}`, 'info');
+          addLogEntry(`下载URL: ${app.downloadUrl}`, 'info');
+          
+          // 从URL提取文件名，如果没有扩展名则使用app.name
+          let fileName = app.name;
+          try {
+            const urlPath = new URL(app.downloadUrl).pathname;
+            const urlFileName = urlPath.split('/').pop();
+            if (urlFileName && urlFileName.includes('.')) {
+              fileName = decodeURIComponent(urlFileName);
+            }
+          } catch (e) {
+            addLogEntry(`无法从URL解析文件名，使用应用名称: ${e.message}`, 'warning');
+          }
+          
+          addLogEntry(`使用文件名: ${fileName}`, 'info');
+          
+          // 创建下载任务
+          const taskId = await invoke('create_download_task', {
+            url: app.downloadUrl,
+            fileName: fileName,
+            downloadPath: null // 使用默认下载路径
+          });
+          
+          addLogEntry(`下载任务创建成功，任务ID: ${taskId}`, 'info');
+          
+          // 立即开始下载
+          const startResult = await invoke('start_download', { taskId });
+          
+          addLogEntry(`下载启动成功: ${app.name}，结果: ${JSON.stringify(startResult)}`, 'info');
+          addLogEntry(`任务状态应该已更新为下载中`, 'info');
+          
+        } catch (downloadError) {
+          addLogEntry(`下载管理器失败，回退到内置下载: ${downloadError.message}`, 'warning');
+          
+          // 回退到原有的下载方式
+          if (isAccelerated) {
+            addLogEntry(`启动多线程加速下载: ${app.name}`, 'info');
+          } else {
+            addLogEntry(`启动常规下载: ${app.name}`, 'info');
+          }
+          
+          TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
         }
-        
-        TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
       } catch (error) {
         addLogEntry(`下载初始化失败: ${error.message}`, 'error');
       }

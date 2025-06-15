@@ -1,89 +1,69 @@
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { getDownloadSettings } from '../utils/settingsUtil';
-import { invoke } from '@tauri-apps/api/core';
+import mime from 'mime';
 
-// 下载状态枚举
-const DownloadStatus = {
-  PENDING: 'pending',
-  DOWNLOADING: 'downloading',
-  COMPLETED: 'completed',
-  FAILED: 'failed'
-};
-
-// 创建加速下载任务
-const createAcceleratedDownload = (url, name, options = {}, callbacks = {}) => {
-  let status = DownloadStatus.PENDING;
-  
-  // 默认配置
-  const config = {
-    chunkCount: options.chunkCount || 4,
-    useMultiThread: options.useMultiThread !== false,
-    retryCount: options.retryCount || 3,
-    timeout: options.timeout || 30000
-  };
-  
-  const startDownload = () => {
-    status = DownloadStatus.DOWNLOADING;
-    if (callbacks.onStatusChange) callbacks.onStatusChange(status);
-    
-    // 模拟下载进度
-    let progress = 0;
-    const totalSize = 10000000; // 假设文件大小 10MB
-    let downloaded = 0;
-    
-    const interval = setInterval(() => {
-      // 随机增加下载量
-      const chunk = Math.random() * 500000; // 0-500KB
-      downloaded += chunk;
-      progress = Math.min((downloaded / totalSize) * 100, 99.9);
-      
-      if (callbacks.onProgress) {
-        callbacks.onProgress({
-          progress,
-          downloaded,
-          total: totalSize,
-          speed: `${(chunk / 1024 / 0.2).toFixed(2)} KB/s`,
-          remainingChunks: Math.max(0, config.chunkCount - Math.floor(progress / (100 / config.chunkCount)))
-        });
-      }
-      
-      if (progress >= 99.9) {
-        clearInterval(interval);
-        status = DownloadStatus.COMPLETED;
-        if (callbacks.onStatusChange) callbacks.onStatusChange(status);
-      }
-    }, 200);
-    
-    // 记录日志
-    if (callbacks.onLog) callbacks.onLog(`加速下载开始: ${name}`, 'info');
-    
-    return {
-      cancel: () => {
-        clearInterval(interval);
-        status = DownloadStatus.FAILED;
-        if (callbacks.onStatusChange) callbacks.onStatusChange(status);
-        if (callbacks.onLog) callbacks.onLog(`加速下载已取消: ${name}`, 'warn');
-      }
-    };
-  };
-  
-  return {
-    start: startDownload,
-    getStatus: () => status
-  };
-};
-
-// 隐藏的iframe用于在应用内处理下载
-const DownloadFrame = styled.iframe`
+// HTTP Client下载器容器
+const DownloadContainer = styled.div`
   display: none;
-  width: 0;
-  height: 0;
-  border: 0;
 `;
 
+// 下载进度信息
+const DownloadProgress = styled.div`
+  padding: 10px;
+  background: ${props => props.theme === 'dark' ? '#2d2d2d' : '#f5f5f5'};
+  border-radius: 8px;
+  margin: 5px 0;
+  color: ${props => props.theme === 'dark' ? '#ffffff' : '#333333'};
+`;
+
+// 进度条
+const ProgressBar = styled.div`
+  width: 100%;
+  height: 6px;
+  background: ${props => props.theme === 'dark' ? '#404040' : '#e0e0e0'};
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 5px 0;
+`;
+
+const ProgressFill = styled.div`
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #45a049);
+  width: ${props => props.progress || 0}%;
+  transition: width 0.3s ease;
+`;
+
+// 格式化速度显示
+const formatSpeed = (bytesPerSecond) => {
+  const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+  let size = bytesPerSecond;
+  let unitIndex = 0;
+  
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+  
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
+};
+
+// 格式化文件大小显示
+const formatFileSize = (bytes) => {
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIndex = 0;
+  
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+  
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
+};
+
 // 下载队列管理器，确保下载按顺序进行
-const TauriDownloader = ({ onDownloadStart, onDownloadComplete, onDownloadError }) => {
+const TauriDownloader = ({ onDownloadStart, onDownloadComplete, onDownloadError, theme }) => {
   const [downloadQueue, setDownloadQueue] = useState([]);
   const [currentDownload, setCurrentDownload] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -106,7 +86,7 @@ const TauriDownloader = ({ onDownloadStart, onDownloadComplete, onDownloadError 
     return newDownload.id;
   };
 
-  // 立即处理下载
+  // 使用HTTP Client进行下载
   const processDownload = async (download) => {
     setCurrentDownload(download);
     setIsDownloading(true);
@@ -122,48 +102,165 @@ const TauriDownloader = ({ onDownloadStart, onDownloadComplete, onDownloadError 
       // 使用代理URL或直接URL
       const finalUrl = proxyUrl ? `${proxyUrl}?url=${encodeURIComponent(download.url)}` : download.url;
       
-      // 创建一个下载 iframe
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = finalUrl;
+      console.log(`开始HTTP下载: ${download.name}`);
+      console.log(`下载URL: ${finalUrl}`);
       
-      // 监听加载完成事件
-      iframe.onload = () => {
-        document.body.removeChild(iframe);
-        
-        if (onDownloadComplete) {
-          onDownloadComplete(download);
+      // 使用fetch进行下载
+      const response = await fetch(finalUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': '*/*',
+          'User-Agent': 'OpenStore/1.0'
         }
-        
-        setCurrentDownload(null);
-        setIsDownloading(false);
-        
-        // 处理队列中的下一个下载
-        processNextDownload();
-      };
+      });
       
-      // 监听错误事件
-      iframe.onerror = (error) => {
-        document.body.removeChild(iframe);
-        
-        if (onDownloadError) {
-          onDownloadError(download, error);
+      if (!response.ok) {
+        throw new Error(`HTTP错误: ${response.status} ${response.statusText}`);
+      }
+      
+      // 获取文件大小
+      const contentLength = response.headers.get('content-length');
+      const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+      
+      console.log(`文件大小: ${totalSize} bytes`);
+      
+      // 获取文件名，优先从Content-Disposition获取，其次从URL路径获取
+      let fileName = download.name || 'downloaded_file'; // 默认使用传入的name
+      console.log('初始文件名:', fileName);
+      
+      const contentDisposition = response.headers.get('content-disposition');
+      console.log('Content-Disposition:', contentDisposition);
+      
+      if (contentDisposition) {
+        const fileNameMatch = contentDisposition.match(/filename\*?=['"]?(?:UTF-\d['"]*)?([^;"\r\n]*?)['"]?(?:;|$)/i);
+        if (fileNameMatch && fileNameMatch[1]) {
+          try {
+            fileName = decodeURIComponent(fileNameMatch[1]);
+            console.log('从Content-Disposition获取文件名:', fileName);
+          } catch (e) {
+            fileName = fileNameMatch[1]; // 如果解码失败，使用原始值
+            console.warn('无法解码Content-Disposition中的文件名:', fileNameMatch[1], e);
+          }
+        } else {
+          // 尝试另一种常见的filename格式
+          const basicFileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+          if (basicFileNameMatch && basicFileNameMatch[1]) {
+            fileName = basicFileNameMatch[1];
+            console.log('从Content-Disposition基本格式获取文件名:', fileName);
+          }
         }
-        
-        setCurrentDownload(null);
-        setIsDownloading(false);
-        
-        // 处理队列中的下一个下载
-        processNextDownload();
-      };
+      }
+
+      // 如果Content-Disposition中没有文件名，或者文件名不包含后缀，尝试从URL解析
+      if (!fileName || !fileName.includes('.')) {
+        try {
+          const urlPath = new URL(finalUrl).pathname;
+          const segments = urlPath.split('/');
+          const lastSegment = segments.pop() || segments.pop(); // 处理末尾可能有斜杠的情况
+          if (lastSegment && lastSegment.includes('.')) {
+            fileName = decodeURIComponent(lastSegment);
+            console.log('从URL获取文件名:', fileName);
+          }
+        } catch (e) {
+          console.warn('无法从URL解析文件名:', finalUrl, e);
+        }
+      }
+
+      // 如果文件名仍然没有后缀，尝试从MIME类型推断
+      if (!fileName.includes('.')) {
+        const contentType = response.headers.get('content-type');
+        console.log('Content-Type:', contentType);
+        if (contentType) {
+          const extension = mime.extension(contentType);
+          if (extension) {
+            fileName = `${fileName}.${extension}`;
+            console.log('从MIME类型推断文件名:', fileName);
+          }
+        }
+      }
       
-      // 添加到 DOM 启动下载
-      setTimeout(() => {
-        document.body.appendChild(iframe);
-      }, 0);
+      console.log('最终文件名:', fileName);
+      
+      // 创建可读流读取器
+      const reader = response.body.getReader();
+      const chunks = [];
+      let downloadedSize = 0;
+      let lastUpdateTime = Date.now();
+      let lastDownloadedSize = 0;
+      
+      // 读取数据流
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+        
+        chunks.push(value);
+        downloadedSize += value.length;
+        
+        // 计算进度和速度
+        const now = Date.now();
+        if (now - lastUpdateTime >= 1000) { // 每秒更新一次
+          const progress = totalSize > 0 ? (downloadedSize / totalSize) * 100 : 0;
+          const timeDiff = (now - lastUpdateTime) / 1000;
+          const sizeDiff = downloadedSize - lastDownloadedSize;
+          const speed = formatSpeed(sizeDiff / timeDiff);
+          
+          console.log(`下载进度: ${progress.toFixed(1)}%, 速度: ${speed}`);
+          
+          // 触发进度事件
+          if (onDownloadStart) {
+            onDownloadStart({
+              ...download,
+              progress: progress,
+              downloadedSize: downloadedSize,
+              totalSize: totalSize,
+              speed: speed
+            });
+          }
+          
+          lastUpdateTime = now;
+          lastDownloadedSize = downloadedSize;
+        }
+      }
+      
+      // 合并所有数据块
+      const blob = new Blob(chunks);
+      
+      // 创建下载链接
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = fileName;
+      
+      // 触发下载
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+      // 清理URL对象
+      window.URL.revokeObjectURL(url);
+      
+      console.log(`下载完成: ${fileName}`);
+      
+      if (onDownloadComplete) {
+        onDownloadComplete({
+          ...download,
+          progress: 100,
+          downloadedSize: downloadedSize,
+          totalSize: totalSize || downloadedSize,
+          fileName: fileName
+        });
+      }
+      
+      setCurrentDownload(null);
+      setIsDownloading(false);
+      
+      // 处理队列中的下一个下载
+      processNextDownload();
       
     } catch (error) {
-      console.error('下载处理失败:', error);
+      console.error('HTTP下载失败:', error);
       
       if (onDownloadError) {
         onDownloadError(download, error);
@@ -186,7 +283,27 @@ const TauriDownloader = ({ onDownloadStart, onDownloadComplete, onDownloadError 
     }
   };
 
-  return <></>;
+  return (
+    <DownloadContainer>
+      {currentDownload && (
+        <DownloadProgress theme={theme}>
+          <div>正在下载: {currentDownload.name}</div>
+          {currentDownload.progress !== undefined && (
+            <>
+              <ProgressBar theme={theme}>
+                <ProgressFill progress={currentDownload.progress} />
+              </ProgressBar>
+              <div style={{ fontSize: '12px', marginTop: '5px' }}>
+                进度: {currentDownload.progress?.toFixed(1)}% | 
+                速度: {currentDownload.speed || '计算中...'} | 
+                大小: {formatFileSize(currentDownload.downloadedSize || 0)} / {formatFileSize(currentDownload.totalSize || 0)}
+              </div>
+            </>
+          )}
+        </DownloadProgress>
+      )}
+    </DownloadContainer>
+  );
 };
 
 // 导出组件和辅助方法
@@ -362,35 +479,166 @@ const processNextQueuedDownload = () => {
   }
 };
 
-// 使用常规下载
-const useRegularDownload = (download) => {
+// 使用HTTP Client常规下载
+const useRegularDownload = async (download) => {
   currentlyDownloading = true;
   
-  // 创建一个下载 iframe - 立即执行
-  setTimeout(() => {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = download.url;
+  try {
+    console.log(`开始常规HTTP下载: ${download.name}`);
     
-    // 监听加载完成事件
-    iframe.onload = () => {
-      document.body.removeChild(iframe);
-      triggerEvent('onComplete', download);
-      currentlyDownloading = false;
-      processNextQueuedDownload();
-    };
+    // 使用fetch进行下载
+    const response = await fetch(download.url, {
+      method: 'GET',
+      headers: {
+        'Accept': '*/*',
+        'User-Agent': 'OpenStore/1.0'
+      }
+    });
     
-    // 监听错误事件
-    iframe.onerror = (error) => {
-      document.body.removeChild(iframe);
-      triggerEvent('onError', { download, error });
-      currentlyDownloading = false;
-      processNextQueuedDownload();
-    };
+    if (!response.ok) {
+      throw new Error(`HTTP错误: ${response.status} ${response.statusText}`);
+    }
     
-    // 添加到 DOM 启动下载
-    document.body.appendChild(iframe);
-  }, 0);
+    // 获取文件大小
+    const contentLength = response.headers.get('content-length');
+    const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+    
+    // 获取文件名，优先从Content-Disposition获取，其次从URL路径获取
+    let fileName = download.name || 'downloaded_file'; // 默认使用传入的name
+    console.log('常规下载初始文件名:', fileName);
+    
+    const contentDisposition = response.headers.get('content-disposition');
+    console.log('常规下载Content-Disposition:', contentDisposition);
+    
+    if (contentDisposition) {
+      const fileNameMatch = contentDisposition.match(/filename\*?=['"]?(?:UTF-\d['"]*)?([^;"\r\n]*?)['"]?(?:;|$)/i);
+      if (fileNameMatch && fileNameMatch[1]) {
+        try {
+          fileName = decodeURIComponent(fileNameMatch[1]);
+          console.log('常规下载从Content-Disposition获取文件名:', fileName);
+        } catch (e) {
+          fileName = fileNameMatch[1]; // 如果解码失败，使用原始值
+          console.warn('无法解码Content-Disposition中的文件名:', fileNameMatch[1], e);
+        }
+      } else {
+        // 尝试另一种常见的filename格式
+        const basicFileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (basicFileNameMatch && basicFileNameMatch[1]) {
+          fileName = basicFileNameMatch[1];
+          console.log('常规下载从Content-Disposition基本格式获取文件名:', fileName);
+        }
+      }
+    }
+
+    // 如果Content-Disposition中没有文件名，或者文件名不包含后缀，尝试从URL解析
+    if (!fileName || !fileName.includes('.')) {
+      try {
+        const urlPath = new URL(download.url).pathname; // 使用原始URL进行解析
+        const segments = urlPath.split('/');
+        const lastSegment = segments.pop() || segments.pop(); // 处理末尾可能有斜杠的情况
+        if (lastSegment && lastSegment.includes('.')) {
+          fileName = decodeURIComponent(lastSegment);
+          console.log('常规下载从URL获取文件名:', fileName);
+        }
+      } catch (e) {
+        console.warn('无法从URL解析文件名:', download.url, e);
+      }
+    }
+
+    // 如果文件名仍然没有后缀，尝试从MIME类型推断
+    if (!fileName.includes('.')) {
+      const contentType = response.headers.get('content-type');
+      console.log('常规下载Content-Type:', contentType);
+      if (contentType) {
+        const extension = mime.extension(contentType);
+        if (extension) {
+          fileName = `${fileName}.${extension}`;
+          console.log('常规下载从MIME类型推断文件名:', fileName);
+        }
+      }
+    }
+    
+    console.log('常规下载最终文件名:', fileName);
+    
+    // 创建可读流读取器
+    const reader = response.body.getReader();
+    const chunks = [];
+    let downloadedSize = 0;
+    let lastUpdateTime = Date.now();
+    let lastDownloadedSize = 0;
+    
+    // 读取数据流并显示进度
+    while (true) {
+      const { done, value } = await reader.read();
+      
+      if (done) break;
+      
+      chunks.push(value);
+      downloadedSize += value.length;
+      
+      // 计算进度和速度
+      const now = Date.now();
+      if (now - lastUpdateTime >= 1000) { // 每秒更新一次
+        const progress = totalSize > 0 ? (downloadedSize / totalSize) * 100 : 0;
+        const timeDiff = (now - lastUpdateTime) / 1000;
+        const sizeDiff = downloadedSize - lastDownloadedSize;
+        const speed = formatSpeed(sizeDiff / timeDiff);
+        
+        console.log(`常规下载进度: ${progress.toFixed(1)}%, 速度: ${speed}`);
+        
+        // 触发进度事件
+        triggerEvent('onProgress', {
+          download,
+          progress: {
+            progress: progress,
+            downloadedSize: downloadedSize,
+            totalSize: totalSize,
+            speed: speed
+          }
+        });
+        
+        lastUpdateTime = now;
+        lastDownloadedSize = downloadedSize;
+      }
+    }
+    
+    // 合并所有数据块
+    const blob = new Blob(chunks);
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = fileName;
+    
+    // 触发下载
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    // 清理URL对象
+    window.URL.revokeObjectURL(url);
+    
+    console.log(`常规下载完成: ${fileName}`);
+    
+    triggerEvent('onComplete', {
+      ...download,
+      progress: 100,
+      downloadedSize: downloadedSize,
+      totalSize: totalSize || downloadedSize,
+      fileName: fileName
+    });
+    
+    currentlyDownloading = false;
+    processNextQueuedDownload();
+    
+  } catch (error) {
+    console.error('常规HTTP下载失败:', error);
+    triggerEvent('onError', { download, error });
+    currentlyDownloading = false;
+    processNextQueuedDownload();
+  }
 };
 
 // 导出下载工具
@@ -402,4 +650,4 @@ export const TauriDownloaderUtil = {
   isAcceleratedDownloadEnabled
 };
 
-export default TauriDownloader; 
+export default TauriDownloader;

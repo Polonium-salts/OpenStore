@@ -303,131 +303,100 @@ const SliderLabel = styled.div`
   color: ${props => props.theme === 'dark' ? '#999' : '#666'};
 `;
 
-const Slider = styled.input.attrs(props => ({
-  type: 'range',
-  min: props.min || 0.1,
-  max: props.max || 1,
-  step: props.step || 0.05
-}))`
+const Slider = styled.input`
   width: 100%;
   -webkit-appearance: none;
-  appearance: none;
-  height: 8px;
-  border-radius: 4px;
-  background: linear-gradient(
-    to right,
-    #0066CC 0%,
-    #0066CC ${props => props.value * 100}%,
-    ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'} ${props => props.value * 100}%,
-    ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'} 100%
-  );
+  height: 6px;
+  border-radius: 3px;
+  background: ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'};
   outline: none;
-  cursor: pointer;
-  margin: 10px 0;
   
   &::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     background: #0066CC;
     cursor: pointer;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    transition: transform 0.1s, box-shadow 0.1s;
-    border: 2px solid white;
   }
   
   &::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     background: #0066CC;
     cursor: pointer;
-    border: 2px solid white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    transition: transform 0.1s, box-shadow 0.1s;
+    border: none;
   }
-  
-  &::-webkit-slider-thumb:hover,
-  &::-webkit-slider-thumb:active {
-    transform: scale(1.1);
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
-  }
-  
-  &::-moz-range-thumb:hover,
-  &::-moz-range-thumb:active {
-    transform: scale(1.1);
-    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
-  }
-`;
-
-const OpacityValue = styled.div`
-  background-color: ${props => props.theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.05)'};
-  border-radius: 12px;
-  padding: 6px 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-  min-width: 54px;
-  text-align: center;
-  box-shadow: ${props => props.theme === 'dark' ? 'none' : '0 1px 3px rgba(0, 0, 0, 0.1)'};
 `;
 
 // 自定义的分离式滑块组件，避免频繁重渲染
 const FastSlider = React.memo(({ value, min, max, step, onChange, theme }) => {
+  const sliderRef = useRef(null);
   const [localValue, setLocalValue] = useState(value);
-  const debounceTimerRef = useRef(null);
+  const isFirstRender = useRef(true);
+  
+  // 使用RAF优化视觉更新
+  const updateVisualStyle = useCallback((newValue) => {
+    requestAnimationFrame(() => {
+      // 更新CSS变量 - 立即显示效果
+      document.documentElement.style.setProperty('--app-bg-opacity', newValue);
+      
+      // 更新显示的百分比文本
+      const percentEl = sliderRef.current?.parentElement?.querySelector('.slider-percent');
+      if (percentEl) {
+        percentEl.textContent = `${Math.round(newValue * 100)}%`;
+      }
+    });
+  }, []);
+  
+  // 初始化
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      updateVisualStyle(value);
+    }
+  }, [value, updateVisualStyle]);
   
   // 当外部value变化时同步
   useEffect(() => {
     if (Math.abs(value - localValue) > 0.01) {
       setLocalValue(value);
+      updateVisualStyle(value);
     }
-  }, [value, localValue]);
+  }, [value, localValue, updateVisualStyle]);
   
-  // 滑块变化处理函数
+  // 处理滑块变化 - 使用防抖优化
   const handleChange = useCallback((event) => {
     const newValue = parseFloat(event.target.value);
-    
-    // 立即更新本地状态
-    setLocalValue(newValue);
-    
-    // 更新全局CSS变量
-    document.documentElement.style.setProperty('--app-bg-opacity', newValue);
-    
-    // 防抖处理父组件的回调
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
+    if (Math.abs(newValue - localValue) > 0.01) {
+      setLocalValue(newValue);
+      updateVisualStyle(newValue);
     }
-    
-    debounceTimerRef.current = setTimeout(() => {
-      onChange(newValue);
-      debounceTimerRef.current = null;
-    }, 100);
-  }, [onChange]);
+  }, [localValue, updateVisualStyle]);
   
-  // 组件销毁时清理
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, []);
+  // 滑动结束时通知父组件
+  const handleChangeEnd = useCallback(() => {
+    onChange(localValue);
+  }, [onChange, localValue]);
   
   return (
-    <div className="fast-slider">
+    <div ref={sliderRef} className="fast-slider">
       <SliderLabel theme={theme}>
-        <span>背景不透明度</span>
-        <OpacityValue theme={theme}>{Math.round(localValue * 100)}%</OpacityValue>
+        <span>透明</span>
+        <span className="slider-percent">{Math.round(localValue * 100)}%</span>
+        <span>不透明</span>
       </SliderLabel>
       <Slider
+        type="range"
         min={min}
         max={max}
         step={step}
         value={localValue}
         onChange={handleChange}
+        onMouseUp={handleChangeEnd}
+        onTouchEnd={handleChangeEnd}
         theme={theme}
       />
     </div>
@@ -514,10 +483,7 @@ const Settings = React.memo(({
 }) => {
   const { t } = useTranslation();
   const [customBgUrl, setCustomBgUrl] = useState('');
-  const [customBgPreviewUrl, setCustomBgPreviewUrl] = useState(() => {
-    // 从localStorage加载自定义背景
-    return localStorage.getItem('customBackgroundImage') || '';
-  });
+  const [customBgPreviewUrl, setCustomBgPreviewUrl] = useState('');
   const [opacity, setOpacity] = useState(() => {
     // 从localStorage获取值，如果没有则使用默认值0.8
     return parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
@@ -730,7 +696,7 @@ const Settings = React.memo(({
     { id: 'none', url: '', label: '无背景' },
     { id: 'bg1', url: 'https://cdn.pixabay.com/photo/2020/10/27/08/00/mountains-5689938_1280.png', label: '星空' },
     { id: 'bg2', url: 'https://cdn.pixabay.com/photo/2012/08/27/14/19/mountains-55067_1280.png', label: '山脉' },
-    { id: 'bg3', url: 'https://media.istockphoto.com/id/1145054673/zh/%E5%90%91%E9%87%8F/%E6%B5%B7%E7%81%98.jpg?s=2048x2048&w=is&k=20&c=EPBjB3MJ4_A6_wM5CyLv2Ca7VVHLIQvL2BDXpHoL6yk=', label: '海洋' },
+    { id: 'bg3', url: 'https://cdn.pixabay.com/photo/2020/10/11/08/00/lighthouse-5645042_1280.png', label: '灯塔' },
   ];
   
   // 使用useMemo优化渲染复杂组件 - 移动到组件内部
