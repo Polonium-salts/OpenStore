@@ -505,8 +505,12 @@ const SourceManager = ({ theme, onSourcesChange }) => {
   };
 
   // 删除软件源
-  const handleDeleteSource = (sourceId) => {
-    if (window.confirm(t('sourceManager.confirmDelete'))) {
+  const handleDeleteSource = async (sourceId) => {
+    const confirmed = window.showConfirm ? 
+      await window.showConfirm(t('sourceManager.confirmDelete')) : 
+      window.confirm(t('sourceManager.confirmDelete'));
+    
+    if (confirmed) {
       const updatedSources = sources.filter(source => source.id !== sourceId);
       saveSources(updatedSources);
       
@@ -1102,4 +1106,4 @@ const SourceManager = ({ theme, onSourcesChange }) => {
   );
 };
 
-export default SourceManager; 
+export default SourceManager;

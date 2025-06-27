@@ -21,6 +21,17 @@
       "csp": null
     }
   },
+  "plugins": {
+    "os": {
+      "all": true,
+      "platform": true,
+      "version": true,
+      "arch": true,
+      "type": true,
+      "locale": true
+    },
+    "dialog": null
+  },
   "bundle": {
     "active": true,
     "targets": "all",

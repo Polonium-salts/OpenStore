@@ -1,0 +1,94 @@
+[
+  {
+    "id": "test-app-1",
+    "name": "测试应用 - 部分支持",
+    "icon": "https://via.placeholder.com/64",
+    "description": "这是一个测试应用，用于演示部分平台支持的情况",
+    "version": "1.0.0",
+    "category": "工具",
+    "downloads": {
+      "windows": {
+        "x64": {
+          "url": "https://example.com/app-windows-x64.exe",
+          "size": "45.2 MB",
+          "filename": "TestApp-1.0.0-win-x64.exe"
+        },
+        "x86": {
+          "url": "",
+          "size": "42.1 MB",
+          "filename": "TestApp-1.0.0-win-x86.exe"
+        }
+      },
+      "macos": {
+        "intel": {
+          "url": "",
+          "size": "38.5 MB",
+          "filename": "TestApp-1.0.0-mac-intel.dmg"
+        },
+        "apple_silicon": {
+          "url": "",
+          "size": "36.2 MB",
+          "filename": "TestApp-1.0.0-mac-arm64.dmg"
+        }
+      },
+      "linux": {
+        "x64_deb": {
+          "url": "https://example.com/app-linux-x64.deb",
+          "size": "32.8 MB",
+          "filename": "testapp_1.0.0_amd64.deb"
+        },
+        "x64_rpm": {
+          "url": "",
+          "size": "33.1 MB",
+          "filename": "testapp-1.0.0-x86_64.rpm"
+        }
+      }
+    },
+    "systemRequirements": {
+      "windows": "Windows 10 或更高版本",
+      "macos": "macOS 10.15 或更高版本",
+      "linux": "Ubuntu 18.04 或兼容发行版"
+    }
+  },
+  {
+    "id": "test-app-2",
+    "name": "测试应用 - 完全不支持某平台",
+    "icon": "https://via.placeholder.com/64",
+    "description": "这是一个测试应用，用于演示某个平台完全不支持的情况",
+    "version": "2.0.0",
+    "category": "游戏",
+    "downloads": {
+      "windows": {
+        "x64": {
+          "url": "https://example.com/game-windows-x64.exe",
+          "size": "125.6 MB",
+          "filename": "TestGame-2.0.0-win-x64.exe"
+        }
+      },
+      "macos": {
+        "intel": {
+          "url": "",
+          "size": "118.3 MB",
+          "filename": "TestGame-2.0.0-mac-intel.dmg"
+        },
+        "apple_silicon": {
+          "url": "",
+          "size": "115.7 MB",
+          "filename": "TestGame-2.0.0-mac-arm64.dmg"
+        }
+      },
+      "linux": {
+        "x64_deb": {
+          "url": "https://example.com/game-linux-x64.deb",
+          "size": "98.4 MB",
+          "filename": "testgame_2.0.0_amd64.deb"
+        }
+      }
+    },
+    "systemRequirements": {
+      "windows": "Windows 10 或更高版本，DirectX 11",
+      "macos": "macOS 11.0 或更高版本",
+      "linux": "Ubuntu 20.04 或兼容发行版，OpenGL 3.3"
+    }
+  }
+]

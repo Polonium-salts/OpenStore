@@ -11,6 +11,10 @@ import DownloadManager from './components/DownloadManager';
 import AppDetails from './components/AppDetails';
 import { TauriDownloader, TauriDownloaderUtil } from './components/TauriDownloader';
 import { fetchAppsFromSources, fetchAppsByCategory } from './services/sourceService';
+import NotificationSystem from './components/NotificationSystem';
+import ConfirmDialogContainer from './components/ConfirmDialog';
+import PromptDialogContainer from './components/PromptDialog';
+import Messages from './components/Messages';
 
 const AppContainer = styled.div`
   display: flex;
@@ -153,12 +157,128 @@ const AppPrice = styled.div`
 `;
 
 const DownloadButton = styled.button`
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
   border: none;
   font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  background-color: #0066CC;
+  background-color: ${props => {
+    if (props.status === 'preparing') return '#ff9500';
+    if (props.status === 'downloading') return '#ff9500';
+    if (props.status === 'pausing') return '#ff9f0a';
+    if (props.status === 'paused') return '#007aff';
+    if (props.status === 'resuming') return '#ff9f0a';
+    if (props.status === 'completed') return '#34c759';
+    if (props.status === 'failed') return '#ff3b30';
+    if (props.status === 'cancelled') return '#8e8e93';
+    if (props.status === 'extracting') return '#af52de';
+    if (props.status === 'extracted') return '#34c759';
+    if (props.status === 'running') return '#30d158';
+    if (props.status === 'processing') return '#ff9f0a';
+    if (props.status === 'analyzingFile') return '#64d2ff';
+    if (props.status === 'starting') return '#ff9500';
+    return '#0066CC';
+  }};
+  color: white;
+  min-width: 90px;
+  min-height: 36px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  
+  &:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+`;
+
+const DownloadProgress = styled.div`
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: ${props => props.progress || 0}%;
+    background: linear-gradient(90deg, #00d4ff 0%, #0099cc 100%);
+    border-radius: 0 0 6px 6px;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+  }
+`;
+
+const ProgressText = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  z-index: 1;
+  pointer-events: none;
+`;
+
+const DownloadDropdown = styled.div`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
+  border: 1px solid ${props => props.theme === 'dark' ? '#404040' : '#e0e0e0'};
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  margin-top: 4px;
+  padding: 8px;
+  font-size: 12px;
+  min-width: 200px;
+`;
+
+const DownloadInfo = styled.div`
+  display: flex;
+  justify-content: between;
+  align-items: center;
+  margin-bottom: 8px;
+  color: ${props => props.theme === 'dark' ? '#ffffff' : '#333333'};
+`;
+
+const DownloadActions = styled.div`
+  display: flex;
+  gap: 8px;
+`;
+
+const ActionButton = styled.button`
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  background-color: ${props => {
+    if (props.action === 'pause') return '#ff9500';
+    if (props.action === 'resume') return '#007aff';
+    if (props.action === 'open') return '#34c759';
+    return '#666666';
+  }};
   color: white;
   
   &:hover {
@@ -396,8 +516,28 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDownloadManagerVisible, setIsDownloadManagerVisible] = useState(false);
+  const [isMessagesVisible, setIsMessagesVisible] = useState(false);
   const [selectedApp, setSelectedApp] = useState(null);
   const downloadManagerRef = useRef(null);
+  const [downloadStates, setDownloadStates] = useState(() => {
+    try {
+      const saved = localStorage.getItem('downloadStates');
+      return saved ? JSON.parse(saved) : {};
+    } catch (error) {
+      console.error('读取下载状态失败:', error);
+      return {};
+    }
+  }); // 存储每个应用的下载状态
+  const [appActionStates, setAppActionStates] = useState(() => {
+    try {
+      const saved = localStorage.getItem('appActionStates');
+      return saved ? JSON.parse(saved) : {};
+    } catch (error) {
+      console.error('读取应用状态失败:', error);
+      return {};
+    }
+  }); // 存储每个应用的操作状态（安装/打开）
+  const [showDownloadDropdown, setShowDownloadDropdown] = useState(null); // 控制下载详情下拉框显示
   
   // 使用防抖，避免频繁更新localStorage
   const debounceTimeoutRef = useRef(null);
@@ -414,6 +554,134 @@ const App = () => {
       }, 50); // 50ms的防抖延迟
     }
   }, []);
+
+  // 更新下载状态
+  const updateDownloadState = useCallback((appId, state) => {
+    setDownloadStates(prev => {
+      const newStates = {
+        ...prev,
+        [appId]: { ...prev[appId], ...state }
+      };
+      // 保存到localStorage
+      try {
+        localStorage.setItem('downloadStates', JSON.stringify(newStates));
+      } catch (error) {
+        console.error('保存下载状态失败:', error);
+      }
+      return newStates;
+    });
+  }, []);
+
+  // 获取下载状态
+  const getDownloadState = useCallback((appId) => {
+    return downloadStates[appId] || { status: 'idle', progress: 0, speed: '', taskId: null };
+  }, [downloadStates]);
+
+  // 更新应用操作状态
+  const updateAppActionState = useCallback((appId, state) => {
+    setAppActionStates(prev => {
+      const newStates = {
+        ...prev,
+        [appId]: { ...prev[appId], ...state }
+      };
+      // 保存到localStorage
+      try {
+        localStorage.setItem('appActionStates', JSON.stringify(newStates));
+      } catch (error) {
+        console.error('保存应用状态失败:', error);
+      }
+      return newStates;
+    });
+  }, []);
+
+  // 获取应用操作状态
+  const getAppActionState = useCallback((appId) => {
+    return appActionStates[appId] || { action: '下载', isInstalled: false };
+  }, [appActionStates]);
+
+  // 检查应用安装状态并更新操作文本
+  const checkAppInstallStatus = useCallback(async (appId, filePath) => {
+    if (!filePath) return;
+    
+    try {
+      // 首先检查文件是否存在
+      const fileExists = await invoke('file_exists', { path: filePath });
+      
+      if (!fileExists) {
+        // 如果安装程序文件被删除，自动切换到下载状态
+        console.log('安装程序文件不存在，切换到下载状态:', filePath);
+        updateAppActionState(appId, { action: '下载', isInstalled: false });
+        // 同时清除下载状态，允许重新下载
+        updateDownloadState(appId, { status: 'idle', progress: 0, filePath: null, taskId: null });
+        return;
+      }
+      
+      const action = await invoke('get_file_action', { filePath });
+      updateAppActionState(appId, { 
+        action, 
+        isInstalled: action === '运行' || action === '打开'
+      });
+    } catch (error) {
+      console.error('检查应用安装状态失败:', error);
+      updateAppActionState(appId, { action: '下载', isInstalled: false });
+    }
+  }, [updateAppActionState, updateDownloadState]);
+
+  // 格式化文件大小
+  const formatFileSize = useCallback((bytes) => {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let size = bytes;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+    return `${size.toFixed(1)} ${units[unitIndex]}`;
+  }, []);
+
+  // 获取下载按钮文本
+  const getDownloadButtonText = useCallback((appId) => {
+    const state = getDownloadState(appId);
+    switch (state.status) {
+      case 'preparing':
+        return t('downloadManager.preparingDownload') || '准备中';
+      case 'downloading':
+        return t('downloadManager.downloadingFile') || '下载中';
+      case 'pausing':
+        return t('downloadManager.pausing') || '暂停中';
+      case 'paused':
+        return t('downloadManager.paused') || '已暂停';
+      case 'resuming':
+        return t('downloadManager.resuming') || '恢复中';
+      case 'completed':
+        const actionState = getAppActionState(appId);
+        switch(actionState.action) {
+          case '安装': return '安装';
+          case '运行': return '运行';
+          case '打开': return t('downloadManager.open') || '打开';
+          default: return t('downloadManager.open') || '打开';
+        }
+      case 'failed':
+        return t('downloadManager.failed') || '失败';
+      case 'cancelled':
+        return t('downloadManager.cancelled') || '已取消';
+      case 'extracting':
+        return t('downloadManager.extracting') || '解压中';
+      case 'extracted':
+        return t('downloadManager.extracted') || '解压完成';
+      case 'running':
+        return t('downloadManager.running') || '运行中';
+      case 'processing':
+        return t('downloadManager.processing') || '处理中';
+      case 'analyzingFile':
+        return t('downloadManager.analyzingFile') || '分析中';
+      case 'starting':
+        return t('downloadManager.starting') || '启动中';
+      default:
+        return t('app.download') || '下载';
+    }
+  }, [getDownloadState, getAppActionState, t]);
 
   // 使用useEffect带上之前的值进行比较
   useEffect(() => {
@@ -542,12 +810,21 @@ const App = () => {
       sessionStorage.setItem(`apps_${category}`, JSON.stringify(appsList));
       setApps(appsList);
       setFilteredApps(appsList);
+      
+      // 初始化应用安装状态
+      for (const app of appsList) {
+        const downloadState = getDownloadState(app.id);
+        if (downloadState.status === 'completed' && downloadState.filePath) {
+          // 对于已下载完成的应用，检查其安装状态
+          await checkAppInstallStatus(app.id, downloadState.filePath);
+        }
+      }
     } catch (error) {
       console.error('加载应用失败:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getDownloadState, checkAppInstallStatus]);
 
   useEffect(() => {
     if (['dev-tools', 'software', 'games', 'ai-models'].includes(currentCategory)) {
@@ -672,24 +949,215 @@ const App = () => {
 
   const handleToggleDownloadManager = useCallback(() => {
     setIsDownloadManagerVisible(!isDownloadManagerVisible);
+    // 如果打开下载管理器，关闭消息页面
+    if (!isDownloadManagerVisible) {
+      setIsMessagesVisible(false);
+    }
   }, [isDownloadManagerVisible]);
 
-  const handleDownload = async (app) => {
+  const handleToggleMessages = useCallback(() => {
+    setIsMessagesVisible(!isMessagesVisible);
+    // 如果打开消息页面，关闭下载管理器
+    if (!isMessagesVisible) {
+      setIsDownloadManagerVisible(false);
+    }
+  }, [isMessagesVisible]);
+
+  // 处理下载控制
+  const handleDownloadControl = useCallback(async (app, action) => {
+    const state = getDownloadState(app.id);
+    
     try {
-      // Show immediate feedback to the user
-      const toast = document.createElement('div');
-      toast.style.position = 'fixed';
-      toast.style.bottom = '20px';
-      toast.style.right = '20px';
-      toast.style.padding = '10px 20px';
-      toast.style.backgroundColor = '#0066CC';
-      toast.style.color = 'white';
-      toast.style.borderRadius = '4px';
-      toast.style.zIndex = '9999';
-      toast.style.transition = 'opacity 0.5s ease';
-      toast.textContent = `${t('downloadManager.starting')}: ${app.name}`;
+      switch (action) {
+        case 'pause':
+          if (state.taskId) {
+            // 先更新UI状态为正在暂停
+            updateDownloadState(app.id, { status: 'pausing' });
+            await invoke('pause_download', { taskId: state.taskId });
+            // 暂停成功后更新状态
+            updateDownloadState(app.id, { status: 'paused' });
+          }
+          break;
+        case 'resume':
+          if (state.taskId) {
+            // 获取后端真实状态确认任务确实是暂停状态
+            try {
+              const task = await invoke('get_download_progress', { taskId: state.taskId });
+              if (task && task.status !== 'Paused') {
+                console.warn('任务状态不是暂停状态，无法恢复:', task.status);
+                // 同步真实状态
+                if (task.status === 'Downloading') {
+                  updateDownloadState(app.id, { status: 'downloading' });
+                } else if (task.status === 'Completed') {
+                  updateDownloadState(app.id, { status: 'completed' });
+                } else if (task.status === 'Failed' || task.status === 'Error') {
+                  updateDownloadState(app.id, { status: 'failed' });
+                }
+                return;
+              }
+            } catch (error) {
+              console.error('获取任务状态失败:', error);
+            }
+            
+            // 先更新UI状态为正在恢复
+            updateDownloadState(app.id, { status: 'resuming' });
+            await invoke('resume_download', { taskId: state.taskId });
+            // 恢复成功后更新状态
+            updateDownloadState(app.id, { status: 'downloading' });
+          }
+          break;
+        case 'cancel':
+          if (state.taskId) {
+            await invoke('cancel_download', { taskId: state.taskId });
+            updateDownloadState(app.id, { status: 'idle', progress: 0, taskId: null });
+          }
+          break;
+        case 'open':
+          if (state.status === 'completed' && state.filePath) {
+            try {
+              await invoke('open_file', { path: state.filePath });
+            } catch (error) {
+              console.error('打开文件失败:', error);
+              window.showError && window.showError('无法打开文件: ' + error);
+            }
+          }
+          break;
+      }
+    } catch (error) {
+      console.error(`下载控制操作失败 (${action}):`, error);
+      window.showError && window.showError(`操作失败: ${error}`);
+      // 操作失败时恢复之前的状态
+      if (action === 'pause') {
+        updateDownloadState(app.id, { status: 'downloading' });
+      } else if (action === 'resume') {
+        updateDownloadState(app.id, { status: 'paused' });
+      }
+    }
+  }, [getDownloadState, updateDownloadState]);
+
+  // 处理打开文件或安装应用
+  const handleOpenFile = useCallback(async (app) => {
+    const downloadState = getDownloadState(app.id);
+    const actionState = getAppActionState(app.id);
+    
+    if (downloadState.status === 'completed' && downloadState.filePath) {
+      try {
+        // 首先检查文件是否存在
+        const fileExists = await invoke('file_exists', { path: downloadState.filePath });
+        
+        if (!fileExists) {
+          // 如果文件被删除，自动切换到下载状态
+          console.log('文件不存在，切换到下载状态:', downloadState.filePath);
+          updateAppActionState(app.id, { action: '下载', isInstalled: false });
+          updateDownloadState(app.id, { status: 'idle', progress: 0, filePath: null, taskId: null });
+          showToast('文件已被删除，请重新下载', 'warning');
+          return;
+        }
+        
+        if (actionState.action === '安装') {
+          // 运行安装程序
+          await invoke('run_installer', { filePath: downloadState.filePath });
+          showToast('正在运行安装程序...', 'info');
+          // 安装后重新检查状态，使用多次检查确保状态更新
+          const checkInstallation = async () => {
+            await checkAppInstallStatus(app.id, downloadState.filePath);
+            // 如果状态仍然是安装，继续检查
+            const newState = getAppActionState(app.id);
+            if (newState.action === '安装') {
+              setTimeout(checkInstallation, 3000); // 3秒后再次检查
+            }
+          };
+          setTimeout(checkInstallation, 2000); // 2秒后开始检查
+        } else {
+          // 打开文件或运行应用
+          await invoke('open_file', { path: downloadState.filePath });
+          showToast('正在打开应用...', 'info');
+        }
+      } catch (error) {
+        console.error('操作失败:', error);
+        showToast(`操作失败: ${error}`, 'error');
+        
+        // 如果是文件不存在的错误，也切换到下载状态
+        if (error.toString().includes('文件不存在') || error.toString().includes('No such file')) {
+          console.log('文件操作失败，可能文件已被删除，切换到下载状态');
+          updateAppActionState(app.id, { action: '下载', isInstalled: false });
+          updateDownloadState(app.id, { status: 'idle', progress: 0, filePath: null, taskId: null });
+        }
+      }
+    } else {
+      showToast('文件尚未下载完成或文件路径不存在', 'warning');
+    }
+  }, [getDownloadState, getAppActionState, checkAppInstallStatus, updateAppActionState, updateDownloadState]);
+
+  // 防抖处理，防止快速连续点击
+  const downloadDebounceRef = useRef(new Set());
+  
+  const handleDownload = useCallback(async (app) => {
+    // 防抖检查
+    if (downloadDebounceRef.current.has(app.id)) {
+      return;
+    }
+    
+    const currentState = getDownloadState(app.id);
+    
+    // 如果已经在下载中，显示下载详情
+    if (currentState.status === 'downloading' || currentState.status === 'paused') {
+      setShowDownloadDropdown(showDownloadDropdown === app.id ? null : app.id);
+      return;
+    }
+    
+    // 如果已完成，打开文件
+    if (currentState.status === 'completed') {
+      handleDownloadControl(app, 'open');
+      return;
+    }
+    
+    if (!app.downloadUrl) {
+      window.showError && window.showError(t('app.noDownloadUrl'));
+      return;
+    }
+
+    // 添加到防抖集合
+    downloadDebounceRef.current.add(app.id);
+    
+    // 立即更新状态为准备中，提供即时反馈
+    updateDownloadState(app.id, { status: 'preparing', progress: 0 });
+
+    try {
+      // 使用requestAnimationFrame优化UI更新
+      const showToast = (message, bgColor = '#0066CC') => {
+        requestAnimationFrame(() => {
+          const toast = document.createElement('div');
+          toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: ${bgColor};
+            color: white;
+            border-radius: 4px;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+          `;
+          toast.textContent = message;
+          document.body.appendChild(toast);
+          
+          // 自动移除toast
+          setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => {
+              if (document.body.contains(toast)) {
+                document.body.removeChild(toast);
+              }
+            }, 500);
+          }, 3000);
+        });
+      };
       
-      document.body.appendChild(toast);
+      // 更新下载状态为开始
+      updateDownloadState(app.id, { status: 'downloading', progress: 0 });
       
       // 使用Tauri下载管理器进行下载
       try {
@@ -719,17 +1187,25 @@ const App = () => {
         
         console.log('创建下载任务成功，任务ID:', taskId);
         
+        // 更新状态包含taskId
+        updateDownloadState(app.id, { taskId, fileName });
+        
         // 立即开始下载
         const startResult = await invoke('start_download', { taskId });
         
         console.log('下载启动成功:', app.name, '结果:', startResult);
         
         // 显示成功提示
-        toast.textContent = `下载已开始: ${app.name}`;
-        toast.style.backgroundColor = '#28a745';
+        showToast(`下载已开始: ${app.name}`, '#28a745');
         
       } catch (downloadError) {
         console.error('使用下载管理器失败，回退到内置下载:', downloadError);
+        
+        // 更新状态为失败
+        updateDownloadState(app.id, { status: 'failed' });
+        
+        // 显示错误提示
+        showToast(`下载失败: ${app.name}`, '#dc3545');
         
         // 回退到原有的下载方式
         if (downloadManagerRef.current) {
@@ -744,24 +1220,16 @@ const App = () => {
         }
       }
       
-      // 3 seconds later, update the toast to say downloading is in progress
-      setTimeout(() => {
-        toast.textContent = `${t('downloadManager.downloading')}: ${app.name}`;
-        
-        // 3 more seconds later, make the toast disappear
-        setTimeout(() => {
-          toast.style.opacity = '0';
-          setTimeout(() => {
-            document.body.removeChild(toast);
-          }, 500);
-        }, 3000);
-      }, 1000);
-      
     } catch (error) {
       console.error(t('downloadManager.failed'), error);
-      alert(`${t('downloadManager.failed')}: ${app.name} - ${error.message || t('errors.unknownError')}`);
+      window.showError && window.showError(`${t('downloadManager.failed')}: ${app.name} - ${error.message || t('errors.unknownError')}`);
+    } finally {
+      // 清除防抖状态，允许重新点击
+      setTimeout(() => {
+        downloadDebounceRef.current.delete(app.id);
+      }, 1000); // 1秒后清除防抖
     }
-  };
+  }, [t, downloadManagerRef, getDownloadState, updateDownloadState, handleDownloadControl, showDownloadDropdown]);
 
   // 优化背景图片切换
   const handleBackgroundImageChange = useCallback((imageUrl, opacity) => {
@@ -874,14 +1342,98 @@ const App = () => {
             <AppDescription theme={theme}>{app.description}</AppDescription>
             <AppFooter>
               <AppPrice theme={theme}>{app.price === 0 ? '' : `￥${app.price}`}</AppPrice>
-              <DownloadButton 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDownload(app);
-                }}
-              >
-                {t('app.download')}
-              </DownloadButton>
+              <div style={{ position: 'relative' }} data-download-dropdown>
+                {(() => {
+                  const downloadState = getDownloadState(app.id);
+                  return (
+                    <DownloadButton 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // 防止在过渡状态时重复点击
+                            if (downloadState.status === 'pausing' || downloadState.status === 'resuming') {
+                              return;
+                            }
+                            if (downloadState.status === 'completed') {
+                              handleOpenFile(app);
+                            } else if (downloadState.status === 'downloading') {
+                              handleDownloadControl(app, 'pause');
+                            } else if (downloadState.status === 'paused') {
+                              handleDownloadControl(app, 'resume');
+                            } else {
+                              handleDownload(app);
+                            }
+                          }}
+                          status={downloadState.status}
+                          disabled={downloadState.status === 'pausing' || downloadState.status === 'resuming'}
+                        >
+                      {getDownloadButtonText(app.id)}
+                      {downloadState.status === 'downloading' && (
+                        <>
+                          <DownloadProgress progress={downloadState.progress} />
+                          <ProgressText>{Math.round(downloadState.progress || 0)}%</ProgressText>
+                        </>
+                      )}
+                    </DownloadButton>
+                  );
+                })()}
+                
+                {showDownloadDropdown === app.id && (() => {
+                  const dropdownState = getDownloadState(app.id);
+                  return (
+                    <DownloadDropdown theme={theme}>
+                         <DownloadInfo theme={theme}>
+                           <div>{t('downloadManager.status')}: {t(`downloadManager.${dropdownState.status}`)}</div>
+                           <div>{t('downloadManager.progress')}: {dropdownState.progress}%</div>
+                           {dropdownState.speed && (
+                             <div>{t('downloadManager.speed')}: {formatFileSize(dropdownState.speed)}/s</div>
+                           )}
+                           {dropdownState.totalSize && (
+                             <div>{t('downloadManager.size')}: {formatFileSize(dropdownState.totalSize)}</div>
+                           )}
+                         </DownloadInfo>
+                         <DownloadActions>
+                           {dropdownState.status === 'downloading' && (
+                             <ActionButton action="pause" onClick={() => handleDownloadControl(app, 'pause')}>
+                               {t('downloadManager.pause')}
+                             </ActionButton>
+                           )}
+                           {dropdownState.status === 'paused' && (
+                             <ActionButton action="resume" onClick={() => handleDownloadControl(app, 'resume')}>
+                               {t('downloadManager.resume')}
+                             </ActionButton>
+                           )}
+                           {(dropdownState.status === 'downloading' || 
+                             dropdownState.status === 'paused') && (
+                             <ActionButton onClick={() => handleDownloadControl(app, 'cancel')}>
+                               {t('downloadManager.cancel')}
+                             </ActionButton>
+                           )}
+                           {dropdownState.status === 'completed' && (
+                             <>
+                               <ActionButton action="open" onClick={() => handleOpenFile(app)}>
+                                 {(() => {
+                                   const actionState = getAppActionState(app.id);
+                                   switch(actionState.action) {
+                                     case '安装': return '安装';
+                                     case '运行': return '运行';
+                                     case '打开': return t('downloadManager.open');
+                                     default: return t('downloadManager.open');
+                                   }
+                                 })()}
+                               </ActionButton>
+                               <ActionButton 
+                                 onClick={() => checkAppInstallStatus(app.id, dropdownState.filePath)}
+                                 title="刷新应用状态"
+                               >
+                                 🔄
+                               </ActionButton>
+                             </>
+                           )}
+                         </DownloadActions>
+                       </DownloadDropdown>
+                  );
+                })()}
+              </div>
             </AppFooter>
           </AppCard>
         ))}
@@ -912,14 +1464,97 @@ const App = () => {
                 <AppPrice theme={theme} style={{ marginRight: '12px' }}>
                   {app.price === 0 ? '' : `￥${app.price}`}
                 </AppPrice>
-                <DownloadButton 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDownload(app);
-                  }}
-                >
-                  {t('app.download')}
-                </DownloadButton>
+                <div style={{ position: 'relative' }} data-download-dropdown>
+                  {(() => {
+                    const listDownloadState = getDownloadState(app.id);
+                    return (
+                      <>
+                        <DownloadButton 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // 防止在过渡状态时重复点击
+                            if (listDownloadState.status === 'pausing' || listDownloadState.status === 'resuming') {
+                              return;
+                            }
+                            if (listDownloadState.status === 'completed') {
+                              handleOpenFile(app);
+                            } else if (listDownloadState.status === 'downloading') {
+                              handleDownloadControl(app, 'pause');
+                            } else if (listDownloadState.status === 'paused') {
+                              handleDownloadControl(app, 'resume');
+                            } else {
+                              handleDownload(app);
+                            }
+                          }}
+                          status={listDownloadState.status}
+                          disabled={listDownloadState.status === 'pausing' || listDownloadState.status === 'resuming'}
+                        >
+                          {getDownloadButtonText(app.id)}
+                          {listDownloadState.status === 'downloading' && (
+                            <>
+                              <DownloadProgress progress={listDownloadState.progress} />
+                              <ProgressText>{Math.round(listDownloadState.progress || 0)}%</ProgressText>
+                            </>
+                          )}
+                        </DownloadButton>
+                        
+                        {showDownloadDropdown === app.id && (
+                          <DownloadDropdown theme={theme}>
+                             <DownloadInfo theme={theme}>
+                               <div>{t('downloadManager.status')}: {t(`downloadManager.${listDownloadState.status}`)}</div>
+                               <div>{t('downloadManager.progress')}: {listDownloadState.progress}%</div>
+                               {listDownloadState.speed && (
+                                 <div>{t('downloadManager.speed')}: {formatFileSize(listDownloadState.speed)}/s</div>
+                               )}
+                               {listDownloadState.totalSize && (
+                                 <div>{t('downloadManager.size')}: {formatFileSize(listDownloadState.totalSize)}</div>
+                               )}
+                             </DownloadInfo>
+                             <DownloadActions>
+                               {listDownloadState.status === 'downloading' && (
+                                 <ActionButton action="pause" onClick={() => handleDownloadControl(app, 'pause')}>
+                                   {t('downloadManager.pause')}
+                                 </ActionButton>
+                               )}
+                               {listDownloadState.status === 'paused' && (
+                                 <ActionButton action="resume" onClick={() => handleDownloadControl(app, 'resume')}>
+                                   {t('downloadManager.resume')}
+                                 </ActionButton>
+                               )}
+                               {(listDownloadState.status === 'downloading' || 
+                                 listDownloadState.status === 'paused') && (
+                                 <ActionButton onClick={() => handleDownloadControl(app, 'cancel')}>
+                                   {t('downloadManager.cancel')}
+                                 </ActionButton>
+                               )}
+                               {listDownloadState.status === 'completed' && (
+                                 <>
+                                   <ActionButton action="open" onClick={() => handleOpenFile(app)}>
+                                     {(() => {
+                                       const actionState = getAppActionState(app.id);
+                                       switch(actionState.action) {
+                                         case '安装': return '安装';
+                                         case '运行': return '运行';
+                                         case '打开': return t('downloadManager.open');
+                                         default: return t('downloadManager.open');
+                                       }
+                                     })()}
+                                   </ActionButton>
+                                   <ActionButton 
+                                     onClick={() => checkAppInstallStatus(app.id, listDownloadState.filePath)}
+                                     title="刷新应用状态"
+                                   >
+                                     🔄
+                                   </ActionButton>
+                                 </>
+                               )}
+                             </DownloadActions>
+                           </DownloadDropdown>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
               </ListAppActions>
             </ListAppInfo>
           </ListAppCard>
@@ -975,6 +1610,14 @@ const App = () => {
       );
     }
 
+    if (isMessagesVisible) {
+      return (
+        <FadeIn>
+          <Messages theme={theme} />
+        </FadeIn>
+      );
+    }
+
     if (selectedApp) {
       return (
         <Suspense fallback={<PageLoader>加载应用详情...</PageLoader>}>
@@ -1021,7 +1664,8 @@ const App = () => {
     currentLanguage,
     viewMode,
     backgroundImage,
-    isDownloadManagerVisible, 
+    isDownloadManagerVisible,
+    isMessagesVisible,
     selectedApp, 
     loading, 
     filteredApps, 
@@ -1055,13 +1699,15 @@ const App = () => {
       theme={theme}
       onSearch={handleSearch}
       onToggleDownloadManager={handleToggleDownloadManager}
+        onToggleMessages={handleToggleMessages}
+        isMessagesVisible={isMessagesVisible}
       isDownloadManagerVisible={isDownloadManagerVisible}
       hasBackgroundImage={!!backgroundImage}
       backgroundOpacity={uiBackgroundOpacity}
       viewMode={viewMode}
       onViewModeChange={handleViewModeChange}
     />
-  ), [theme, handleSearch, handleToggleDownloadManager, isDownloadManagerVisible, backgroundImage, uiBackgroundOpacity, viewMode, handleViewModeChange]);
+  ), [theme, handleSearch, handleToggleDownloadManager, handleToggleMessages, isDownloadManagerVisible, isMessagesVisible, backgroundImage, uiBackgroundOpacity, viewMode, handleViewModeChange]);
 
   const getCategoryTitle = useCallback(() => {
     if (selectedApp) {
@@ -1093,6 +1739,85 @@ const App = () => {
     
     initDownloadManager();
   }, [isDownloadManagerVisible, t]);
+
+  // 监听下载进度
+  useEffect(() => {
+    let progressInterval;
+    
+    const checkDownloadProgress = async () => {
+      const activeDownloads = Object.entries(downloadStates).filter(
+        ([_, state]) => state.status === 'downloading' && state.taskId
+      );
+      
+      for (const [appId, state] of activeDownloads) {
+        try {
+          const task = await invoke('get_download_progress', { taskId: state.taskId });
+          if (task) {
+            updateDownloadState(appId, {
+              progress: Math.round(task.progress || 0),
+              speed: task.speed || '0.0 B/s',
+              totalSize: task.total_size || 0,
+              downloadedSize: task.downloaded_size || 0
+            });
+            
+            // 检查是否完成
+            if (task.progress >= 100 || task.status === 'Completed') {
+              updateDownloadState(appId, {
+                status: 'completed',
+                progress: 100,
+                filePath: task.file_path
+              });
+              // 下载完成后自动检查应用安装状态
+              if (task.file_path) {
+                checkAppInstallStatus(appId, task.file_path);
+              }
+            } else if (task.status === 'Failed' || task.status === 'Error') {
+              updateDownloadState(appId, {
+                status: 'failed'
+              });
+            } else if (task.status === 'Paused') {
+              updateDownloadState(appId, {
+                status: 'paused'
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`获取下载进度失败 (${appId}):`, error);
+          // 如果获取进度失败，可能下载已经完成或出错
+          updateDownloadState(appId, { status: 'failed' });
+        }
+      }
+    };
+    
+    // 如果有活跃的下载，启动进度检查
+    const hasActiveDownloads = Object.values(downloadStates).some(
+      state => state.status === 'downloading'
+    );
+    
+    if (hasActiveDownloads) {
+      progressInterval = setInterval(checkDownloadProgress, 1000); // 每秒检查一次
+    }
+    
+    return () => {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+    };
+  }, [downloadStates, updateDownloadState, checkAppInstallStatus]);
+
+  // 点击外部区域关闭下载详情
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showDownloadDropdown && !event.target.closest('[data-download-dropdown]')) {
+        setShowDownloadDropdown(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDownloadDropdown]);
 
   // 添加初始化时的CSS变量设置
   useEffect(() => {
@@ -1151,9 +1876,24 @@ const App = () => {
       {/* 全局下载管理器组件，处理后台下载任务 */}
       <TauriDownloader 
         onDownloadStart={(download) => console.log(t('downloadManager.starting'), download.name)}
-        onDownloadComplete={(download) => console.log(t('downloadManager.completed'), download.name)}
+        onDownloadComplete={(download) => {
+          console.log(t('downloadManager.completed'), download.name);
+          // 下载完成后检查应用安装状态
+          if (download.appId && download.filePath) {
+            checkAppInstallStatus(download.appId, download.filePath);
+          }
+        }}
         onDownloadError={(download, error) => console.error(t('downloadManager.failed'), download.name, error)}
       />
+      
+      {/* 通知系统 */}
+      <NotificationSystem theme={theme} />
+      
+      {/* 确认对话框容器 */}
+      <ConfirmDialogContainer theme={theme} />
+      
+      {/* 输入对话框容器 */}
+      <PromptDialogContainer theme={theme} />
     </AppContainer>
   );
 };

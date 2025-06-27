@@ -292,8 +292,10 @@ const Header = ({
   theme, 
   onSearch, 
   onToggleDownloadManager, 
+  onToggleMessages,
   onViewModeChange,
   isDownloadManagerVisible,
+  isMessagesVisible,
   viewMode = 'grid',
   hasBackgroundImage = false, 
   backgroundOpacity = 0.8 
@@ -341,12 +343,15 @@ const Header = ({
     </SearchIcon>
   ), [theme]);
 
+
+
   // 使用useMemo缓存按钮部分
   const headerActions = useMemo(() => (
     <HeaderActions>
-      {/* 现有按钮 */}
+
+      {/* 下载管理按钮 */}
       <MemoizedHeaderButton 
-        title="日志管理"
+        title="下载管理"
         theme={theme}
         active={isDownloadManagerVisible}
         onClick={onToggleDownloadManager}
@@ -356,17 +361,20 @@ const Header = ({
           <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
         </svg>
       </MemoizedHeaderButton>
+      {/* 消息按钮 */}
       <MemoizedHeaderButton 
-        title="通知"
+        title="消息中心"
         theme={theme}
+        active={isMessagesVisible}
+        onClick={onToggleMessages}
         backgroundOpacity={backgroundOpacity}
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-          <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
+          <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
         </svg>
       </MemoizedHeaderButton>
     </HeaderActions>
-  ), [theme, isDownloadManagerVisible, onToggleDownloadManager, backgroundOpacity]);
+  ), [theme, isDownloadManagerVisible, isMessagesVisible, onToggleDownloadManager, onToggleMessages, backgroundOpacity]);
 
   // 使用useMemo缓存Logo部分
   const logoSection = useMemo(() => (
@@ -437,4 +445,4 @@ const Header = ({
   );
 };
 
-export default React.memo(Header); 
+export default React.memo(Header);

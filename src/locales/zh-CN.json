@@ -49,7 +49,23 @@
     "enable": "启用",
     "acceleratedDownloadDesc": "使用多线程加速下载，可提高下载速度，但可能增加服务器负载",
     "autoRunDesc": "下载完成后自动运行可执行文件（仅适用于可执行文件）",
-    "autoExtractDesc": "下载完成后自动解压压缩文件（支持zip、rar等常见格式）"
+    "autoExtractDesc": "下载完成后自动解压压缩文件（支持zip、rar等常见格式）",
+    "systemInfo": "系统信息",
+    "systemInfoDesc": "当前系统详细信息",
+    "systemInfoDescription": "查看当前运行环境的系统信息，包括操作系统、架构、版本等详细信息",
+    "operatingSystem": "操作系统",
+    "systemArchitecture": "系统架构",
+    "systemVersion": "系统版本",
+    "systemType": "系统类型",
+    "systemLanguage": "系统语言",
+    "refresh": "刷新系统信息",
+    "refreshing": "刷新中...",
+    "downloadDirectory": "下载设置",
+    "downloadPath": "下载目录",
+    "downloadPathDesc": "设置应用下载文件的保存位置",
+    "currentDownloadPath": "当前下载目录",
+    "selectDownloadDirectory": "选择下载目录",
+    "refreshDownloadDirectory": "刷新下载目录"
   },
   "sourceManager": {
     "title": "软件源管理",
@@ -82,13 +98,28 @@
     "allFailed": "所有软件源处理失败"
   },
   "downloadManager": {
-    "title": "下载",
-    "starting": "开始下载...",
+    "title": "下载管理器",
+    "addDownload": "添加下载",
     "downloading": "下载中",
-    "completed": "下载完成",
+    "paused": "已暂停",
+    "completed": "已完成",
     "failed": "下载失败",
+    "cancelled": "已取消",
+    "start": "开始",
+    "pause": "暂停",
+    "resume": "恢复",
+    "cancel": "取消",
+    "copy": "复制",
+    "starting": "正在启动下载",
+    "noDownloads": "暂无下载任务",
+    "status": "状态",
+    "progress": "进度",
+    "speed": "速度",
+    "size": "大小",
+    "open": "打开",
+    "openFile": "打开文件",
+    "idle": "待机",
     "canceled": "下载已取消",
-    "noDownloads": "没有活动下载",
     "downloadsInProgress": "个下载进行中",
     "logsCleared": "日志已清空",
     "initialized": "下载管理器初始化完成",
@@ -129,4 +160,4 @@
     "expand": "展开菜单",
     "collapse": "收起菜单"
   }
-} 
+}

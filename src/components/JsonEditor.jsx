@@ -153,10 +153,95 @@ const DeleteButton = styled.button`
 `;
 
 const ErrorMessage = styled.div`
-  color: #FF3B30;
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 107, 107, 0.3);
+`;
+
+const PlatformSection = styled.div`
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid ${props => props.theme === 'dark' ? '#444' : '#ddd'};
+  border-radius: 8px;
+  background: ${props => props.theme === 'dark' ? '#2a2a2a' : '#f9f9f9'};
+`;
+
+const PlatformTitle = styled.h4`
+  margin: 0 0 12px 0;
+  color: ${props => props.theme === 'dark' ? '#fff' : '#333'};
   font-size: 14px;
-  margin-top: 8px;
-  margin-bottom: 8px;
+  font-weight: 600;
+  text-transform: capitalize;
+`;
+
+const ArchSection = styled.div`
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid ${props => props.theme === 'dark' ? '#555' : '#eee'};
+  border-radius: 6px;
+  background: ${props => props.theme === 'dark' ? '#333' : '#fff'};
+`;
+
+const ArchTitle = styled.h5`
+  margin: 0 0 8px 0;
+  color: ${props => props.theme === 'dark' ? '#ccc' : '#666'};
+  font-size: 12px;
+  font-weight: 500;
+`;
+
+const DownloadFieldsGrid = styled.div`
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 8px;
+  align-items: end;
+`;
+
+const MultiPlatformContainer = styled.div`
+  margin: 16px 0;
+  padding: 16px;
+  border: 2px solid ${props => props.theme === 'dark' ? '#4a90e2' : '#007bff'};
+  border-radius: 8px;
+  background: ${props => props.theme === 'dark' ? '#1a1a1a' : '#f8f9fa'};
+`;
+
+const SectionTitle = styled.h3`
+  margin: 0 0 16px 0;
+  color: ${props => props.theme === 'dark' ? '#4a90e2' : '#007bff'};
+  font-size: 16px;
+  font-weight: 600;
+`;
+
+const CollapseButton = styled.button`
+  background: none;
+  border: none;
+  color: ${props => props.theme === 'dark' ? '#4a90e2' : '#007bff'};
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  
+  &:hover {
+    background: ${props => props.theme === 'dark' ? 'rgba(74, 144, 226, 0.1)' : 'rgba(0, 123, 255, 0.1)'};
+  }
+  
+  &:focus {
+    outline: none;
+    background: ${props => props.theme === 'dark' ? 'rgba(74, 144, 226, 0.2)' : 'rgba(0, 123, 255, 0.2)'};
+  }
+`;
+
+const CollapsibleContent = styled.div`
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+  max-height: ${props => props.collapsed ? '0' : '2000px'};
+  opacity: ${props => props.collapsed ? '0' : '1'};
 `;
 
 // 为软件源定义应用模板
@@ -166,7 +251,32 @@ const appTemplate = {
   icon: '',
   description: '',
   price: 0,
-  downloadUrl: '',
+  downloadUrl: '', // 保持向后兼容
+  downloads: {
+    windows: {
+      x64: { url: '', size: '', filename: '' },
+      x86: { url: '', size: '', filename: '' },
+      arm64: { url: '', size: '', filename: '' }
+    },
+    macos: {
+      universal: { url: '', size: '', filename: '' },
+      intel: { url: '', size: '', filename: '' },
+      apple_silicon: { url: '', size: '', filename: '' }
+    },
+    linux: {
+      x64_deb: { url: '', size: '', filename: '' },
+      x64_rpm: { url: '', size: '', filename: '' },
+      x64_tar: { url: '', size: '', filename: '' },
+      arm64_deb: { url: '', size: '', filename: '' },
+      arm64_rpm: { url: '', size: '', filename: '' },
+      arm64_tar: { url: '', size: '', filename: '' }
+    }
+  },
+  systemRequirements: {
+    windows: '',
+    macos: '',
+    linux: ''
+  },
   version: '',
   developer: '',
   screenshot: '',
@@ -178,6 +288,7 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState({});
   
   useEffect(() => {
     // 如果初始数据为空，添加一个空的应用对象
@@ -223,6 +334,123 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
     }
     
     setJsonData(newData);
+  };
+
+  // 更新多平台下载信息
+  const handleUpdateDownload = (index, platform, arch, field, value) => {
+    const newData = [...jsonData];
+    if (!newData[index].downloads) {
+      newData[index].downloads = {
+        windows: {},
+        macos: {},
+        linux: {}
+      };
+    }
+    if (!newData[index].downloads[platform]) {
+      newData[index].downloads[platform] = {};
+    }
+    if (!newData[index].downloads[platform][arch]) {
+      newData[index].downloads[platform][arch] = { url: '', size: '', filename: '' };
+    }
+    newData[index].downloads[platform][arch][field] = value;
+    setJsonData(newData);
+  };
+
+  // 更新系统要求
+  const handleUpdateSystemRequirement = (index, platform, value) => {
+    const newData = [...jsonData];
+    if (!newData[index].systemRequirements) {
+      newData[index].systemRequirements = {};
+    }
+    newData[index].systemRequirements[platform] = value;
+    setJsonData(newData);
+  };
+
+  // 从传统downloadUrl转换为多平台格式
+  const convertToMultiPlatform = (index) => {
+    const newData = [...jsonData];
+    const app = newData[index];
+    if (app.downloadUrl && !app.downloads) {
+      const parsedInfo = parseDownloadUrl(app.downloadUrl);
+      newData[index].downloads = {
+        windows: {
+          x64: { url: app.downloadUrl, size: '', filename: parsedInfo.filename || '' },
+          x86: { url: '', size: '', filename: '' },
+          arm64: { url: '', size: '', filename: '' }
+        },
+        macos: {
+          universal: { url: '', size: '', filename: '' },
+          intel: { url: '', size: '', filename: '' },
+          apple_silicon: { url: '', size: '', filename: '' }
+        },
+        linux: {
+          x64_deb: { url: '', size: '', filename: '' },
+          x64_rpm: { url: '', size: '', filename: '' },
+          x64_tar: { url: '', size: '', filename: '' },
+          arm64_deb: { url: '', size: '', filename: '' },
+          arm64_rpm: { url: '', size: '', filename: '' },
+          arm64_tar: { url: '', size: '', filename: '' }
+        }
+      };
+      newData[index].systemRequirements = {
+        windows: '',
+        macos: '',
+        linux: ''
+      };
+      setJsonData(newData);
+    }
+  };
+
+  // 清空多平台配置
+  const clearMultiPlatform = (index) => {
+    const newData = [...jsonData];
+    delete newData[index].downloads;
+    delete newData[index].systemRequirements;
+    setJsonData(newData);
+  };
+
+  // 批量转换为多平台格式
+  const batchConvertToMultiPlatform = () => {
+    const newData = [...jsonData];
+    newData.forEach((app, index) => {
+      if (app.downloadUrl && !app.downloads) {
+        const parsedInfo = parseDownloadUrl(app.downloadUrl);
+        newData[index].downloads = {
+          windows: {
+            x64: { url: app.downloadUrl, size: '', filename: parsedInfo.filename || '' },
+            x86: { url: '', size: '', filename: '' },
+            arm64: { url: '', size: '', filename: '' }
+          },
+          macos: {
+            universal: { url: '', size: '', filename: '' },
+            intel: { url: '', size: '', filename: '' },
+            apple_silicon: { url: '', size: '', filename: '' }
+          },
+          linux: {
+            x64_deb: { url: '', size: '', filename: '' },
+            x64_rpm: { url: '', size: '', filename: '' },
+            x64_tar: { url: '', size: '', filename: '' },
+            arm64_deb: { url: '', size: '', filename: '' },
+            arm64_rpm: { url: '', size: '', filename: '' },
+            arm64_tar: { url: '', size: '', filename: '' }
+          }
+        };
+        newData[index].systemRequirements = {
+          windows: '',
+          macos: '',
+          linux: ''
+        };
+      }
+    });
+    setJsonData(newData);
+  };
+
+  // 切换多平台配置的收缩状态
+  const toggleMultiPlatformCollapse = (appIndex) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [appIndex]: !prev[appIndex]
+    }));
   };
 
   // 导出JSON数据
@@ -475,6 +703,13 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
         >
           粘贴JSON (Ctrl+V)
         </Button>
+        <Button 
+          onClick={batchConvertToMultiPlatform}
+          variant="info"
+          disabled={!jsonData.some(app => app.downloadUrl && !app.downloads)}
+        >
+          批量转换多平台
+        </Button>
       </ToolBar>
       
       {error && <ErrorMessage>{error}</ErrorMessage>}
@@ -614,6 +849,178 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
                 placeholder="截图URL地址"
               />
             </FormField>
+            
+            {/* 多平台下载配置 */}
+            <MultiPlatformContainer theme={theme}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <SectionTitle theme={theme}>多平台下载配置</SectionTitle>
+                  <CollapseButton 
+                    theme={theme} 
+                    onClick={() => toggleMultiPlatformCollapse(index)}
+                    title={collapsedSections[index] ? '展开' : '收缩'}
+                  >
+                    {collapsedSections[index] ? '展开 ▼' : '收缩 ▲'}
+                  </CollapseButton>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {app.downloadUrl && !app.downloads && (
+                    <Button
+                      onClick={() => convertToMultiPlatform(index)}
+                      variant="success"
+                      style={{ fontSize: '12px', padding: '6px 12px' }}
+                    >
+                      从传统格式转换
+                    </Button>
+                  )}
+                  {app.downloads && (
+                    <Button
+                      onClick={() => clearMultiPlatform(index)}
+                      variant="danger"
+                      style={{ fontSize: '12px', padding: '6px 12px' }}
+                    >
+                      清空配置
+                    </Button>
+                  )}
+                </div>
+              </div>
+              
+              <CollapsibleContent collapsed={collapsedSections[index]}>
+                {/* Windows 平台 */}
+                <PlatformSection theme={theme}>
+                <PlatformTitle theme={theme}>Windows</PlatformTitle>
+                {['x64', 'x86', 'arm64'].map(arch => (
+                  <ArchSection key={arch} theme={theme}>
+                    <ArchTitle theme={theme}>{arch.toUpperCase()}</ArchTitle>
+                    <DownloadFieldsGrid>
+                      <Input
+                        type="text"
+                        value={app.downloads?.windows?.[arch]?.url || ''}
+                        onChange={(e) => handleUpdateDownload(index, 'windows', arch, 'url', e.target.value)}
+                        theme={theme}
+                        placeholder="下载链接"
+                      />
+                      <Input
+                        type="text"
+                        value={app.downloads?.windows?.[arch]?.size || ''}
+                        onChange={(e) => handleUpdateDownload(index, 'windows', arch, 'size', e.target.value)}
+                        theme={theme}
+                        placeholder="文件大小"
+                      />
+                      <Input
+                        type="text"
+                        value={app.downloads?.windows?.[arch]?.filename || ''}
+                        onChange={(e) => handleUpdateDownload(index, 'windows', arch, 'filename', e.target.value)}
+                        theme={theme}
+                        placeholder="文件名"
+                      />
+                    </DownloadFieldsGrid>
+                  </ArchSection>
+                ))}
+              </PlatformSection>
+              
+              {/* macOS 平台 */}
+              <PlatformSection theme={theme}>
+                <PlatformTitle theme={theme}>macOS</PlatformTitle>
+                {['universal', 'intel', 'apple_silicon'].map(arch => (
+                  <ArchSection key={arch} theme={theme}>
+                    <ArchTitle theme={theme}>{arch === 'apple_silicon' ? 'Apple Silicon' : arch.charAt(0).toUpperCase() + arch.slice(1)}</ArchTitle>
+                    <DownloadFieldsGrid>
+                      <Input
+                        type="text"
+                        value={app.downloads?.macos?.[arch]?.url || ''}
+                        onChange={(e) => handleUpdateDownload(index, 'macos', arch, 'url', e.target.value)}
+                        theme={theme}
+                        placeholder="下载链接"
+                      />
+                      <Input
+                        type="text"
+                        value={app.downloads?.macos?.[arch]?.size || ''}
+                        onChange={(e) => handleUpdateDownload(index, 'macos', arch, 'size', e.target.value)}
+                        theme={theme}
+                        placeholder="文件大小"
+                      />
+                      <Input
+                        type="text"
+                        value={app.downloads?.macos?.[arch]?.filename || ''}
+                        onChange={(e) => handleUpdateDownload(index, 'macos', arch, 'filename', e.target.value)}
+                        theme={theme}
+                        placeholder="文件名"
+                      />
+                    </DownloadFieldsGrid>
+                  </ArchSection>
+                ))}
+              </PlatformSection>
+              
+              {/* Linux 平台 */}
+              <PlatformSection theme={theme}>
+                <PlatformTitle theme={theme}>Linux</PlatformTitle>
+                {['x64_deb', 'x64_rpm', 'x64_tar', 'arm64_deb', 'arm64_rpm', 'arm64_tar'].map(arch => (
+                  <ArchSection key={arch} theme={theme}>
+                    <ArchTitle theme={theme}>{arch.replace('_', ' ').toUpperCase()}</ArchTitle>
+                    <DownloadFieldsGrid>
+                      <Input
+                        type="text"
+                        value={app.downloads?.linux?.[arch]?.url || ''}
+                        onChange={(e) => handleUpdateDownload(index, 'linux', arch, 'url', e.target.value)}
+                        theme={theme}
+                        placeholder="下载链接"
+                      />
+                      <Input
+                        type="text"
+                        value={app.downloads?.linux?.[arch]?.size || ''}
+                        onChange={(e) => handleUpdateDownload(index, 'linux', arch, 'size', e.target.value)}
+                        theme={theme}
+                        placeholder="文件大小"
+                      />
+                      <Input
+                        type="text"
+                        value={app.downloads?.linux?.[arch]?.filename || ''}
+                        onChange={(e) => handleUpdateDownload(index, 'linux', arch, 'filename', e.target.value)}
+                        theme={theme}
+                        placeholder="文件名"
+                      />
+                    </DownloadFieldsGrid>
+                  </ArchSection>
+                ))}
+              </PlatformSection>
+              
+              {/* 系统要求 */}
+              <PlatformSection theme={theme}>
+                <PlatformTitle theme={theme}>系统要求</PlatformTitle>
+                <FormField>
+                  <FieldLabel theme={theme}>Windows 系统要求</FieldLabel>
+                  <Input
+                    type="text"
+                    value={app.systemRequirements?.windows || ''}
+                    onChange={(e) => handleUpdateSystemRequirement(index, 'windows', e.target.value)}
+                    theme={theme}
+                    placeholder="例如：Windows 10 或更高版本"
+                  />
+                </FormField>
+                <FormField>
+                  <FieldLabel theme={theme}>macOS 系统要求</FieldLabel>
+                  <Input
+                    type="text"
+                    value={app.systemRequirements?.macos || ''}
+                    onChange={(e) => handleUpdateSystemRequirement(index, 'macos', e.target.value)}
+                    theme={theme}
+                    placeholder="例如：macOS 10.15 或更高版本"
+                  />
+                </FormField>
+                <FormField>
+                  <FieldLabel theme={theme}>Linux 系统要求</FieldLabel>
+                  <Input
+                    type="text"
+                    value={app.systemRequirements?.linux || ''}
+                    onChange={(e) => handleUpdateSystemRequirement(index, 'linux', e.target.value)}
+                    theme={theme}
+                    placeholder="例如：Ubuntu 18.04 或兼容发行版"
+                  />
+                </FormField>
+              </PlatformSection>
+              </CollapsibleContent>
+            </MultiPlatformContainer>
           </ArrayItemContainer>
         ))}
       </JsonObjectList>
@@ -627,4 +1034,4 @@ const JsonEditor = ({ initialData = [], onChange, theme, title = 'JSON编辑器'
   );
 };
 
-export default JsonEditor; 
+export default JsonEditor;

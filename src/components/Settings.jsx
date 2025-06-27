@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import { useTranslation } from 'react-i18next';
-import { isAcceleratedDownloadEnabled, toggleAcceleratedDownload } from './TauriDownloader';
+import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
+
+import { platform, arch, version, type as osType, locale } from '@tauri-apps/plugin-os';
 
 const SettingsContainer = styled.div`
   padding: 20px;
@@ -259,6 +262,70 @@ const Button = styled.button`
   }
 `;
 
+const SystemInfoGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+`;
+
+const SystemInfoCard = styled.div`
+  background-color: ${props => props.theme === 'dark' ? '#2a2a2d' : '#ffffff'};
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    box-shadow: 0 4px 12px var(--shadow-color);
+    transform: translateY(-2px);
+  }
+`;
+
+const SystemInfoLabel = styled.div`
+  font-size: 12px;
+  font-weight: 600;
+  color: ${props => props.theme === 'dark' ? '#aaa' : '#666'};
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+`;
+
+const SystemInfoValue = styled.div`
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--app-text-color);
+  word-break: break-word;
+`;
+
+const RefreshButton = styled(Button)`
+  margin-top: 16px;
+  background-color: var(--accent-color);
+  color: white;
+  
+  &:hover {
+    background-color: ${props => props.theme === 'dark' ? '#5bb3f7' : '#0052a3'};
+  }
+  
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    
+    svg {
+      animation: spin 1s linear infinite;
+    }
+  }
+  
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
 const InputGroup = styled.div`
   margin-top: 16px;
   display: flex;
@@ -335,7 +402,8 @@ const Slider = styled.input`
 const FastSlider = React.memo(({ value, min, max, step, onChange, theme }) => {
   const sliderRef = useRef(null);
   const [localValue, setLocalValue] = useState(value);
-  const isFirstRender = useRef(true);
+  const isUpdatingRef = useRef(false);
+  const timeoutRef = useRef(null);
   
   // 使用RAF优化视觉更新
   const updateVisualStyle = useCallback((newValue) => {
@@ -351,35 +419,52 @@ const FastSlider = React.memo(({ value, min, max, step, onChange, theme }) => {
     });
   }, []);
   
-  // 初始化
+  // 当外部value变化时同步，但避免循环更新
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      updateVisualStyle(value);
-    }
-  }, [value, updateVisualStyle]);
-  
-  // 当外部value变化时同步
-  useEffect(() => {
-    if (Math.abs(value - localValue) > 0.01) {
+    if (!isUpdatingRef.current && Math.abs(value - localValue) > 0.01) {
       setLocalValue(value);
       updateVisualStyle(value);
     }
   }, [value, localValue, updateVisualStyle]);
   
-  // 处理滑块变化 - 使用防抖优化
+  // 处理滑块变化 - 实时更新视觉效果
   const handleChange = useCallback((event) => {
     const newValue = parseFloat(event.target.value);
-    if (Math.abs(newValue - localValue) > 0.01) {
-      setLocalValue(newValue);
-      updateVisualStyle(newValue);
+    setLocalValue(newValue);
+    updateVisualStyle(newValue);
+    
+    // 防抖通知父组件
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
     }
-  }, [localValue, updateVisualStyle]);
+    
+    isUpdatingRef.current = true;
+    timeoutRef.current = setTimeout(() => {
+      onChange(newValue);
+      isUpdatingRef.current = false;
+    }, 100);
+  }, [updateVisualStyle, onChange]);
   
-  // 滑动结束时通知父组件
+  // 滑动结束时立即通知父组件
   const handleChangeEnd = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    isUpdatingRef.current = true;
     onChange(localValue);
+    setTimeout(() => {
+      isUpdatingRef.current = false;
+    }, 50);
   }, [onChange, localValue]);
+  
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
   
   return (
     <div ref={sliderRef} className="fast-slider">
@@ -547,8 +632,10 @@ const Settings = React.memo(({
     if (Math.abs(savedOpacity - localOpacity) > 0.01) {
       setLocalOpacity(savedOpacity);
       setOpacity(savedOpacity);
+      // 同步更新CSS变量
+      document.documentElement.style.setProperty('--app-bg-opacity', savedOpacity);
     }
-  }, [backgroundImage, theme]);
+  }, [backgroundImage, theme, localOpacity]);
 
   // 优化文件上传处理
   const handleFileChange = useCallback((e) => {
@@ -556,12 +643,12 @@ const Settings = React.memo(({
     if (!file) return;
     
     if (!file.type.startsWith('image/')) {
-      alert('请上传图片文件');
+      window.showError && window.showError('请上传图片文件');
       return;
     }
     
     if (file.size > 3 * 1024 * 1024) {
-      alert('图片大小不能超过3MB');
+      window.showError && window.showError('图片大小不能超过3MB');
       return;
     }
     
@@ -625,7 +712,7 @@ const Settings = React.memo(({
       
       img.onerror = () => {
         // 处理加载错误
-        alert('图片加载失败，请尝试其他图片');
+        window.showError && window.showError('图片加载失败，请尝试其他图片');
         setCustomBgPreviewUrl('');
       };
       
@@ -644,16 +731,94 @@ const Settings = React.memo(({
     };
   }, []);
 
-  // Download settings states
-  const [acceleratedDownload, setAcceleratedDownload] = useState(() => {
-    return isAcceleratedDownloadEnabled();
+
+
+  // System info states
+  const [systemInfo, setSystemInfo] = useState({
+    platform: '检测中...',
+    arch: '检测中...',
+    version: '检测中...',
+    osType: '检测中...',
+    locale: '检测中...'
   });
-  const [autoRun, setAutoRun] = useState(() => {
-    return localStorage.getItem('autoRunDownloads') === 'true';
-  });
-  const [autoExtract, setAutoExtract] = useState(() => {
-    return localStorage.getItem('autoExtractDownloads') === 'true';
-  });
+  const [isLoadingSystemInfo, setIsLoadingSystemInfo] = useState(false);
+  
+  // Download directory states
+  const [downloadDirectory, setDownloadDirectory] = useState('检测中...');
+  const [isLoadingDownloadDir, setIsLoadingDownloadDir] = useState(false);
+
+  // 获取系统信息的函数
+  const fetchSystemInfo = async () => {
+    setIsLoadingSystemInfo(true);
+    try {
+      const [platformInfo, archInfo, versionInfo, osTypeInfo, localeInfo] = await Promise.all([
+        platform(),
+        arch(),
+        version(),
+        osType(),
+        locale()
+      ]);
+      
+      setSystemInfo({
+        platform: platformInfo || '未知',
+        arch: archInfo || '未知',
+        version: versionInfo || '未知',
+        osType: osTypeInfo || '未知',
+        locale: localeInfo || '未知'
+      });
+    } catch (error) {
+      console.error('获取系统信息失败:', error);
+      setSystemInfo({
+        platform: '获取失败',
+        arch: '获取失败',
+        version: '获取失败',
+        osType: '获取失败',
+        locale: '获取失败'
+      });
+    } finally {
+      setIsLoadingSystemInfo(false);
+    }
+  };
+  
+  // 获取下载目录的函数
+  const fetchDownloadDirectory = async () => {
+    setIsLoadingDownloadDir(true);
+    try {
+      const dir = await invoke('get_download_directory');
+      setDownloadDirectory(dir || '未知');
+    } catch (error) {
+      console.error('获取下载目录失败:', error);
+      setDownloadDirectory('获取失败');
+    } finally {
+      setIsLoadingDownloadDir(false);
+    }
+  };
+  
+  // 选择下载目录的函数
+  const selectDownloadDirectory = async () => {
+    try {
+      const selectedPath = await open({
+        directory: true,
+        multiple: false,
+        title: '选择下载目录'
+      });
+      
+      if (selectedPath) {
+        await invoke('set_download_directory', { path: selectedPath });
+        setDownloadDirectory(selectedPath);
+        window.showSuccess && window.showSuccess('下载目录设置成功！');
+      }
+    } catch (error) {
+      console.error('设置下载目录失败:', error);
+      window.showError && window.showError('设置下载目录失败: ' + error);
+    }
+  };
+
+  // 组件挂载时获取系统信息和下载目录
+  useEffect(() => {
+    fetchSystemInfo();
+    fetchDownloadDirectory();
+  }, []);
 
   const handleThemeChange = (value) => {
     if (onThemeChange) {
@@ -681,15 +846,23 @@ const Settings = React.memo(({
 
   // 修复backgroundImage undefined错误 - 移动到组件内部
   const handleOpacityChange = useCallback((newOpacity) => {
+    // 避免重复更新相同的值
+    if (Math.abs(newOpacity - localOpacity) < 0.01) {
+      return;
+    }
+    
     // 更新本地状态
     setLocalOpacity(newOpacity);
     setOpacity(newOpacity);
+    
+    // 立即更新localStorage，避免状态不一致
+    localStorage.setItem('backgroundOpacity', newOpacity.toString());
     
     // 触发背景更新 - 确保传入正确的backgroundImage参数
     if (typeof onBackgroundImageChange === 'function') {
       onBackgroundImageChange(backgroundImage || '', newOpacity);
     }
-  }, [backgroundImage, onBackgroundImageChange]);
+  }, [backgroundImage, onBackgroundImageChange, localOpacity]);
   
   // 默认背景图片列表
   const DEFAULT_BACKGROUNDS = [
@@ -801,7 +974,7 @@ const Settings = React.memo(({
   // 通过URL加载图片
   const handleLoadUrlImage = () => {
     if (!customBgUrl) {
-      alert('请输入图片URL');
+      window.showError && window.showError('请输入图片URL');
       return;
     }
 
@@ -809,7 +982,7 @@ const Settings = React.memo(({
     try {
       new URL(customBgUrl);
     } catch (e) {
-      alert('请输入有效的URL地址');
+      window.showError && window.showError('请输入有效的URL地址');
       return;
     }
 
@@ -822,37 +995,12 @@ const Settings = React.memo(({
       setCustomBgUrl(''); // 清空输入框
     };
     img.onerror = () => {
-      alert('无法加载图片，请检查URL是否正确');
+      window.showError && window.showError('无法加载图片，请检查URL是否正确');
     };
     img.src = customBgUrl;
   };
 
-  // Download settings handlers
-  const handleAcceleratedDownloadToggle = () => {
-    const newValue = !acceleratedDownload;
-    
-    // Save to localStorage and update the internal state
-    localStorage.setItem('useAcceleratedDownload', newValue.toString());
-    setAcceleratedDownload(newValue);
-    
-    // Explicitly call the utility function to ensure it's properly toggled
-    toggleAcceleratedDownload(newValue);
-    
-    // Log for debugging
-    console.log(`多线程加速下载模式: ${newValue ? '已启用' : '已禁用'}`);
-  };
 
-  const handleAutoRunToggle = () => {
-    const newValue = !autoRun;
-    setAutoRun(newValue);
-    localStorage.setItem('autoRunDownloads', newValue);
-  };
-
-  const handleAutoExtractToggle = () => {
-    const newValue = !autoExtract;
-    setAutoExtract(newValue);
-    localStorage.setItem('autoExtractDownloads', newValue);
-  };
 
   return (
     <SettingsContainer theme={theme}>
@@ -977,60 +1125,135 @@ const Settings = React.memo(({
           {opacitySlider}
         </OptionGroup>
       </SettingsSection>
-
-      {/* Download Settings - New Section */}
+      
+      {/* Download Directory Section */}
       <SettingsSection theme={theme}>
-        <SectionTitle theme={theme}>{t('downloadManager.settings') || '下载设置'}</SectionTitle>
+        <SectionTitle theme={theme}>{t('settings.downloadDirectory') || '下载设置'}</SectionTitle>
         
         <OptionGroup>
-          <OptionLabel theme={theme}>{t('downloadManager.acceleratedDownload') || '加速下载'}</OptionLabel>
+          <OptionLabel theme={theme}>{t('settings.downloadPath') || '下载目录'}</OptionLabel>
           <OptionDescription theme={theme}>
-            {t('settings.acceleratedDownloadDesc') || '使用多线程加速下载，可提高下载速度，但可能增加服务器负载'}
+            {t('settings.downloadPathDesc') || '设置应用下载文件的保存位置'}
           </OptionDescription>
-          <RadioGroup>
-            <RadioLabel theme={theme} selected={acceleratedDownload}>
-              <RadioInput 
-                type="checkbox" 
-                checked={acceleratedDownload} 
-                onChange={handleAcceleratedDownloadToggle} 
-              />
-              {t('settings.enable') || '启用'}
-            </RadioLabel>
-          </RadioGroup>
+          
+          <SystemInfoCard theme={theme} style={{ marginTop: '16px', marginBottom: '16px' }}>
+            <SystemInfoLabel theme={theme}>{t('settings.currentDownloadPath') || '当前下载目录'}</SystemInfoLabel>
+            <SystemInfoValue theme={theme}>{downloadDirectory}</SystemInfoValue>
+          </SystemInfoCard>
+          
+          <Button 
+            onClick={selectDownloadDirectory}
+            disabled={isLoadingDownloadDir}
+            theme={theme}
+          >
+            {isLoadingDownloadDir ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                </svg>
+                {t('settings.loading') || '加载中...'}
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14,2 14,8 20,8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                  <polyline points="10,9 9,9 8,9"></polyline>
+                </svg>
+                {t('settings.selectDownloadDirectory') || '选择下载目录'}
+              </>
+            )}
+          </Button>
+          
+          <RefreshButton 
+            theme={theme}
+            onClick={fetchDownloadDirectory}
+            disabled={isLoadingDownloadDir}
+            style={{ marginTop: '12px' }}
+          >
+            {isLoadingDownloadDir ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                </svg>
+                {t('settings.refreshing') || '刷新中...'}
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                {t('settings.refreshDownloadDirectory') || '刷新下载目录'}
+              </>
+            )}
+          </RefreshButton>
         </OptionGroup>
+      </SettingsSection>
 
+      {/* System Information Section */}
+      <SettingsSection theme={theme}>
+        <SectionTitle theme={theme}>{t('settings.systemInfo') || '系统信息'}</SectionTitle>
+        
         <OptionGroup>
-          <OptionLabel theme={theme}>{t('downloadManager.autoRun') || '自动运行'}</OptionLabel>
+          <OptionLabel theme={theme}>{t('settings.systemInfoDesc') || '当前系统详细信息'}</OptionLabel>
           <OptionDescription theme={theme}>
-            {t('settings.autoRunDesc') || '下载完成后自动运行可执行文件（仅适用于可执行文件）'}
+            {t('settings.systemInfoDescription') || '查看当前运行环境的系统信息，包括操作系统、架构、版本等详细信息'}
           </OptionDescription>
-          <RadioGroup>
-            <RadioLabel theme={theme} selected={autoRun}>
-              <RadioInput 
-                type="checkbox" 
-                checked={autoRun} 
-                onChange={handleAutoRunToggle} 
-              />
-              {t('settings.enable') || '启用'}
-            </RadioLabel>
-          </RadioGroup>
-        </OptionGroup>
-
-        <OptionGroup>
-          <OptionLabel theme={theme}>{t('downloadManager.autoExtract') || '自动解压'}</OptionLabel>
-          <OptionDescription theme={theme}>
-            {t('settings.autoExtractDesc') || '下载完成后自动解压压缩文件（支持zip、rar等常见格式）'}
-          </OptionDescription>
-          <RadioGroup>
-            <RadioLabel theme={theme} selected={autoExtract}>
-              <RadioInput 
-                type="checkbox" 
-                checked={autoExtract} 
-                onChange={handleAutoExtractToggle} 
-              />
-              {t('settings.enable') || '启用'}
-            </RadioLabel>
-          </RadioGroup>
+          
+          <SystemInfoGrid>
+            <SystemInfoCard theme={theme}>
+              <SystemInfoLabel theme={theme}>{t('settings.operatingSystem') || '操作系统'}</SystemInfoLabel>
+              <SystemInfoValue theme={theme}>{systemInfo.platform}</SystemInfoValue>
+            </SystemInfoCard>
+            
+            <SystemInfoCard theme={theme}>
+              <SystemInfoLabel theme={theme}>{t('settings.systemArchitecture') || '系统架构'}</SystemInfoLabel>
+              <SystemInfoValue theme={theme}>{systemInfo.arch}</SystemInfoValue>
+            </SystemInfoCard>
+            
+            <SystemInfoCard theme={theme}>
+              <SystemInfoLabel theme={theme}>{t('settings.systemVersion') || '系统版本'}</SystemInfoLabel>
+              <SystemInfoValue theme={theme}>{systemInfo.version}</SystemInfoValue>
+            </SystemInfoCard>
+            
+            <SystemInfoCard theme={theme}>
+              <SystemInfoLabel theme={theme}>{t('settings.systemType') || '系统类型'}</SystemInfoLabel>
+              <SystemInfoValue theme={theme}>{systemInfo.osType}</SystemInfoValue>
+            </SystemInfoCard>
+            
+            <SystemInfoCard theme={theme}>
+              <SystemInfoLabel theme={theme}>{t('settings.systemLanguage') || '系统语言'}</SystemInfoLabel>
+              <SystemInfoValue theme={theme}>{systemInfo.locale}</SystemInfoValue>
+            </SystemInfoCard>
+          </SystemInfoGrid>
+          
+          <RefreshButton 
+            theme={theme}
+            onClick={fetchSystemInfo}
+            disabled={isLoadingSystemInfo}
+          >
+            {isLoadingSystemInfo ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                </svg>
+                {t('settings.refreshing') || '刷新中...'}
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                {t('settings.refresh') || '刷新系统信息'}
+              </>
+            )}
+          </RefreshButton>
         </OptionGroup>
       </SettingsSection>
     </SettingsContainer>
@@ -1044,4 +1267,4 @@ Settings.defaultProps = {
   onLanguageChange: () => {}
 };
 
-export default Settings; 
+export default Settings;

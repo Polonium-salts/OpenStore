@@ -1,5 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
+import PlatformDownloadSelector from './PlatformDownloadSelector';
 
 const DetailsContainer = styled.div`
   background-color: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
@@ -275,14 +276,18 @@ const AppDetails = ({ app, theme, onBack, onDownload }) => {
         <Price theme={theme}>
           {app.price === 0 ? '免费' : `¥${app.price}`}
         </Price>
-        <div>
-          <DownloadButton onClick={() => onDownload(app)}>
-            下载
-          </DownloadButton>
-        </div>
       </ActionBar>
+      
+      {/* 多平台下载选择器 */}
+      <div style={{ padding: '0 24px 24px' }}>
+        <PlatformDownloadSelector 
+          app={app} 
+          theme={theme} 
+          onDownload={onDownload} 
+        />
+      </div>
     </DetailsContainer>
   );
 };
 
-export default AppDetails; 
+export default AppDetails;

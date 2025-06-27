@@ -293,7 +293,7 @@ const DownloadManager = ({ theme = 'light' }) => {
   // 创建下载任务
   const createDownload = async () => {
     if (!newDownload.url || !newDownload.fileName) {
-      alert('请填写下载链接和文件名');
+      window.showError && window.showError('请填写下载链接和文件名');
       return;
     }
 
@@ -310,7 +310,7 @@ const DownloadManager = ({ theme = 'light' }) => {
       loadDownloads();
     } catch (error) {
       console.error('创建下载任务失败:', error);
-      alert('创建下载任务失败: ' + error);
+      window.showError && window.showError('创建下载任务失败: ' + error);
     }
   };
 
@@ -320,7 +320,7 @@ const DownloadManager = ({ theme = 'light' }) => {
       await invoke('start_download', { taskId });
     } catch (error) {
       console.error('开始下载失败:', error);
-      alert('开始下载失败: ' + error);
+      window.showError && window.showError('开始下载失败: ' + error);
     }
   };
 
@@ -330,7 +330,7 @@ const DownloadManager = ({ theme = 'light' }) => {
       await invoke('resume_download', { taskId });
     } catch (error) {
       console.error('恢复下载失败:', error);
-      alert('恢复下载失败: ' + error);
+      window.showError && window.showError('恢复下载失败: ' + error);
     }
   };
 
@@ -364,9 +364,12 @@ const DownloadManager = ({ theme = 'light' }) => {
 
   // 创建副本下载
   const createCopyDownload = async (originalTaskId) => {
-    const copyCount = prompt('请输入要创建的副本数量:', '1');
+    const copyCount = window.showNumberPrompt ? 
+      await window.showNumberPrompt('请输入要创建的副本数量:', '1') :
+      prompt('请输入要创建的副本数量:', '1');
+    
     if (!copyCount || isNaN(copyCount) || parseInt(copyCount) <= 0) {
-      alert('请输入有效的副本数量');
+      window.showError && window.showError('请输入有效的副本数量');
       return;
     }
 
@@ -377,16 +380,16 @@ const DownloadManager = ({ theme = 'light' }) => {
       });
       console.log('创建副本成功:', createdTaskIds);
       loadDownloads();
-      alert(`成功创建 ${createdTaskIds.length} 个副本`);
+      window.showSuccess && window.showSuccess(`成功创建 ${createdTaskIds.length} 个副本`);
     } catch (error) {
       console.error('创建副本失败:', error);
-      alert('创建副本失败: ' + error);
+      window.showError && window.showError('创建副本失败: ' + error);
     }
   };
 
   // 监听下载事件
   useEffect(() => {
-    let unlistenProgress, unlistenStatusChanged, unlistenCompleted, unlistenFailed;
+    let unlistenProgress, unlistenStatusChanged, unlistenCompleted, unlistenFailed, unlistenInstallerReady;
     
     const setupListeners = async () => {
       unlistenProgress = await listen('download_progress', (event) => {
@@ -427,7 +430,20 @@ const DownloadManager = ({ theme = 'light' }) => {
           task.id === failedTask.id ? { ...task, ...failedTask } : task
         ));
         // 可以在这里添加错误提示
-        alert(`下载失败: ${failedTask.file_name}`);
+        window.showError && window.showError(`下载失败: ${failedTask.file_name}`);
+      });
+
+      unlistenInstallerReady = await listen('installer_ready', async (event) => {
+        const installerTask = event.payload;
+        console.log('安装程序准备就绪:', installerTask);
+        // 显示运行安装程序的提示
+        const shouldRun = window.showConfirm ? 
+          await window.showConfirm(`下载完成！是否立即运行安装程序 "${installerTask.file_name}"？`) :
+          window.confirm(`下载完成！是否立即运行安装程序 "${installerTask.file_name}"？`);
+        
+        if (shouldRun) {
+          runInstaller(installerTask.file_path);
+        }
       });
     };
 
@@ -439,8 +455,26 @@ const DownloadManager = ({ theme = 'light' }) => {
       if (unlistenStatusChanged) unlistenStatusChanged();
       if (unlistenCompleted) unlistenCompleted();
       if (unlistenFailed) unlistenFailed();
+      if (unlistenInstallerReady) unlistenInstallerReady();
     };
   }, []);
+
+  // 判断是否为安装程序文件
+  const isInstallerFile = (fileName) => {
+    const ext = fileName.toLowerCase().split('.').pop();
+    return ['exe', 'msi', 'dmg', 'pkg', 'deb', 'rpm', 'appimage'].includes(ext);
+  };
+
+  // 运行安装程序
+  const runInstaller = async (filePath) => {
+    try {
+      await invoke('run_installer', { filePath: filePath });
+      console.log('安装程序启动成功');
+    } catch (error) {
+      console.error('启动安装程序失败:', error);
+      window.showError && window.showError(`启动安装程序失败: ${error}`);
+    }
+  };
 
   // 从URL提取文件名
   const extractFileName = (url) => {
@@ -542,6 +576,14 @@ const DownloadManager = ({ theme = 'light' }) => {
                 
                 {download.status === 'Completed' || download.status === 'Failed' || download.status === 'Cancelled' ? (
                   <>
+                    {download.status === 'Completed' && isInstallerFile(download.file_name) ? (
+                      <ActionButton 
+                        className="start" 
+                        onClick={() => runInstaller(download.file_path)}
+                      >
+                        运行安装程序
+                      </ActionButton>
+                    ) : null}
                     <ActionButton 
                       className="start" 
                       onClick={() => createCopyDownload(download.id)}
