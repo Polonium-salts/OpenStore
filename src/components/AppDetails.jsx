@@ -193,7 +193,7 @@ const PageHeader = styled.div`
   margin-bottom: 16px;
 `;
 
-const AppDetails = ({ app, theme, onBack, onDownload }) => {
+const AppDetails = ({ app, theme, onBack, onDownload, getDownloadState, handleDownloadControl, getDownloadButtonText, formatFileSize }) => {
   if (!app) {
     return (
       <DetailsContainer theme={theme}>
@@ -283,7 +283,11 @@ const AppDetails = ({ app, theme, onBack, onDownload }) => {
         <PlatformDownloadSelector 
           app={app} 
           theme={theme} 
-          onDownload={onDownload} 
+          onDownload={onDownload}
+          getDownloadState={getDownloadState}
+          handleDownloadControl={handleDownloadControl}
+          getDownloadButtonText={getDownloadButtonText}
+          formatFileSize={formatFileSize}
         />
       </div>
     </DetailsContainer>

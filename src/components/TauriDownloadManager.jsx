@@ -5,6 +5,7 @@ import styled from 'styled-components';
 import { save } from '@tauri-apps/api/dialog';
 import { downloadDir } from '@tauri-apps/api/path';
 import { writeBinaryFile } from '@tauri-apps/api/fs';
+import { createAcceleratedDownload, DownloadStatus } from '../services/acceleratedDownloader';
 
 const Container = styled.div`
   width: 100%;
@@ -65,7 +66,7 @@ const DownloadName = styled.div`
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
 `;
 
-const DownloadStatus = styled.div`
+const DownloadStatusText = styled.div`
   font-size: 12px;
   color: ${props => {
     switch (props.status) {
@@ -109,95 +110,102 @@ const Button = styled.button`
 const TauriDownloadManager = forwardRef(({ theme }, ref) => {
   const [downloads, setDownloads] = useState([]);
 
-  useImperativeHandle(ref, () => ({
+    useImperativeHandle(ref, () => ({
     startDownload: async (app) => {
+      const downloadId = Date.now();
       const newDownload = {
-        id: Date.now(),
+        id: downloadId,
         name: app.name,
         url: app.downloadUrl,
         progress: 0,
-        status: 'downloading',
-        error: null
+        status: 'pending',
+        error: null,
+        speed: '0 B/s',
+        downloader: null,
       };
 
       setDownloads(prev => [...prev, newDownload]);
 
       try {
-        // 获取下载目录路径
         const downloadsPath = await downloadDir();
-        
-        // 使用 Tauri 的 dialog API 让用户选择保存位置
         const filePath = await save({
           defaultPath: `${downloadsPath}/${app.name}`,
-          filters: [{
-            name: 'All Files',
-            extensions: ['*']
-          }]
+          filters: [{ name: 'All Files', extensions: ['*'] }],
         });
-        
+
         if (!filePath) {
-          // 用户取消了保存
-          setDownloads(prev => prev.filter(d => d.id !== newDownload.id));
+          setDownloads(prev => prev.filter(d => d.id !== downloadId));
           return;
         }
 
-        // 使用 fetch 获取内容并显示进度
-        const response = await fetch(app.downloadUrl);
-        
-        if (!response.ok) {
-          throw new Error(`下载失败: 状态码 ${response.status}`);
-        }
+        const downloader = createAcceleratedDownload(
+          app.downloadUrl,
+          app.name,
+          { useMultiThread: true },
+          {
+            onProgress: ({ progress, speed }) => {
+              setDownloads(prev =>
+                prev.map(d =>
+                  d.id === downloadId ? { ...d, progress, speed } : d
+                )
+              );
+            },
+            onStatusChange: (status) => {
+              setDownloads(prev =>
+                prev.map(d => (d.id === downloadId ? { ...d, status } : d))
+              );
+            },
+            onComplete: async (mergedData) => {
+              try {
+                await writeBinaryFile(filePath, mergedData);
+                setDownloads(prev =>
+                  prev.map(d =>
+                    d.id === downloadId
+                      ? { ...d, status: DownloadStatus.COMPLETED, progress: 100 }
+                      : d
+                  )
+                );
+              } catch (writeError) {
+                console.error('File write error:', writeError);
+                setDownloads(prev =>
+                  prev.map(d =>
+                    d.id === downloadId
+                      ? { ...d, status: DownloadStatus.FAILED, error: writeError.message }
+                      : d
+                  )
+                );
+              }
+            },
+            onError: (error) => {
+              console.error('Download error:', error);
+              setDownloads(prev =>
+                prev.map(d =>
+                  d.id === downloadId
+                    ? { ...d, status: DownloadStatus.FAILED, error: error.message }
+                    : d
+                )
+              );
+            },
+          }
+        );
 
-        const contentLength = response.headers.get('content-length');
-        const total = parseInt(contentLength, 10) || 0;
-        let loaded = 0;
+        setDownloads(prev =>
+          prev.map(d => (d.id === downloadId ? { ...d, downloader } : d))
+        );
 
-        const reader = response.body.getReader();
-        const chunks = [];
+        downloader.start();
 
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) break;
-
-          chunks.push(value);
-          loaded += value.length;
-
-          // 更新进度
-          const progress = total ? Math.round((loaded / total) * 100) : Math.min(loaded / 1024 / 1024 * 5, 99); // 如果无法获取总大小，则估算进度
-          setDownloads(prev => prev.map(d => 
-            d.id === newDownload.id ? { ...d, progress } : d
-          ));
-        }
-
-        // 将所有数据块合并成一个 Uint8Array
-        let totalLength = 0;
-        for (const chunk of chunks) {
-          totalLength += chunk.length;
-        }
-        
-        const mergedArray = new Uint8Array(totalLength);
-        let offset = 0;
-        
-        for (const chunk of chunks) {
-          mergedArray.set(chunk, offset);
-          offset += chunk.length;
-        }
-        
-        // 使用 Tauri 的 fs API 写入文件
-        await writeBinaryFile(filePath, mergedArray);
-
-        // 更新下载状态
-        setDownloads(prev => prev.map(d => 
-          d.id === newDownload.id ? { ...d, status: 'completed' } : d
-        ));
       } catch (error) {
-        console.error('下载错误:', error);
-        setDownloads(prev => prev.map(d => 
-          d.id === newDownload.id ? { ...d, status: 'error', error: error.message } : d
-        ));
+        console.error('Setup error:', error);
+        setDownloads(prev =>
+          prev.map(d =>
+            d.id === downloadId
+              ? { ...d, status: DownloadStatus.FAILED, error: error.message }
+              : d
+          )
+        );
       }
-    }
+    },
   }));
 
   const cancelDownload = (downloadId) => {
@@ -225,20 +233,18 @@ const TauriDownloadManager = forwardRef(({ theme }, ref) => {
             <DownloadItem key={download.id} theme={theme}>
               <DownloadHeader>
                 <DownloadName theme={theme}>{download.name}</DownloadName>
-                <DownloadStatus theme={theme} status={download.status}>
-                  {download.status === 'downloading' ? '下载中' :
-                   download.status === 'completed' ? '已完成' :
-                   '下载失败'}
-                </DownloadStatus>
+                <DownloadStatusText status={download.status}>
+                  {download.status} - {download.speed}
+                </DownloadStatusText>
               </DownloadHeader>
               
-              {download.status === 'downloading' && (
+              {download.status !== 'completed' && download.status !== 'error' && (
                 <ProgressBar theme={theme}>
                   <Progress value={download.progress} />
                 </ProgressBar>
               )}
               
-              {download.status === 'error' && (
+              {download.status === 'failed' && (
                 <>
                   <div style={{ color: '#FF3B30', fontSize: '12px', marginBottom: '8px' }}>
                     {download.error}
@@ -249,7 +255,7 @@ const TauriDownloadManager = forwardRef(({ theme }, ref) => {
                 </>
               )}
               
-              {download.status === 'downloading' && (
+              {download.status !== 'completed' && download.status !== 'failed' && (
                 <Button 
                   variant="danger" 
                   onClick={() => cancelDownload(download.id)}
@@ -265,4 +271,4 @@ const TauriDownloadManager = forwardRef(({ theme }, ref) => {
   );
 });
 
-export default TauriDownloadManager; 
+export default TauriDownloadManager;

@@ -1366,12 +1366,13 @@ const App = () => {
                           status={downloadState.status}
                           disabled={downloadState.status === 'pausing' || downloadState.status === 'resuming'}
                         >
-                      {getDownloadButtonText(app.id)}
-                      {downloadState.status === 'downloading' && (
+                      {downloadState.status === 'downloading' ? (
                         <>
                           <DownloadProgress progress={downloadState.progress} />
                           <ProgressText>{Math.round(downloadState.progress || 0)}%</ProgressText>
                         </>
+                      ) : (
+                        getDownloadButtonText(app.id)
                       )}
                     </DownloadButton>
                   );
@@ -1489,12 +1490,13 @@ const App = () => {
                           status={listDownloadState.status}
                           disabled={listDownloadState.status === 'pausing' || listDownloadState.status === 'resuming'}
                         >
-                          {getDownloadButtonText(app.id)}
-                          {listDownloadState.status === 'downloading' && (
+                          {listDownloadState.status === 'downloading' ? (
                             <>
                               <DownloadProgress progress={listDownloadState.progress} />
                               <ProgressText>{Math.round(listDownloadState.progress || 0)}%</ProgressText>
                             </>
+                          ) : (
+                            getDownloadButtonText(app.id)
                           )}
                         </DownloadButton>
                         
@@ -1627,6 +1629,10 @@ const App = () => {
               theme={theme} 
               onBack={handleBackToList}
               onDownload={handleDownload}
+              getDownloadState={getDownloadState}
+              handleDownloadControl={handleDownloadControl}
+              getDownloadButtonText={getDownloadButtonText}
+              formatFileSize={formatFileSize}
             />
           </FadeIn>
         </Suspense>

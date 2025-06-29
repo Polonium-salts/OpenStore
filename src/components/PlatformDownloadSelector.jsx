@@ -116,18 +116,106 @@ const DownloadButton = styled.button`
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  background-color: #0066CC;
+  background-color: ${props => {
+    switch(props.status) {
+      case 'downloading': return '#FF9500';
+      case 'paused': return '#34C759';
+      case 'completed': return '#007AFF';
+      case 'failed': return '#FF3B30';
+      default: return '#0066CC';
+    }
+  }};
   color: white;
   margin-top: 16px;
   transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   
   &:hover {
-    background-color: #0052A3;
+    opacity: 0.9;
   }
   
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+`;
+
+const DownloadProgress = styled.div`
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.2);
+  transition: width 0.3s ease;
+  width: ${props => props.progress || 0}%;
+`;
+
+const ProgressText = styled.span`
+  position: relative;
+  z-index: 1;
+  margin-left: 8px;
+`;
+
+const DownloadDropdown = styled.div`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background-color: ${props => props.theme === 'dark' ? '#2a2a2d' : 'white'};
+  border: 1px solid ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'};
+  border-radius: 8px;
+  box-shadow: 0 4px 12px ${props => props.theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)'};
+  z-index: 1000;
+  margin-top: 4px;
+  overflow: hidden;
+`;
+
+const DropdownDownloadInfo = styled.div`
+  padding: 12px 16px;
+  border-bottom: 1px solid ${props => props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed'};
+  font-size: 14px;
+  
+  div {
+    margin-bottom: 4px;
+    color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+`;
+
+const DownloadActions = styled.div`
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+`;
+
+const ActionButton = styled.button`
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  background-color: ${props => {
+    switch(props.action) {
+      case 'pause': return '#FF9500';
+      case 'resume': return '#34C759';
+      case 'open': return '#007AFF';
+      default: return '#666';
+    }
+  }};
+  color: white;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    opacity: 0.9;
   }
 `;
 
@@ -224,11 +312,12 @@ const getPlatformDisplayName = (platform) => {
   return names[platform] || platform;
 };
 
-const PlatformDownloadSelector = ({ app, theme, onDownload }) => {
+const PlatformDownloadSelector = ({ app, theme, onDownload, getDownloadState, handleDownloadControl, getDownloadButtonText, formatFileSize }) => {
   const { t } = useTranslation();
   const [selectedPlatform, setSelectedPlatform] = useState('');
   const [selectedArch, setSelectedArch] = useState('');
   const [selectedDownload, setSelectedDownload] = useState(null);
+  const [showDownloadDropdown, setShowDownloadDropdown] = useState(false);
 
   // 检查是否支持多平台下载
   const hasMultiPlatformDownloads = app.downloads && typeof app.downloads === 'object';
@@ -329,6 +418,39 @@ const PlatformDownloadSelector = ({ app, theme, onDownload }) => {
     }
   };
 
+  const handleOpenFile = (app) => {
+    if (handleDownloadControl) {
+      handleDownloadControl(app, 'open');
+    }
+  };
+
+  // 获取下载状态
+  const downloadState = getDownloadState ? getDownloadState(app.id) : { status: 'idle', progress: 0 };
+
+  // 处理下载按钮点击
+  const handleDownloadButtonClick = (e) => {
+    e.stopPropagation();
+    // 防止在过渡状态时重复点击
+    if (downloadState.status === 'pausing' || downloadState.status === 'resuming') {
+      return;
+    }
+    if (downloadState.status === 'completed') {
+      handleOpenFile(app);
+    } else if (downloadState.status === 'downloading') {
+      handleDownloadControl && handleDownloadControl(app, 'pause');
+    } else if (downloadState.status === 'paused') {
+      handleDownloadControl && handleDownloadControl(app, 'resume');
+    } else {
+      handleDownload();
+    }
+  };
+
+  // 切换下载详情显示
+  const toggleDownloadDropdown = (e) => {
+    e.stopPropagation();
+    setShowDownloadDropdown(!showDownloadDropdown);
+  };
+
   return (
     <SelectorContainer theme={theme}>
       <SelectorTitle theme={theme}>选择下载版本</SelectorTitle>
@@ -425,13 +547,63 @@ const PlatformDownloadSelector = ({ app, theme, onDownload }) => {
       )}
 
       {/* 下载按钮 */}
-      <DownloadButton
-        onClick={handleDownload}
-        disabled={!selectedDownload}
-        theme={theme}
-      >
-        {selectedDownload ? `下载 (${selectedDownload.size})` : '暂无可用下载'}
-      </DownloadButton>
+      <div style={{ position: 'relative' }}>
+        <DownloadButton
+          onClick={handleDownloadButtonClick}
+          onContextMenu={downloadState.status !== 'idle' ? toggleDownloadDropdown : undefined}
+          disabled={!selectedDownload || downloadState.status === 'pausing' || downloadState.status === 'resuming'}
+          status={downloadState.status}
+          theme={theme}
+        >
+          {downloadState.status === 'downloading' ? (
+            <>
+              <DownloadProgress progress={downloadState.progress} />
+              <span>下载中</span>
+              <ProgressText>{Math.round(downloadState.progress || 0)}%</ProgressText>
+            </>
+          ) : (
+            getDownloadButtonText ? getDownloadButtonText(app.id) : 
+            (selectedDownload ? `下载 (${selectedDownload.size})` : '暂无可用下载')
+          )}
+        </DownloadButton>
+        
+        {showDownloadDropdown && downloadState.status !== 'idle' && (
+          <DownloadDropdown theme={theme}>
+            <DropdownDownloadInfo theme={theme}>
+              <div>{t('downloadManager.status')}: {t(`downloadManager.${downloadState.status}`)}</div>
+              <div>{t('downloadManager.progress')}: {downloadState.progress}%</div>
+              {downloadState.speed && formatFileSize && (
+                <div>{t('downloadManager.speed')}: {formatFileSize(downloadState.speed)}/s</div>
+              )}
+              {downloadState.totalSize && formatFileSize && (
+                <div>{t('downloadManager.size')}: {formatFileSize(downloadState.totalSize)}</div>
+              )}
+            </DropdownDownloadInfo>
+            <DownloadActions>
+              {downloadState.status === 'downloading' && (
+                <ActionButton action="pause" onClick={() => handleDownloadControl && handleDownloadControl(app, 'pause')}>
+                  {t('downloadManager.pause')}
+                </ActionButton>
+              )}
+              {downloadState.status === 'paused' && (
+                <ActionButton action="resume" onClick={() => handleDownloadControl && handleDownloadControl(app, 'resume')}>
+                  {t('downloadManager.resume')}
+                </ActionButton>
+              )}
+              {(downloadState.status === 'downloading' || downloadState.status === 'paused') && (
+                <ActionButton onClick={() => handleDownloadControl && handleDownloadControl(app, 'cancel')}>
+                  {t('downloadManager.cancel')}
+                </ActionButton>
+              )}
+              {downloadState.status === 'completed' && (
+                <ActionButton action="open" onClick={() => handleOpenFile(app)}>
+                  {t('downloadManager.open')}
+                </ActionButton>
+              )}
+            </DownloadActions>
+          </DownloadDropdown>
+        )}
+      </div>
     </SelectorContainer>
   );
 };

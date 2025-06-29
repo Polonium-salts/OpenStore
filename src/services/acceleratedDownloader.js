@@ -379,14 +379,7 @@ export const createAcceleratedDownload = (url, fileName, options = {}, callbacks
           endTime = Date.now();
           updateStatus(DownloadStatus.COMPLETED);
           
-          if (onComplete) {
-            onComplete({
-              id: downloadId,
-              name: fileName,
-              size: totalSize,
-              duration: endTime - startTime,
-            });
-          }
+          if (onComplete) onComplete(mergedData);
         } else {
           updateStatus(DownloadStatus.FAILED);
           if (onError) onError(new Error('单线程下载失败'));
@@ -424,28 +417,27 @@ export const createAcceleratedDownload = (url, fileName, options = {}, callbacks
           // 所有分块下载完成后合并
           if (completedChunks === chunks.length) {
             clearInterval(progressTimer);
-            mergeChunks().then(success => {
-              endTime = Date.now();
+            const mergedData = await mergeChunks();
+            endTime = Date.now();
+            
+            if (mergedData) {
+              const duration = (endTime - startTime) / 1000;
+              const speedMBps = (totalSize / 1024 / 1024) / duration;
+              log(`下载完成! 总时间: ${duration.toFixed(1)}秒, 平均速度: ${speedMBps.toFixed(2)} MB/s`);
               
-              if (success) {
-                const duration = (endTime - startTime) / 1000;
-                const speedMBps = (totalSize / 1024 / 1024) / duration;
-                log(`下载完成! 总时间: ${duration.toFixed(1)}秒, 平均速度: ${speedMBps.toFixed(2)} MB/s`);
-                
-                updateStatus(DownloadStatus.COMPLETED);
-                if (onComplete) {
-                  onComplete({
-                    id: downloadId,
-                    name: fileName,
-                    size: totalSize,
-                    duration: endTime - startTime,
-                  });
-                }
-              } else {
-                updateStatus(DownloadStatus.FAILED);
-                if (onError) onError(new Error('合并文件失败'));
+              updateStatus(DownloadStatus.COMPLETED);
+              if (onComplete) {
+                onComplete({
+                  id: downloadId,
+                  name: fileName,
+                  size: totalSize,
+                  duration: endTime - startTime,
+                });
               }
-            });
+            } else {
+              updateStatus(DownloadStatus.FAILED);
+              if (onError) onError(new Error('合并文件失败'));
+            }
           }
         } else if (cancelRequested) {
           updateStatus(DownloadStatus.CANCELED);
@@ -550,4 +542,4 @@ export const formatSize = (bytes) => {
  */
 export const formatSpeed = (bytesPerSecond) => {
   return `${formatSize(bytesPerSecond)}/s`;
-}; 
+};
