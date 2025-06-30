@@ -24,7 +24,9 @@ const PlatformTabs = styled.div`
   flex-wrap: wrap;
 `;
 
-const PlatformTab = styled.button`
+const PlatformTab = styled.button.withConfig({
+  shouldForwardProp: (prop) => !['active'].includes(prop)
+})`
   padding: 8px 16px;
   border-radius: 8px;
   border: 1px solid ${props => props.active ? '#0066CC' : (props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed')};
@@ -50,7 +52,9 @@ const ArchOptions = styled.div`
   margin-bottom: 16px;
 `;
 
-const ArchOption = styled.div`
+const ArchOption = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['selected'].includes(prop)
+})`
   padding: 12px 16px;
   border-radius: 8px;
   border: 1px solid ${props => props.selected ? '#0066CC' : (props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed')};

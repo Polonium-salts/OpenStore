@@ -32,7 +32,9 @@ const getInputBackgroundColor = (props, defaultDark, defaultLight) => {
   return props.theme === 'dark' ? defaultDark : defaultLight;
 };
 
-const HeaderContainer = styled.div`
+const HeaderContainer = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['hasBackgroundImage', 'backgroundOpacity'].includes(prop)
+})`
   display: flex;
   align-items: center;
   padding: 12px 20px;
@@ -87,7 +89,9 @@ const SearchContainer = styled.div`
   margin: 0 24px;
 `;
 
-const SearchInput = styled.input`
+const SearchInput = styled.input.withConfig({
+  shouldForwardProp: (prop) => !['hasBackgroundImage', 'backgroundOpacity'].includes(prop)
+})`
   width: 100%;
   height: 40px;
   padding: 0 40px;
@@ -138,7 +142,9 @@ const SearchIcon = styled.div`
   }
 `;
 
-const SearchSuggestions = styled.div`
+const SearchSuggestions = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['show', 'hasBackgroundImage', 'backgroundOpacity'].includes(prop)
+})`
   position: absolute;
   top: 100%;
   left: 0;
@@ -214,7 +220,9 @@ const HeaderActions = styled.div`
   margin-left: auto;
 `;
 
-const HeaderButton = styled.button`
+const HeaderButton = styled.button.withConfig({
+  shouldForwardProp: (prop) => !['active', 'backgroundOpacity'].includes(prop)
+})`
   width: 36px;
   height: 36px;
   border-radius: 8px;

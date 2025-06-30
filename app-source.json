@@ -1,0 +1,87 @@
+[
+  {
+    "id": 1750946046173,
+    "name": "微信",
+    "icon": "https://igoutu.cn/icon/38288/wechat",
+    "description": "5545",
+    "price": 0,
+    "downloadUrl": "https://dldir1v6.qq.com/weixin/Universal/Windows/WeChatWin.exe",
+    "version": "4.0.1",
+    "developer": "tencent",
+    "screenshot": "https://cn.bing.com/images/search?view=detailV2&ccid=uKum55kg&id=085BACB6D4564746B1D11CCC21EEA7AAC6AD8148&thid=OIP.uKum55kg40nUed-vA53AGQHaE7&mediaurl=https%3a%2f%2fts1.tc.mm.bing.net%2fth%2fid%2fR-C.b8aba6e79920e349d479dfaf039dc019%3frik%3dSIGtxqqn7iHMHA%26riu%3dhttp%253a%252f%252fimg.iplaysoft.com%252fwp-content%252fuploads%252f2014%252fweixin%252fwei_xin.jpg%26ehk%3dalVVkCsRWVBRqxhr7BZht6Cd0RSfFCWHq3PBgEH2mkI%253d%26risl%3d%26pid%3dImgRaw%26r%3d0%26sres%3d1%26sresct%3d1%26srh%3d799%26srw%3d1200&exph=453&expw=680&q=%e5%be%ae%e4%bf%a1&simid=608021903993434862&FORM=IRPRST&ck=3F0BC6DE95AC67A601DDA15E4D00B550&selectedIndex=4&itb=0",
+    "category": "software",
+    "downloads": {
+      "windows": {
+        "x64": {
+          "url": "https://dldir1v6.qq.com/weixin/Windows/WeChatSetup.exe",
+          "size": "189",
+          "filename": "微信"
+        },
+        "x86": {
+          "url": "https://dldir1v6.qq.com/weixin/Windows/WeChatSetup_x86.exe",
+          "size": "189",
+          "filename": "微信"
+        },
+        "arm64": {
+          "url": "https://dldir1v6.qq.com/weixin/Windows/WeChatSetup.exe",
+          "size": "189",
+          "filename": "微信"
+        }
+      },
+      "macos": {
+        "universal": {
+          "url": "https://dldir1v6.qq.com/weixin/Universal/Mac/WeChatMac.dmg",
+          "size": "189",
+          "filename": "微信"
+        },
+        "intel": {
+          "url": "https://dldir1v6.qq.com/weixin/Universal/Mac/WeChatMac.dmg",
+          "size": "189",
+          "filename": "微信"
+        },
+        "apple_silicon": {
+          "url": "https://apps.apple.com/cn/app/%E5%BE%AE%E4%BF%A1/id836500024?mt=12",
+          "size": "189",
+          "filename": "微信"
+        }
+      },
+      "linux": {
+        "x64_deb": {
+          "url": "https://dldir1v6.qq.com/weixin/Universal/Linux/WeChatLinux_x86_64.deb",
+          "size": "189",
+          "filename": "微信"
+        },
+        "x64_rpm": {
+          "url": "https://dldir1v6.qq.com/weixin/Universal/Linux/WeChatLinux_x86_64.rpm",
+          "size": "189",
+          "filename": "微信"
+        },
+        "x64_tar": {
+          "url": "https://dldir1v6.qq.com/weixin/Universal/Linux/WeChatLinux_x86_64.AppImage",
+          "size": "189",
+          "filename": "微信"
+        },
+        "arm64_deb": {
+          "url": "https://dldir1v6.qq.com/weixin/Universal/Linux/WeChatLinux_arm64.deb",
+          "size": "189",
+          "filename": "微信"
+        },
+        "arm64_rpm": {
+          "url": "https://dldir1v6.qq.com/weixin/Universal/Linux/WeChatLinux_arm64.rpm",
+          "size": "189",
+          "filename": "微信"
+        },
+        "arm64_tar": {
+          "url": "https://dldir1v6.qq.com/weixin/Universal/Linux/WeChatLinux_arm64.AppImage",
+          "size": "189",
+          "filename": "微信"
+        }
+      }
+    },
+    "systemRequirements": {
+      "windows": "Windows 7 以上",
+      "macos": "macos10.15以上",
+      "linux": "ubuntu17以上"
+    }
+  }
+]
