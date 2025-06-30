@@ -136,3 +136,276 @@ The server includes error handling middleware that will return appropriate error
 
 MIT
 请修复无法显示下载进度和下载进度百分比的问题和文件大小信息不正确的问题
+
+
+
+
+[Error] Warning: Received `true` for a non-boolean attribute `collapsed`.
+
+If you want to write it to the DOM, pass a string instead: collapsed="true" or collapsed={value.toString()}.
+h1
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+Sidebar@http://localhost:1420/src/components/Sidebar.jsx:221:36
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+App@http://localhost:1420/src/App.jsx:489:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
+	printWarning (chunk-OY5C42Z6.js:521)
+	error (chunk-OY5C42Z6.js:505)
+	validateProperty$1 (chunk-OY5C42Z6.js:3439)
+	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
+	validateProperties$2 (chunk-OY5C42Z6.js:3484)
+	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
+	setInitialProperties (chunk-OY5C42Z6.js:7567)
+	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
+	completeWork (chunk-OY5C42Z6.js:16341)
+	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
+	performUnitOfWork (chunk-OY5C42Z6.js:19259)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
+	performConcurrentWorkOnRoot
+	workLoop (chunk-OY5C42Z6.js:197)
+	flushWork (chunk-OY5C42Z6.js:176)
+	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+[Error] Warning: React does not recognize the `marginBottom` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `marginbottom` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+_c10@http://localhost:1420/src/components/Sidebar.jsx:199:58
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+Sidebar@http://localhost:1420/src/components/Sidebar.jsx:221:36
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+App@http://localhost:1420/src/App.jsx:489:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
+	printWarning (chunk-OY5C42Z6.js:521)
+	error (chunk-OY5C42Z6.js:505)
+	validateProperty$1 (chunk-OY5C42Z6.js:3433)
+	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
+	validateProperties$2 (chunk-OY5C42Z6.js:3484)
+	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
+	setInitialProperties (chunk-OY5C42Z6.js:7567)
+	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
+	completeWork (chunk-OY5C42Z6.js:16341)
+	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
+	performUnitOfWork (chunk-OY5C42Z6.js:19259)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
+	performConcurrentWorkOnRoot
+	workLoop (chunk-OY5C42Z6.js:197)
+	flushWork (chunk-OY5C42Z6.js:176)
+	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+[Error] Warning: React does not recognize the `hasTopMargin` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `hastopmargin` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+Sidebar@http://localhost:1420/src/components/Sidebar.jsx:221:36
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+App@http://localhost:1420/src/App.jsx:489:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
+	printWarning (chunk-OY5C42Z6.js:521)
+	error (chunk-OY5C42Z6.js:505)
+	validateProperty$1 (chunk-OY5C42Z6.js:3433)
+	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
+	validateProperties$2 (chunk-OY5C42Z6.js:3484)
+	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
+	setInitialProperties (chunk-OY5C42Z6.js:7567)
+	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
+	completeWork (chunk-OY5C42Z6.js:16341)
+	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
+	performUnitOfWork (chunk-OY5C42Z6.js:19259)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
+	performConcurrentWorkOnRoot
+	workLoop (chunk-OY5C42Z6.js:197)
+	flushWork (chunk-OY5C42Z6.js:176)
+	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+[Error] Warning: React does not recognize the `fillSpace` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `fillspace` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+Sidebar@http://localhost:1420/src/components/Sidebar.jsx:221:36
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+App@http://localhost:1420/src/App.jsx:489:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
+	printWarning (chunk-OY5C42Z6.js:521)
+	error (chunk-OY5C42Z6.js:505)
+	validateProperty$1 (chunk-OY5C42Z6.js:3433)
+	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
+	validateProperties$2 (chunk-OY5C42Z6.js:3484)
+	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
+	setInitialProperties (chunk-OY5C42Z6.js:7567)
+	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
+	completeWork (chunk-OY5C42Z6.js:16341)
+	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
+	performUnitOfWork (chunk-OY5C42Z6.js:19259)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
+	performConcurrentWorkOnRoot
+	workLoop (chunk-OY5C42Z6.js:197)
+	flushWork (chunk-OY5C42Z6.js:176)
+	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+[Error] Warning: React does not recognize the `hasBackgroundImage` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `hasbackgroundimage` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+Sidebar@http://localhost:1420/src/components/Sidebar.jsx:221:36
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+App@http://localhost:1420/src/App.jsx:489:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
+	printWarning (chunk-OY5C42Z6.js:521)
+	error (chunk-OY5C42Z6.js:505)
+	validateProperty$1 (chunk-OY5C42Z6.js:3433)
+	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
+	validateProperties$2 (chunk-OY5C42Z6.js:3484)
+	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
+	setInitialProperties (chunk-OY5C42Z6.js:7567)
+	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
+	completeWork (chunk-OY5C42Z6.js:16341)
+	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
+	performUnitOfWork (chunk-OY5C42Z6.js:19259)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
+	performConcurrentWorkOnRoot
+	workLoop (chunk-OY5C42Z6.js:197)
+	flushWork (chunk-OY5C42Z6.js:176)
+	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+[Error] Warning: React does not recognize the `backgroundOpacity` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `backgroundopacity` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+Sidebar@http://localhost:1420/src/components/Sidebar.jsx:221:36
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+App@http://localhost:1420/src/App.jsx:489:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
+	printWarning (chunk-OY5C42Z6.js:521)
+	error (chunk-OY5C42Z6.js:505)
+	validateProperty$1 (chunk-OY5C42Z6.js:3433)
+	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
+	validateProperties$2 (chunk-OY5C42Z6.js:3484)
+	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
+	setInitialProperties (chunk-OY5C42Z6.js:7567)
+	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
+	completeWork (chunk-OY5C42Z6.js:16341)
+	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
+	performUnitOfWork (chunk-OY5C42Z6.js:19259)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
+	performConcurrentWorkOnRoot
+	workLoop (chunk-OY5C42Z6.js:197)
+	flushWork (chunk-OY5C42Z6.js:176)
+	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+[Error] Warning: Received `false` for a non-boolean attribute `show`.
+
+If you want to write it to the DOM, pass a string instead: show="false" or show={value.toString()}.
+
+If you used to conditionally omit it with show={condition && value}, pass show={condition ? value : undefined} instead.
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+Header@http://localhost:1420/src/components/Header.jsx:305:8
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+App@http://localhost:1420/src/App.jsx:489:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
+	printWarning (chunk-OY5C42Z6.js:521)
+	error (chunk-OY5C42Z6.js:505)
+	validateProperty$1 (chunk-OY5C42Z6.js:3441)
+	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
+	validateProperties$2 (chunk-OY5C42Z6.js:3484)
+	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
+	setInitialProperties (chunk-OY5C42Z6.js:7567)
+	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
+	completeWork (chunk-OY5C42Z6.js:16341)
+	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
+	performUnitOfWork (chunk-OY5C42Z6.js:19259)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
+	performConcurrentWorkOnRoot
+	workLoop (chunk-OY5C42Z6.js:197)
+	flushWork (chunk-OY5C42Z6.js:176)
+	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+[Error] Warning: Received `false` for a non-boolean attribute `active`.
+
+If you want to write it to the DOM, pass a string instead: active="false" or active={value.toString()}.
+
+If you used to conditionally omit it with active={condition && value}, pass active={condition ? value : undefined} instead.
+button
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+_c15@http://localhost:1420/src/components/Header.jsx:282:56
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+Header@http://localhost:1420/src/components/Header.jsx:305:8
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+App@http://localhost:1420/src/App.jsx:489:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
+	printWarning (chunk-OY5C42Z6.js:521)
+	error (chunk-OY5C42Z6.js:505)
+	validateProperty$1 (chunk-OY5C42Z6.js:3441)
+	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
+	validateProperties$2 (chunk-OY5C42Z6.js:3484)
+	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
+	setInitialProperties (chunk-OY5C42Z6.js:7567)
+	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
+	completeWork (chunk-OY5C42Z6.js:16341)
+	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
+	performUnitOfWork (chunk-OY5C42Z6.js:19259)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
+	performConcurrentWorkOnRoot
+	workLoop (chunk-OY5C42Z6.js:197)
+	flushWork (chunk-OY5C42Z6.js:176)
+	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+[Error] Warning: React does not recognize the `backgroundImage` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `backgroundimage` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=6fe008bc:1261:179
+App@http://localhost:1420/src/App.jsx:489:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
+	printWarning (chunk-OY5C42Z6.js:521)
+	error (chunk-OY5C42Z6.js:505)
+	validateProperty$1 (chunk-OY5C42Z6.js:3433)
+	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
+	validateProperties$2 (chunk-OY5C42Z6.js:3484)
+	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
+	setInitialProperties (chunk-OY5C42Z6.js:7567)
+	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
+	completeWork (chunk-OY5C42Z6.js:16341)
+	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
+	performUnitOfWork (chunk-OY5C42Z6.js:19259)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
+	performConcurrentWorkOnRoot
+	workLoop (chunk-OY5C42Z6.js:197)
+	flushWork (chunk-OY5C42Z6.js:176)
+	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
