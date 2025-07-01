@@ -21,6 +21,12 @@ body {
     Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  
+  /* WKWebView兼容性修复 */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 #root {
@@ -99,6 +105,57 @@ img {
   transition: opacity 0.2s;
 }
 
+/* WKWebView环境专用样式修复 */
+@supports (-webkit-overflow-scrolling: touch) {
+  /* 检测到iOS WebKit环境时应用的样式 */
+  body {
+    /* 强制硬件加速 */
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+    /* 优化滚动性能 */
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  #root {
+    /* 确保根元素在WKWebView中正确渲染 */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    /* 修复可能的白屏问题 */
+    contain: layout style paint;
+    isolation: isolate;
+  }
+  
+  /* 修复WKWebView中的backdrop-filter问题 */
+  [data-wkwebview="true"] {
+    /* 在WKWebView环境下禁用可能有问题的效果 */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    /* 使用替代的半透明效果 */
+    background-color: rgba(42, 42, 45, 0.95) !important;
+  }
+  
+  /* 优化WKWebView中的动画性能 */
+  * {
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-perspective: 1000;
+    perspective: 1000;
+  }
+}
+
+/* iOS设备特定修复 */
+@media screen and (-webkit-min-device-pixel-ratio: 1) {
+  @supports (-webkit-appearance: none) {
+    /* iOS Safari/WKWebView特定样式 */
+    body {
+      /* 修复iOS下的渲染问题 */
+      -webkit-text-size-adjust: 100%;
+      /* 防止页面缩放 */
+      touch-action: manipulation;
+    }
+  }
+}
+
 @keyframes pulse {
   0% {
     opacity: 0.6;
@@ -140,4 +197,4 @@ h1, h2, h3, h4, h5, h6 {
 
 p, span, a, li {
   max-width: 70ch;
-} 
+}

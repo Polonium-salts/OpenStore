@@ -201,9 +201,7 @@ const FilterTabs = styled.div`
   padding: 4px;
 `;
 
-const FilterTab = styled.button.withConfig({
-  shouldForwardProp: (prop) => !['active'].includes(prop)
-})`
+const FilterTab = styled.button`
   padding: 8px 16px;
   border-radius: 6px;
   border: none;

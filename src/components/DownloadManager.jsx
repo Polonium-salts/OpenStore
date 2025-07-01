@@ -47,7 +47,9 @@ const DownloadList = styled.div`
   gap: 15px;
 `;
 
-const DownloadItem = styled.div`
+const DownloadItem = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'status'
+})`
   background: ${props => props.theme === 'dark' ? '#1d1d1f' : 'white'};
   border-radius: 8px;
   padding: 15px;
@@ -77,7 +79,9 @@ const FileName = styled.div`
   font-size: 16px;
 `;
 
-const DownloadStatus = styled.div`
+const DownloadStatus = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'status'
+})`
   color: ${props => {
     switch(props.status) {
       case 'Downloading': return '#007bff';

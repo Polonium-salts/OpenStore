@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { useTranslation } from 'react-i18next';
+import { isWKWebView, getWKWebViewCSS, applyWKWebViewFixes, forceRepaint, fixBackdropFilter } from '../utils/wkwebviewUtils';
 
 // 提取共用的透明度计算函数
 const getBackgroundColor = (props, defaultDark, defaultLight) => {
@@ -23,9 +24,7 @@ const getBorderColor = (props, defaultDark, defaultLight) => {
   return props.theme === 'dark' ? defaultDark : defaultLight;
 };
 
-const SidebarContainer = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['collapsed', 'hasBackgroundImage', 'backgroundOpacity'].includes(prop)
-})`
+const SidebarContainer = styled.div`
   width: ${props => props.collapsed ? '60px' : '200px'};
   height: 100%;
   --sidebar-opacity: ${props => props.backgroundOpacity || 0.8};
@@ -55,11 +54,12 @@ const SidebarContainer = styled.div.withConfig({
   -webkit-backdrop-filter: ${props => props.hasBackgroundImage ? 'blur(10px)' : 'none'};
   z-index: 5;
   will-change: transform, opacity;
+  
+  /* WKWebView兼容性修复 */
+  ${getWKWebViewCSS()}
 `;
 
-const StoreTitle = styled.h1.withConfig({
-  shouldForwardProp: (prop) => !['collapsed'].includes(prop)
-})`
+const StoreTitle = styled.h1`
   font-size: 20px;
   font-weight: 600;
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
@@ -70,9 +70,7 @@ const StoreTitle = styled.h1.withConfig({
   overflow: hidden;
 `;
 
-const SidebarSection = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['hasTopMargin', 'fillSpace'].includes(prop)
-})`
+const SidebarSection = styled.div`
   margin-bottom: 20px;
   margin-top: ${props => props.hasTopMargin ? '40px' : '0'};
   flex: ${props => props.fillSpace ? '1' : '0'};
@@ -80,9 +78,7 @@ const SidebarSection = styled.div.withConfig({
   flex-direction: column;
 `;
 
-const SidebarTitle = styled.h3.withConfig({
-  shouldForwardProp: (prop) => !['collapsed'].includes(prop)
-})`
+const SidebarTitle = styled.h3`
   font-size: 11px;
   font-weight: 600;
   color: ${props => props.theme === 'dark' ? '#999' : '#86868b'};
@@ -95,9 +91,7 @@ const SidebarTitle = styled.h3.withConfig({
   overflow: hidden;
 `;
 
-const SidebarItem = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['collapsed', 'marginBottom', 'selected'].includes(prop)
-})`
+const SidebarItem = styled.div`
   display: flex;
   align-items: center;
   padding: 8px 14px;
@@ -122,18 +116,14 @@ const SidebarItem = styled.div.withConfig({
   `}
 `;
 
-const ItemText = styled.span.withConfig({
-  shouldForwardProp: (prop) => !['collapsed'].includes(prop)
-})`
+const ItemText = styled.span`
   transition: opacity 0.2s ease;
   opacity: ${props => props.collapsed ? 0 : 1};
   white-space: nowrap;
   overflow: hidden;
 `;
 
-const Icon = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['collapsed', 'selected', 'color'].includes(prop)
-})`
+const Icon = styled.div`
   width: 22px;
   height: 22px;
   margin-right: ${props => props.collapsed ? 0 : '8px'};
@@ -155,9 +145,7 @@ const Icon = styled.div.withConfig({
   }
 `;
 
-const CollapseButton = styled.button.withConfig({
-  shouldForwardProp: (prop) => !['collapsed'].includes(prop)
-})`
+const CollapseButton = styled.button`
   position: absolute;
   top: 10px;
   right: ${props => props.collapsed ? '50%' : '10px'};
@@ -225,11 +213,69 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
     const savedState = localStorage.getItem('sidebarCollapsed');
     return savedState ? JSON.parse(savedState) : defaultCollapsed;
   });
+  const [isWKWebViewEnv, setIsWKWebViewEnv] = useState(false);
   
   useEffect(() => {
     // 当 collapsed 状态改变时保存到 localStorage
     localStorage.setItem('sidebarCollapsed', JSON.stringify(collapsed));
   }, [collapsed]);
+  
+  useEffect(() => {
+    // WKWebView和macOS环境检测和初始化
+    const isWK = isWKWebView();
+    const isMac = typeof navigator !== 'undefined' && /Macintosh|MacIntel|MacPPC|Mac68K/.test(navigator.userAgent);
+    setIsWKWebViewEnv(isWK);
+    
+    if (isWK || isMac) {
+      console.log('WKWebView/macOS environment detected, applying compatibility fixes');
+      
+      // 延迟应用修复，确保DOM已渲染
+      const applyFixes = () => {
+        const sidebar = document.querySelector('[data-sidebar="true"]');
+        if (sidebar) {
+          // 应用WKWebView修复
+          applyWKWebViewFixes(sidebar);
+          // 修复backdrop-filter问题
+          fixBackdropFilter(sidebar);
+          // 强制重绘
+          forceRepaint(sidebar);
+          
+          // macOS特定修复
+          if (isMac) {
+            sidebar.style.webkitTransform = 'translateZ(0)';
+            sidebar.style.transform = 'translateZ(0)';
+            sidebar.style.webkitBackfaceVisibility = 'hidden';
+            sidebar.style.backfaceVisibility = 'hidden';
+            sidebar.style.contain = 'layout style';
+            sidebar.style.willChange = 'auto';
+          }
+        }
+      };
+      
+      // 立即应用修复
+      setTimeout(applyFixes, 100);
+      
+      // 监听页面可见性变化
+      const handleVisibilityChange = () => {
+        if (!document.hidden) {
+          setTimeout(applyFixes, 50);
+        }
+      };
+      
+      // 监听窗口大小变化
+      const handleResize = () => {
+        setTimeout(applyFixes, 100);
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('resize', handleResize);
+      
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('resize', handleResize);
+      };
+    }
+  }, []);
 
   const handleSelect = (category) => {
     onCategorySelect(category);
@@ -367,6 +413,8 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
       theme={theme} 
       hasBackgroundImage={hasBackgroundImage}
       backgroundOpacity={backgroundOpacity}
+      data-sidebar="true"
+      data-wkwebview={isWKWebViewEnv}
     >
       <StoreTitle collapsed={collapsed} theme={theme}>OpenStore</StoreTitle>
       {collapseButton}

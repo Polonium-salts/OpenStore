@@ -66,7 +66,9 @@ const DownloadName = styled.div`
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
 `;
 
-const DownloadStatusText = styled.div`
+const DownloadStatusText = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'status'
+})`
   font-size: 12px;
   color: ${props => {
     switch (props.status) {
