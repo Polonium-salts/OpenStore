@@ -162,3 +162,21 @@ div
 App@http://localhost:1420/src/App.jsx:490:31
 TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:27:6
 ErrorBoundary@http://localhost:1420/src/components/ErrorBoundary.jsx:61:10
+
+
+
+
+Error: Rendered more hooks than during the previous render.
+@http://localhost:1420/src/components/Settings.jsx:689:8
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
+Suspense
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
+App@http://localhost:1420/src/App.jsx:490:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:27:6
+ErrorBoundary@http://localhost:1420/src/components/ErrorBoundary.jsx:61:10
