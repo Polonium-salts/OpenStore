@@ -17,6 +17,7 @@ const SettingsContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-height: 100vh;
   
   /* macOS特定修复 */
   ${props => props.isMacOS ? `
@@ -29,7 +30,7 @@ const SettingsContainer = styled.div`
     contain: layout style;
     will-change: auto;
     overflow: visible;
-    min-height: 100vh;
+    isolation: isolate;
   ` : ''}
 `;
 
@@ -643,18 +644,60 @@ const Settings = React.memo(({
   // macOS兼容性修复
   useEffect(() => {
     if (isMacOS()) {
-      // 延迟应用修复以确保DOM已渲染
-      const timer = setTimeout(() => {
-        const settingsContainer = document.querySelector('[data-settings-container]');
+      console.log('Applying macOS compatibility fixes for Settings page');
+      
+      // 延迟应用修复，确保DOM已渲染
+      const applyFixes = () => {
+        const settingsContainer = document.querySelector('[data-component="settings"]') || 
+                                 document.querySelector('[data-settings-container]') ||
+                                 document.querySelector('.settings-container');
+        
         if (settingsContainer) {
           // 应用macOS特定修复
           applyMacOSFixes(settingsContainer);
-          // 强制重绘以确保渲染正确
+          
+          // 修复可能的渲染问题
+          settingsContainer.style.minHeight = '100vh';
+          settingsContainer.style.overflow = 'visible';
+          settingsContainer.style.display = 'flex';
+          settingsContainer.style.flexDirection = 'column';
+          
+          // 强制重绘
           forceRepaint(settingsContainer);
+          
+          // 修复子元素
+          const childElements = settingsContainer.querySelectorAll('*');
+          childElements.forEach(child => {
+            if (child.offsetHeight === 0 || child.offsetWidth === 0) {
+              applyMacOSFixes(child);
+              setTimeout(() => forceRepaint(child), 50);
+            }
+          });
         }
-      }, 100);
+      };
       
-      return () => clearTimeout(timer);
+      // 立即应用修复
+      setTimeout(applyFixes, 100);
+      
+      // 监听页面可见性变化
+      const handleVisibilityChange = () => {
+        if (!document.hidden) {
+          setTimeout(applyFixes, 50);
+        }
+      };
+      
+      // 监听窗口大小变化
+      const handleResize = () => {
+        setTimeout(applyFixes, 100);
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('resize', handleResize);
+      
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('resize', handleResize);
+      };
     }
   }, []);
 
@@ -1038,6 +1081,7 @@ const Settings = React.memo(({
   return (
     <SettingsContainer 
       theme={theme}
+      data-component="settings"
       data-settings-container
       isMacOS={isMacOS()}
     >

@@ -17,7 +17,8 @@ export const isWKWebView = () => {
   const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
   
   // 更精确的WKWebView检测，包括macOS
-  return (isIOS || isMacOS) && (isWK || (isSafari && window.webkit));
+  // 在macOS环境下，即使不是严格的WKWebView，也可能需要兼容性修复
+  return (isIOS || isMacOS) && (isWK || (isSafari && window.webkit) || isMacOS);
 };
 
 /**
@@ -88,15 +89,37 @@ export const forceRepaint = (element) => {
   
   // 方法1: 强制重排
   const originalTransform = targetElement.style.transform;
-  targetElement.style.transform = 'translateZ(0)';
+  targetElement.style.transform = 'translateZ(0.1px)';
   targetElement.offsetHeight; // 触发重排
-  targetElement.style.transform = originalTransform;
+  
+  // 恢复原始transform
+  setTimeout(() => {
+    targetElement.style.transform = originalTransform || 'translateZ(0)';
+  }, 10);
+  
+  // 针对设置页面的特殊重绘处理
+  if (targetElement.hasAttribute('data-component') && targetElement.getAttribute('data-component') === 'settings') {
+    // 强制重新计算所有子元素
+    const children = targetElement.querySelectorAll('*');
+    children.forEach(child => {
+      child.offsetHeight;
+    });
+    
+    // 延迟再次重绘确保渲染完成
+    setTimeout(() => {
+      targetElement.style.opacity = '0.99';
+      targetElement.offsetHeight;
+      targetElement.style.opacity = '1';
+    }, 50);
+  }
   
   // 方法2: 临时修改display属性
-  const originalDisplay = targetElement.style.display;
-  targetElement.style.display = 'none';
-  targetElement.offsetHeight; // 触发重排
-  targetElement.style.display = originalDisplay;
+  if (targetElement.style.opacity !== '0') {
+    const originalDisplay = targetElement.style.display;
+    targetElement.style.display = 'none';
+    targetElement.offsetHeight; // 触发重排
+    targetElement.style.display = originalDisplay || 'flex';
+  }
 };
 
 /**
@@ -120,6 +143,22 @@ export const applyMacOSFixes = (element) => {
   element.style.contain = 'layout style';
   element.style.willChange = 'auto';
   
+  // 确保正确的显示属性
+  if (element.style.display === '' || element.style.display === 'none') {
+    element.style.display = 'flex';
+    element.style.flexDirection = 'column';
+  }
+  
+  // 设置最小高度以防止白屏
+  if (!element.style.minHeight) {
+    element.style.minHeight = '100vh';
+  }
+  
+  // 修复overflow问题
+  if (element.style.overflow === 'hidden') {
+    element.style.overflow = 'visible';
+  }
+  
   // macOS版本特定修复
   const macVersion = getMacOSVersion();
   if (macVersion && macVersion >= 10.15) {
@@ -131,6 +170,17 @@ export const applyMacOSFixes = (element) => {
   // 修复可能的层叠上下文问题
   if (element.style.position === 'fixed' || element.style.position === 'absolute') {
     element.style.zIndex = element.style.zIndex || '1';
+  }
+  
+  // 针对设置页面的特殊修复
+  if (element.hasAttribute('data-component') && element.getAttribute('data-component') === 'settings') {
+    element.style.isolation = 'isolate';
+    element.style.contain = 'layout style';
+    element.style.position = 'relative';
+    element.style.zIndex = '1';
+    
+    // 强制重新计算布局
+    element.offsetHeight;
   }
 };
 

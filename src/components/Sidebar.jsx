@@ -221,13 +221,12 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
   }, [collapsed]);
   
   useEffect(() => {
-    // WKWebView和macOS环境检测和初始化
+    // WKWebView环境检测和初始化
     const isWK = isWKWebView();
-    const isMac = typeof navigator !== 'undefined' && /Macintosh|MacIntel|MacPPC|Mac68K/.test(navigator.userAgent);
     setIsWKWebViewEnv(isWK);
     
-    if (isWK || isMac) {
-      console.log('WKWebView/macOS environment detected, applying compatibility fixes');
+    if (isWK) {
+      console.log('WKWebView environment detected, applying compatibility fixes');
       
       // 延迟应用修复，确保DOM已渲染
       const applyFixes = () => {
@@ -239,16 +238,6 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
           fixBackdropFilter(sidebar);
           // 强制重绘
           forceRepaint(sidebar);
-          
-          // macOS特定修复
-          if (isMac) {
-            sidebar.style.webkitTransform = 'translateZ(0)';
-            sidebar.style.transform = 'translateZ(0)';
-            sidebar.style.webkitBackfaceVisibility = 'hidden';
-            sidebar.style.backfaceVisibility = 'hidden';
-            sidebar.style.contain = 'layout style';
-            sidebar.style.willChange = 'auto';
-          }
         }
       };
       
@@ -279,6 +268,17 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
 
   const handleSelect = (category) => {
     onCategorySelect(category);
+    
+    // 如果选择的是设置页面且在macOS环境下，延迟应用修复
+    if (category === 'settings' && isWKWebView()) {
+      setTimeout(() => {
+        const settingsContainer = document.querySelector('[data-component="settings"]');
+        if (settingsContainer) {
+          applyWKWebViewFixes(settingsContainer);
+          forceRepaint(settingsContainer);
+        }
+      }, 200);
+    }
   };
   
   const toggleCollapse = () => {
