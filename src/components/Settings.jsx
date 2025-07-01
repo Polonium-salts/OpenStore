@@ -679,17 +679,17 @@ const Settings = React.memo(({
   // WebKit兼容性修复（支持macOS、iOS、Linux）
   useEffect(() => {
     if (isWebKit()) {
-      console.log('Applying enhanced WebKit compatibility fixes for Settings component');
+      console.log('Applying WebKit compatibility fixes for Settings component');
       
       // 初始化WebKit特定修复（支持所有WebKit平台）
       const cleanup = initWebKitFixes({
-        autoRepaint: true,
+        autoRepaint: false, // 禁用自动重绘避免循环
         repaintDelay: 100,
         settingsPageFix: true
       });
       
-      // 立即应用基础修复
-      const applyImmediateFixes = () => {
+      // 应用一次性修复
+      const applyFixesOnce = () => {
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
           // 防止白屏的关键样式
@@ -709,93 +709,38 @@ const Settings = React.memo(({
             applyMacOSFixes(settingsContainer);
           }
           
-          // 强制重绘
+          // 单次强制重绘
           forceRepaint(settingsContainer);
-        }
-      };
-      
-      // 立即应用修复
-      applyImmediateFixes();
-      
-      // 延迟应用修复以确保DOM已完全渲染
-      const timer = setTimeout(() => {
-        const settingsContainer = document.querySelector('[data-settings-container]');
-        if (settingsContainer) {
-          // 再次确保可见性
-          settingsContainer.style.visibility = 'visible !important';
-          settingsContainer.style.opacity = '1 !important';
-          
-          // 修复所有子元素
-          const childElements = settingsContainer.querySelectorAll('*');
-          childElements.forEach(child => {
-            child.style.visibility = 'visible !important';
-            child.style.opacity = '1 !important';
-            
-            if (child.offsetHeight === 0 || child.offsetWidth === 0) {
-              applyWebKitFixes(child);
-              if (isMacOS()) {
-                applyMacOSFixes(child);
-              }
-              forceRepaint(child);
-            }
-          });
-          
-          // 多次重绘确保渲染
-          forceRepaint(settingsContainer);
-          setTimeout(() => forceRepaint(settingsContainer), 100);
-          setTimeout(() => forceRepaint(settingsContainer), 200);
           
           // 标记WebKit准备完成
           setIsWebKitReady(true);
-        }
-      }, 150);
-      
-      // 额外的延迟修复，确保所有组件都已渲染
-      const secondTimer = setTimeout(() => {
-        const settingsContainer = document.querySelector('[data-settings-container]');
-        if (settingsContainer) {
-          // 最终检查和修复
-          const computedStyle = getComputedStyle(settingsContainer);
-          if (computedStyle.visibility === 'hidden' || computedStyle.opacity === '0' || settingsContainer.offsetHeight === 0) {
-            console.warn('Settings container still has visibility issues, applying emergency fixes');
-            settingsContainer.style.visibility = 'visible !important';
-            settingsContainer.style.opacity = '1 !important';
-            settingsContainer.style.display = 'flex !important';
-            settingsContainer.style.minHeight = '100vh';
-            forceRepaint(settingsContainer);
-            
-            // 强制触发重排
-            settingsContainer.offsetHeight;
-            document.body.offsetHeight;
-          }
           
-          // 确保准备状态已设置
-          setIsWebKitReady(true);
+          return true; // 表示修复成功
         }
-      }, 500);
+        return false;
+      };
       
-      // 持续监控机制
-      const monitorInterval = setInterval(() => {
-        const settingsContainer = document.querySelector('[data-settings-container]');
-        if (settingsContainer) {
-          const computedStyle = getComputedStyle(settingsContainer);
-          if (computedStyle.visibility === 'hidden' || computedStyle.opacity === '0') {
-            console.warn('Settings container became hidden, reapplying fixes');
-            settingsContainer.style.visibility = 'visible !important';
-            settingsContainer.style.opacity = '1 !important';
-            forceRepaint(settingsContainer);
+      // 立即尝试应用修复
+      if (!applyFixesOnce()) {
+        // 如果立即修复失败，延迟重试一次
+        const timer = setTimeout(() => {
+          if (!applyFixesOnce()) {
+            console.warn('Settings container not found after delay, marking as ready anyway');
+            setIsWebKitReady(true);
           }
-        }
-      }, 1000);
+        }, 200);
+        
+        return () => {
+          clearTimeout(timer);
+          if (cleanup) cleanup();
+        };
+      }
       
       return () => {
-        clearTimeout(timer);
-        clearTimeout(secondTimer);
-        clearInterval(monitorInterval);
         if (cleanup) cleanup();
       };
     } else {
-      // 非WebKit环境也要确保准备状态
+      // 非WebKit环境直接标记为准备完成
       setIsWebKitReady(true);
     }
   }, []);
