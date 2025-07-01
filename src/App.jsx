@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense, lazy } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import { useTranslation } from 'react-i18next';
 import { useTranslationContext } from './components/TranslationProvider';
@@ -15,6 +15,7 @@ import NotificationSystem from './components/NotificationSystem';
 import ConfirmDialogContainer from './components/ConfirmDialog';
 import PromptDialogContainer from './components/PromptDialog';
 import Messages from './components/Messages';
+import { initWKWebViewFixes } from './utils/wkwebviewUtils';
 
 const AppContainer = styled.div`
   display: flex;
@@ -741,6 +742,18 @@ const App = () => {
     requestAnimationFrame(() => {
       document.documentElement.style.setProperty(varName, value);
     });
+  }, []);
+  
+  // WKWebView兼容性初始化
+  useEffect(() => {
+    // 初始化WKWebView修复
+    const cleanup = initWKWebViewFixes({
+      autoRepaint: true,
+      repaintDelay: 100,
+      selectors: ['[data-sidebar="true"]', '#root', 'body', '[data-app-container="true"]']
+    });
+    
+    return cleanup;
   }, []);
   
   // 优化初始加载 - 使用优先级队列加载资源
@@ -1869,6 +1882,7 @@ const App = () => {
       backgroundImage={backgroundImage} 
       backgroundOpacity={uiBackgroundOpacity}
       style={{ '--app-bg-opacity': uiBackgroundOpacity }}
+      data-app-container="true"
     >
       {sidebar}
       <MainContent>

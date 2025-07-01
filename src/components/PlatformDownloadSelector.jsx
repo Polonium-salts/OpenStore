@@ -24,9 +24,7 @@ const PlatformTabs = styled.div`
   flex-wrap: wrap;
 `;
 
-const PlatformTab = styled.button.withConfig({
-  shouldForwardProp: (prop) => !['active'].includes(prop)
-})`
+const PlatformTab = styled.button`
   padding: 8px 16px;
   border-radius: 8px;
   border: 1px solid ${props => props.active ? '#0066CC' : (props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed')};
@@ -52,9 +50,7 @@ const ArchOptions = styled.div`
   margin-bottom: 16px;
 `;
 
-const ArchOption = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['selected'].includes(prop)
-})`
+const ArchOption = styled.div`
   padding: 12px 16px;
   border-radius: 8px;
   border: 1px solid ${props => props.selected ? '#0066CC' : (props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed')};
@@ -112,7 +108,9 @@ const InfoValue = styled.span`
   font-weight: 500;
 `;
 
-const DownloadButton = styled.button`
+const DownloadButton = styled.button.withConfig({
+  shouldForwardProp: (prop) => prop !== 'status'
+})`
   width: 100%;
   padding: 12px 20px;
   border-radius: 8px;

@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 
 import { platform, arch, version, type as osType, locale } from '@tauri-apps/plugin-os';
+import { isMacOS, applyMacOSFixes, forceRepaint } from '../utils/wkwebviewUtils';
 
 const SettingsContainer = styled.div`
   padding: 20px;
@@ -16,6 +17,20 @@ const SettingsContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 20px;
+  
+  /* macOS特定修复 */
+  ${props => props.isMacOS ? `
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    contain: layout style;
+    will-change: auto;
+    overflow: visible;
+    min-height: 100vh;
+  ` : ''}
 `;
 
 const SettingsTitle = styled.h2`
@@ -625,6 +640,24 @@ const Settings = React.memo(({
     }
   }, []);
 
+  // macOS兼容性修复
+  useEffect(() => {
+    if (isMacOS()) {
+      // 延迟应用修复以确保DOM已渲染
+      const timer = setTimeout(() => {
+        const settingsContainer = document.querySelector('[data-settings-container]');
+        if (settingsContainer) {
+          // 应用macOS特定修复
+          applyMacOSFixes(settingsContainer);
+          // 强制重绘以确保渲染正确
+          forceRepaint(settingsContainer);
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   // 当backgroundImage或theme改变时，确保透明度正确显示
   useEffect(() => {
     // 这里我们只需要更新本地UI状态
@@ -1003,7 +1036,11 @@ const Settings = React.memo(({
 
 
   return (
-    <SettingsContainer theme={theme}>
+    <SettingsContainer 
+      theme={theme}
+      data-settings-container
+      isMacOS={isMacOS()}
+    >
       <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
       
       <SettingsSection theme={theme}>
