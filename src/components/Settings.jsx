@@ -678,6 +678,9 @@ const Settings = React.memo(({
   // WebKit兼容性状态（支持macOS、iOS、Linux）
   const [isWebKitReady, setIsWebKitReady] = useState(!isWebKit());
   
+  // 添加选项卡状态
+  const [activeTab, setActiveTab] = useState('appearance');
+  
   const fileInputRef = useRef(null);
   const opacityUpdateTimeoutRef = useRef(null);
   
@@ -1259,9 +1262,6 @@ const Settings = React.memo(({
       </SettingsContainer>
     );
   }
-
-  // 添加选项卡状态
-  const [activeTab, setActiveTab] = useState('appearance');
 
   return (
     <SettingsContainer 
