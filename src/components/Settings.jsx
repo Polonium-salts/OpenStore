@@ -29,7 +29,7 @@ const SettingsContainer = styled.div`
     contain: layout style;
     will-change: auto;
     overflow: visible;
-    min-height: 100vh;
+    min-height: auto;
     visibility: visible !important;
     opacity: 1 !important;
     position: relative;
