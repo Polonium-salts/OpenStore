@@ -213,27 +213,37 @@ export const initMacOSFixes = (options = {}) => {
       settingsContainer.style.position = 'relative';
       settingsContainer.style.zIndex = '1';
       
-      // 强制重绘
+      // 优化重绘逻辑，减少不必要的操作
       if (autoRepaint) {
         setTimeout(() => forceRepaint(settingsContainer), repaintDelay);
       }
       
-      // 修复子元素
+      // 优化子元素修复，只处理有问题的元素
       const childElements = settingsContainer.querySelectorAll('*');
+      let problematicChildren = [];
+      
       childElements.forEach(child => {
-        // 确保所有子元素都可见
-        child.style.visibility = 'visible';
-        child.style.opacity = '1';
-        
-        if (child.offsetHeight === 0 || child.offsetWidth === 0) {
+        // 只修复真正有问题的子元素
+        if (child.offsetHeight === 0 || child.offsetWidth === 0 || 
+            getComputedStyle(child).visibility === 'hidden' ||
+            getComputedStyle(child).opacity === '0') {
+          problematicChildren.push(child);
+        }
+      });
+      
+      // 批量处理有问题的子元素
+      if (problematicChildren.length > 0) {
+        problematicChildren.forEach(child => {
+          child.style.visibility = 'visible';
+          child.style.opacity = '1';
           applyMacOSFixes(child);
           if (autoRepaint) {
             setTimeout(() => forceRepaint(child), repaintDelay + 50);
           }
-        }
-      });
+        });
+      }
       
-      // 额外的渲染修复
+      // 减少额外渲染修复的频率
       setTimeout(() => {
         if (settingsContainer.offsetHeight === 0) {
           console.warn('Settings container has zero height, applying emergency fixes');
@@ -241,7 +251,7 @@ export const initMacOSFixes = (options = {}) => {
           settingsContainer.style.minHeight = '100vh';
           forceRepaint(settingsContainer);
         }
-      }, repaintDelay + 100);
+      }, repaintDelay + 200); // 增加延迟，减少检查频率
     }
   };
   
@@ -250,38 +260,58 @@ export const initMacOSFixes = (options = {}) => {
     setTimeout(applySettingsPageFixes, 100);
   };
   
-  // 监听DOM变化，当Settings页面加载时应用修复
+  // 优化的DOM变化监听，添加防抖和减少触发频率
+  let debounceTimer = null;
+  let lastMutationTime = 0;
+  
+  const debouncedApplyFixes = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      const now = Date.now();
+      if (now - lastMutationTime < 1000) return; // 至少间隔1秒
+      lastMutationTime = now;
+      applySettingsPageFixes();
+    }, 500); // 500ms防抖
+  };
+  
   const observer = new MutationObserver((mutations) => {
+    let shouldApplyFixes = false;
+    
     mutations.forEach((mutation) => {
       if (mutation.type === 'childList') {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === Node.ELEMENT_NODE) {
-            // 检查是否是Settings相关的元素 - 增加更多选择器
+            // 检查是否是Settings相关的元素
             if (node.matches && (node.matches('[data-settings-container]') ||
                                 node.matches('[data-component="settings"]') || 
                                 node.matches('.settings-container') ||
                                 node.matches('div[class*="Settings"]') ||
                                 node.matches('div[class*="SettingsContainer"]'))) {
               console.log('Settings element detected, applying fixes');
-              setTimeout(applySettingsPageFixes, 50);
-              setTimeout(applySettingsPageFixes, 200);
+              shouldApplyFixes = true;
             }
-            // 检查子元素
-            const settingsElements = node.querySelectorAll('[data-settings-container], [data-component="settings"], .settings-container, div[class*="Settings"], div[class*="SettingsContainer"]');
-            if (settingsElements.length > 0) {
-              console.log('Settings child elements detected, applying fixes');
-              setTimeout(applySettingsPageFixes, 50);
-              setTimeout(applySettingsPageFixes, 200);
+            // 检查子元素（减少查询频率）
+            if (!shouldApplyFixes) {
+              const settingsElements = node.querySelectorAll('[data-settings-container], [data-component="settings"], .settings-container, div[class*="Settings"], div[class*="SettingsContainer"]');
+              if (settingsElements.length > 0) {
+                console.log('Settings child elements detected, applying fixes');
+                shouldApplyFixes = true;
+              }
             }
           }
         });
       }
-      // 监听属性变化
+      // 减少属性变化监听的触发
       if (mutation.type === 'attributes' && mutation.target.matches && 
-          mutation.target.matches('[data-settings-container], [data-component="settings"], .settings-container, div[class*="Settings"], div[class*="SettingsContainer"]')) {
-        setTimeout(applySettingsPageFixes, 50);
+          mutation.target.matches('[data-settings-container], [data-component="settings"], .settings-container, div[class*="Settings"], div[class*="SettingsContainer"]') &&
+          (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
+        shouldApplyFixes = true;
       }
     });
+    
+    if (shouldApplyFixes) {
+      debouncedApplyFixes();
+    }
   });
   
   observer.observe(document.body, {
@@ -294,8 +324,13 @@ export const initMacOSFixes = (options = {}) => {
   // 立即应用修复
   applySettingsPageFixes();
   
-  // 定期检查机制，确保Settings组件持续正常显示
+  // 优化的定期检查机制，减少频率并添加防抖
+  let lastCheckTime = 0;
   const intervalCheck = setInterval(() => {
+    const now = Date.now();
+    if (now - lastCheckTime < 5000) return; // 至少间隔5秒
+    lastCheckTime = now;
+    
     const settingsContainer = document.querySelector('[data-settings-container]') ||
                              document.querySelector('[data-component="settings"]') || 
                              document.querySelector('.settings-container') ||
@@ -310,12 +345,15 @@ export const initMacOSFixes = (options = {}) => {
         applySettingsPageFixes();
       }
     }
-  }, 2000); // 每2秒检查一次
+  }, 10000); // 每10秒检查一次，减少频率
   
   // 返回清理函数
   return () => {
     observer.disconnect();
     clearInterval(intervalCheck);
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
   };
 };
 

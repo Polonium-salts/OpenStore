@@ -29,7 +29,7 @@ const SettingsContainer = styled.div`
     contain: layout style;
     will-change: auto;
     overflow: visible;
-    min-height: auto;
+    min-height: 100vh;
     visibility: visible !important;
     opacity: 1 !important;
     position: relative;
@@ -438,88 +438,111 @@ const Slider = styled.input`
   }
 `;
 
-// 自定义的分离式滑块组件，避免频繁重渲染
+// 优化的滑块组件，减少频繁重渲染
 const FastSlider = React.memo(({ value, min, max, step, onChange, theme }) => {
   const sliderRef = useRef(null);
+  const rafRef = useRef(null);
+  const debounceRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [localValue, setLocalValue] = useState(value);
-  const isUpdatingRef = useRef(false);
-  const timeoutRef = useRef(null);
+  const lastValueRef = useRef(value);
+  const lastUpdateTimeRef = useRef(0);
   
-  // 使用RAF优化视觉更新
+  // 使用requestAnimationFrame优化视觉更新
   const updateVisualStyle = useCallback((newValue) => {
-    requestAnimationFrame(() => {
-      // 更新CSS变量 - 立即显示效果
-      document.documentElement.style.setProperty('--app-bg-opacity', newValue);
-      
-      // 更新显示的百分比文本
-      const percentEl = sliderRef.current?.parentElement?.querySelector('.slider-percent');
-      if (percentEl) {
-        percentEl.textContent = `${Math.round(newValue * 100)}%`;
+    const now = performance.now();
+    // 限制更新频率到60fps
+    if (now - lastUpdateTimeRef.current < 16) {
+      return;
+    }
+    
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+    }
+    
+    rafRef.current = requestAnimationFrame(() => {
+      if (Math.abs(newValue - lastValueRef.current) > 0.001) {
+        // 只在值真正改变时更新CSS变量
+        const currentOpacity = document.documentElement.style.getPropertyValue('--app-bg-opacity');
+        if (Math.abs(parseFloat(currentOpacity) - newValue) > 0.01) {
+          document.documentElement.style.setProperty('--app-bg-opacity', newValue);
+        }
+        lastValueRef.current = newValue;
+        lastUpdateTimeRef.current = now;
       }
     });
   }, []);
   
   // 当外部value变化时同步，但避免循环更新
   useEffect(() => {
-    if (!isUpdatingRef.current && Math.abs(value - localValue) > 0.01) {
+    if (!isDragging && Math.abs(value - localValue) > 0.001) {
       setLocalValue(value);
       updateVisualStyle(value);
     }
-  }, [value, localValue, updateVisualStyle]);
+  }, [value, isDragging, localValue, updateVisualStyle]);
   
-  // 处理滑块变化 - 实时更新视觉效果
+  // 处理滑块变化 - 减少更新频率
   const handleChange = useCallback((event) => {
     const newValue = parseFloat(event.target.value);
     setLocalValue(newValue);
+    
+    // 立即更新视觉效果，但减少频率
     updateVisualStyle(newValue);
     
     // 防抖通知父组件
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
     }
     
-    isUpdatingRef.current = true;
-    timeoutRef.current = setTimeout(() => {
+    debounceRef.current = setTimeout(() => {
       onChange(newValue);
-      isUpdatingRef.current = false;
-    }, 100);
+    }, 300);
   }, [updateVisualStyle, onChange]);
+  
+  // 滑动开始
+  const handleChangeStart = useCallback(() => {
+    setIsDragging(true);
+  }, []);
   
   // 滑动结束时立即通知父组件
   const handleChangeEnd = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
+    setIsDragging(false);
+    // 立即触发最终值
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
     }
-    isUpdatingRef.current = true;
     onChange(localValue);
-    setTimeout(() => {
-      isUpdatingRef.current = false;
-    }, 50);
   }, [onChange, localValue]);
   
-  // 清理定时器
+  // 清理定时器和RAF
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
       }
     };
   }, []);
   
   return (
-    <div ref={sliderRef} className="fast-slider">
+    <div className="fast-slider">
       <SliderLabel theme={theme}>
         <span>透明</span>
-        <span className="slider-percent">{Math.round(localValue * 100)}%</span>
+        <span>{Math.round(localValue * 100)}%</span>
         <span>不透明</span>
       </SliderLabel>
       <Slider
+        ref={sliderRef}
         type="range"
         min={min}
         max={max}
         step={step}
         value={localValue}
         onChange={handleChange}
+        onMouseDown={handleChangeStart}
+        onTouchStart={handleChangeStart}
         onMouseUp={handleChangeEnd}
         onTouchEnd={handleChangeEnd}
         theme={theme}
@@ -556,7 +579,35 @@ const OptimizedBackgroundPreview = React.memo(({
   onUploadClick,
   children
 }) => {
-  // 处理背景预览组件逻辑，减少重渲染
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const imageRef = useRef(null);
+  
+  // 预加载图片 - 添加防抖
+  useEffect(() => {
+    if (imageUrl && !isCustom) {
+      const timer = setTimeout(() => {
+        const img = new Image();
+        img.onload = () => {
+          setImageLoaded(true);
+          setImageError(false);
+        };
+        img.onerror = () => {
+          setImageError(true);
+          setImageLoaded(false);
+        };
+        img.src = imageUrl;
+      }, 50); // 50ms防抖
+      
+      return () => clearTimeout(timer);
+    }
+  }, [imageUrl, isCustom]);
+  
+  // 重置状态当URL改变时
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageError(false);
+  }, [imageUrl]);
 
   if (isCustom) {
     return (
@@ -568,6 +619,14 @@ const OptimizedBackgroundPreview = React.memo(({
       >
         {customImageUrl === 'loading' ? (
           <div>加载中...</div>
+        ) : customImageUrl ? (
+          <img 
+            ref={imageRef}
+            src={customImageUrl} 
+            alt="自定义背景" 
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            loading="lazy"
+          />
         ) : (
           !hideUploadButton && (
             <UploadButton 
@@ -591,7 +650,42 @@ const OptimizedBackgroundPreview = React.memo(({
       selected={selected}
       label={label}
       onClick={onClick}
-    />
+    >
+      {imageUrl && !imageError ? (
+        <img 
+          ref={imageRef}
+          src={imageUrl} 
+          alt={label}
+          loading="lazy"
+          style={{ 
+            width: '100%', 
+            height: '100%', 
+            objectFit: 'cover',
+            opacity: imageLoaded ? 1 : 0,
+            transition: 'opacity 0.3s ease'
+          }}
+        />
+      ) : (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          height: '100%',
+          color: theme === 'dark' ? '#888' : '#666'
+        }}>
+          {imageError ? '加载失败' : label}
+        </div>
+      )}
+    </BackgroundPreview>
+  );
+}, (prevProps, nextProps) => {
+  // 自定义比较函数，只在关键属性变化时重渲染
+  return (
+    prevProps.imageUrl === nextProps.imageUrl &&
+    prevProps.theme === nextProps.theme &&
+    prevProps.selected === nextProps.selected &&
+    prevProps.customImageUrl === nextProps.customImageUrl &&
+    prevProps.isCustom === nextProps.isCustom
   );
 });
 
@@ -624,41 +718,28 @@ const Settings = React.memo(({
   const fileInputRef = useRef(null);
   const opacityUpdateTimeoutRef = useRef(null);
   
-  // 主题相关CSS变量初始化 - 优化为只在真正需要时更新
-  const themeVarsRef = useRef(null);
+  // 主题相关CSS变量初始化
   useEffect(() => {
-    // 避免重复设置相同的主题变量
-    if (themeVarsRef.current === theme) {
-      return;
+    // 设置主题相关的CSS变量
+    if (theme === 'dark') {
+      document.documentElement.style.setProperty('--section-bg-color', '#333');
+      document.documentElement.style.setProperty('--shadow-color', 'rgba(0, 0, 0, 0.3)');
+      document.documentElement.style.setProperty('--input-bg-color', '#444');
+      document.documentElement.style.setProperty('--input-text-color', '#f5f5f7');
+      document.documentElement.style.setProperty('--input-hover-color', '#555');
+      document.documentElement.style.setProperty('--border-color', '#555');
+      document.documentElement.style.setProperty('--accent-color', '#4dabf7');
+      document.documentElement.style.setProperty('--accent-bg-color', 'rgba(77, 171, 247, 0.1)');
+    } else {
+      document.documentElement.style.setProperty('--section-bg-color', '#f5f5f7');
+      document.documentElement.style.setProperty('--shadow-color', 'rgba(0, 0, 0, 0.1)');
+      document.documentElement.style.setProperty('--input-bg-color', '#ffffff');
+      document.documentElement.style.setProperty('--input-text-color', '#1d1d1f');
+      document.documentElement.style.setProperty('--input-hover-color', '#e8e8ed');
+      document.documentElement.style.setProperty('--border-color', '#ced4da');
+      document.documentElement.style.setProperty('--accent-color', '#0066CC');
+      document.documentElement.style.setProperty('--accent-bg-color', 'rgba(0, 102, 204, 0.1)');
     }
-    
-    themeVarsRef.current = theme;
-    
-    // 批量设置CSS变量，减少DOM操作
-    const vars = theme === 'dark' ? {
-      '--section-bg-color': '#333',
-      '--shadow-color': 'rgba(0, 0, 0, 0.3)',
-      '--input-bg-color': '#444',
-      '--input-text-color': '#f5f5f7',
-      '--input-hover-color': '#555',
-      '--border-color': '#555',
-      '--accent-color': '#4dabf7',
-      '--accent-bg-color': 'rgba(77, 171, 247, 0.1)'
-    } : {
-      '--section-bg-color': '#f5f5f7',
-      '--shadow-color': 'rgba(0, 0, 0, 0.1)',
-      '--input-bg-color': '#ffffff',
-      '--input-text-color': '#1d1d1f',
-      '--input-hover-color': '#e8e8ed',
-      '--border-color': '#ced4da',
-      '--accent-color': '#0066CC',
-      '--accent-bg-color': 'rgba(0, 102, 204, 0.1)'
-    };
-    
-    // 一次性设置所有变量
-    Object.entries(vars).forEach(([key, value]) => {
-      document.documentElement.style.setProperty(key, value);
-    });
   }, [theme]);
   
   // 优化初始化加载
@@ -689,30 +770,57 @@ const Settings = React.memo(({
     }
   }, []);
 
-  // macOS兼容性修复 - 简化逻辑，减少频繁操作
+  // 优化的macOS兼容性修复
   useEffect(() => {
     if (isMacOS()) {
-      console.log('Applying simplified macOS compatibility fixes');
+      console.log('Applying optimized macOS compatibility fixes for Settings component');
       
-      // 简化的macOS修复，只在必要时执行
+      // 初始化macOS特定修复（使用优化后的配置）
       const cleanup = initMacOSFixes({
-        autoRepaint: false, // 完全禁用自动重绘
-        repaintDelay: 1000, // 大幅增加延迟
-        settingsPageFix: false // 禁用设置页面特殊修复
+        autoRepaint: false, // 禁用自动重绘，减少频繁操作
+        repaintDelay: 200,
+        settingsPageFix: true
       });
       
-      // 单次延迟修复，避免多次操作
+      // 单次延迟应用修复，减少多次DOM操作
       const timer = setTimeout(() => {
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
-          // 最小化DOM操作
+          // 应用macOS特定修复
+          applyMacOSFixes(settingsContainer);
+          
+          // 确保容器可见性
           settingsContainer.style.visibility = 'visible';
           settingsContainer.style.opacity = '1';
           
-          // 标记macOS准备完成，不进行额外的重绘操作
+          // 只对真正有问题的子元素进行修复
+          const childElements = settingsContainer.querySelectorAll('*');
+          let problematicElements = [];
+          
+          childElements.forEach(child => {
+            if (child.offsetHeight === 0 || child.offsetWidth === 0 ||
+                getComputedStyle(child).visibility === 'hidden' ||
+                getComputedStyle(child).opacity === '0') {
+              problematicElements.push(child);
+            }
+          });
+          
+          // 批量处理有问题的元素
+          if (problematicElements.length > 0) {
+            problematicElements.forEach(child => {
+              applyMacOSFixes(child);
+            });
+            // 只在有问题的元素存在时才进行重绘
+            forceRepaint(settingsContainer);
+          }
+          
+          // 标记macOS准备完成
+          setIsMacOSReady(true);
+        } else {
+          // 如果容器不存在，直接标记为准备完成
           setIsMacOSReady(true);
         }
-      }, 300); // 减少延迟时间
+      }, 200); // 减少延迟时间
       
       return () => {
         clearTimeout(timer);
@@ -724,16 +832,20 @@ const Settings = React.memo(({
     }
   }, []);
 
-  // 当backgroundImage或theme改变时，确保透明度正确显示
+  // 优化背景和主题变化时的透明度处理
   useEffect(() => {
-    // 这里我们只需要更新本地UI状态
-    const savedOpacity = parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
-    if (Math.abs(savedOpacity - localOpacity) > 0.01) {
-      setLocalOpacity(savedOpacity);
-      setOpacity(savedOpacity);
-      // 同步更新CSS变量
-      document.documentElement.style.setProperty('--app-bg-opacity', savedOpacity);
-    }
+    // 添加防抖，避免频繁更新
+    const timeoutId = setTimeout(() => {
+      const savedOpacity = parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
+      if (Math.abs(savedOpacity - localOpacity) > 0.01) {
+        setLocalOpacity(savedOpacity);
+        setOpacity(savedOpacity);
+        // 同步更新CSS变量
+        document.documentElement.style.setProperty('--app-bg-opacity', savedOpacity);
+      }
+    }, 100); // 100ms防抖
+    
+    return () => clearTimeout(timeoutId);
   }, [backgroundImage, theme]); // 移除localOpacity依赖，避免循环更新
 
   // 优化文件上传处理
@@ -821,8 +933,16 @@ const Settings = React.memo(({
     reader.readAsDataURL(file);
   }, [opacity, onBackgroundImageChange]);
 
-  // 清理定时器
+  // 清理定时器和优化初始化
   useEffect(() => {
+    // 初始化时获取保存的透明度值
+    const savedOpacity = parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
+    if (Math.abs(savedOpacity - localOpacity) > 0.01) {
+      setLocalOpacity(savedOpacity);
+      setOpacity(savedOpacity);
+      document.documentElement.style.setProperty('--app-bg-opacity', savedOpacity);
+    }
+    
     return () => {
       if (opacityUpdateTimeoutRef.current) {
         clearTimeout(opacityUpdateTimeoutRef.current);
@@ -913,10 +1033,14 @@ const Settings = React.memo(({
     }
   };
 
-  // 组件挂载时获取系统信息和下载目录
+  // 组件挂载时获取系统信息和下载目录 - 添加防抖
   useEffect(() => {
-    fetchSystemInfo();
-    fetchDownloadDirectory();
+    const timer = setTimeout(() => {
+      fetchSystemInfo();
+      fetchDownloadDirectory();
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, []);
 
   const handleThemeChange = (value) => {
@@ -945,24 +1069,29 @@ const Settings = React.memo(({
 
   // 修复backgroundImage undefined错误 - 移动到组件内部
   const handleOpacityChange = useCallback((newOpacity) => {
-    // 使用ref来避免重复更新相同的值，减少依赖
-    setLocalOpacity(prevOpacity => {
-      if (Math.abs(newOpacity - prevOpacity) < 0.01) {
-        return prevOpacity;
-      }
-      return newOpacity;
-    });
+    // 避免重复更新相同的值
+    if (Math.abs(newOpacity - localOpacity) < 0.01) {
+      return;
+    }
     
+    // 更新本地状态
+    setLocalOpacity(newOpacity);
     setOpacity(newOpacity);
     
     // 立即更新localStorage，避免状态不一致
     localStorage.setItem('backgroundOpacity', newOpacity.toString());
     
-    // 触发背景更新 - 确保传入正确的backgroundImage参数
-    if (typeof onBackgroundImageChange === 'function') {
-      onBackgroundImageChange(backgroundImage || '', newOpacity);
+    // 防抖处理背景更新
+    if (opacityUpdateTimeoutRef.current) {
+      clearTimeout(opacityUpdateTimeoutRef.current);
     }
-  }, [backgroundImage, onBackgroundImageChange]); // 移除localOpacity依赖
+    
+    opacityUpdateTimeoutRef.current = setTimeout(() => {
+      if (typeof onBackgroundImageChange === 'function') {
+        onBackgroundImageChange(backgroundImage || '', newOpacity);
+      }
+    }, 300);
+  }, [backgroundImage, onBackgroundImageChange, localOpacity]);
   
   // 默认背景图片列表
   const DEFAULT_BACKGROUNDS = [
@@ -972,40 +1101,48 @@ const Settings = React.memo(({
     { id: 'bg3', url: 'https://cdn.pixabay.com/photo/2020/10/11/08/00/lighthouse-5645042_1280.png', label: '灯塔' },
   ];
   
-  // 使用useMemo优化渲染复杂组件 - 移动到组件内部
-  const backgroundSelector = useMemo(() => (
-    <BackgroundPreviewContainer>
-      {DEFAULT_BACKGROUNDS.map(bg => (
-        <OptimizedBackgroundPreview 
-          key={bg.id}
-          imageUrl={bg.url}
+  // 使用useMemo优化渲染复杂组件 - 减少依赖项
+  const backgroundSelector = useMemo(() => {
+    const isCustomSelected = backgroundImage === customBgPreviewUrl && customBgPreviewUrl;
+    
+    return (
+      <BackgroundPreviewContainer>
+        {DEFAULT_BACKGROUNDS.map(bg => (
+          <OptimizedBackgroundPreview 
+            key={bg.id}
+            imageUrl={bg.url}
+            theme={theme}
+            selected={backgroundImage === bg.url}
+            label={bg.label}
+            onClick={() => handleBackgroundChange(bg.id, bg.url)}
+          />
+        ))}
+        <OptimizedBackgroundPreview
+          isCustom={true}
           theme={theme}
-          selected={backgroundImage === bg.url}
-          label={bg.label}
-          onClick={() => handleBackgroundChange(bg.id, bg.url)}
-        />
-      ))}
-      <OptimizedBackgroundPreview
-        isCustom={true}
-        theme={theme}
-        customImageUrl={customBgPreviewUrl}
-        selected={backgroundImage === customBgPreviewUrl && customBgPreviewUrl}
-        onClick={() => handleBackgroundChange('custom')}
-        onUploadClick={handleUploadClick}
-      >
-        <UploadInput 
-          ref={fileInputRef}
-          type="file" 
-          accept="image/*"
-          onChange={handleFileChange}
-        />
-      </OptimizedBackgroundPreview>
-    </BackgroundPreviewContainer>
-  ), [theme, backgroundImage, customBgPreviewUrl, handleBackgroundChange, handleFileChange, handleUploadClick]);
+          customImageUrl={customBgPreviewUrl}
+          selected={isCustomSelected}
+          onClick={() => handleBackgroundChange('custom')}
+          onUploadClick={handleUploadClick}
+        >
+          <UploadInput 
+            ref={fileInputRef}
+            type="file" 
+            accept="image/*"
+            onChange={handleFileChange}
+          />
+        </OptimizedBackgroundPreview>
+      </BackgroundPreviewContainer>
+    );
+  }, [theme, backgroundImage, customBgPreviewUrl]);
   
-  // 优化滑块渲染 - 添加undefined检查
-  const opacitySlider = useMemo(() => (
-    backgroundImage && backgroundImage !== undefined && (
+  // 优化滑块渲染 - 减少依赖项和添加undefined检查
+  const opacitySlider = useMemo(() => {
+    if (!backgroundImage || backgroundImage === undefined) {
+      return null;
+    }
+    
+    return (
       <SliderContainer>
         <OptionLabel theme={theme}>{t('settings.opacity')}</OptionLabel>
         <FastSlider
@@ -1017,8 +1154,8 @@ const Settings = React.memo(({
           theme={theme}
         />
       </SliderContainer>
-    )
-  ), [backgroundImage, localOpacity, theme, handleOpacityChange, t]);
+    );
+  }, [backgroundImage, localOpacity, theme, t]);
 
   // 为视图模式切换添加样式组件
   const ViewModeContainer = styled.div`
@@ -1102,8 +1239,31 @@ const Settings = React.memo(({
 
 
 
-  // 移除macOS加载状态检查，直接渲染以避免频繁刷新
-  // macOS兼容性问题通过CSS和简化的useEffect处理
+  // 在macOS环境下，等待兼容性修复完成后再渲染
+  if (isMacOS() && !isMacOSReady) {
+    return (
+      <SettingsContainer 
+        theme={theme}
+        data-settings-container
+        isMacOS={isMacOS()}
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          minHeight: '50vh',
+          opacity: 0.7
+        }}
+      >
+        <div style={{ 
+          textAlign: 'center',
+          color: 'var(--app-text-color)',
+          fontSize: '16px'
+        }}>
+          {t('settings.loading') || '正在加载设置...'}
+        </div>
+      </SettingsContainer>
+    );
+  }
 
   return (
     <SettingsContainer 
