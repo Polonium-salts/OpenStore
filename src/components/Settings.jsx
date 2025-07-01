@@ -683,8 +683,8 @@ const Settings = React.memo(({
       
       // 初始化macOS特定修复
       const cleanup = initMacOSFixes({
-        autoRepaint: true,
-        repaintDelay: 100,
+        autoRepaint: false, // 禁用自动重绘，避免频繁刷新
+        repaintDelay: 300, // 增加重绘延迟，减少频率
         settingsPageFix: true
       });
       
@@ -744,7 +744,7 @@ const Settings = React.memo(({
       // 同步更新CSS变量
       document.documentElement.style.setProperty('--app-bg-opacity', savedOpacity);
     }
-  }, [backgroundImage, theme, localOpacity]);
+  }, [backgroundImage, theme]); // 移除localOpacity依赖，避免循环更新
 
   // 优化文件上传处理
   const handleFileChange = useCallback((e) => {
@@ -955,13 +955,14 @@ const Settings = React.memo(({
 
   // 修复backgroundImage undefined错误 - 移动到组件内部
   const handleOpacityChange = useCallback((newOpacity) => {
-    // 避免重复更新相同的值
-    if (Math.abs(newOpacity - localOpacity) < 0.01) {
-      return;
-    }
+    // 使用ref来避免重复更新相同的值，减少依赖
+    setLocalOpacity(prevOpacity => {
+      if (Math.abs(newOpacity - prevOpacity) < 0.01) {
+        return prevOpacity;
+      }
+      return newOpacity;
+    });
     
-    // 更新本地状态
-    setLocalOpacity(newOpacity);
     setOpacity(newOpacity);
     
     // 立即更新localStorage，避免状态不一致
@@ -971,7 +972,7 @@ const Settings = React.memo(({
     if (typeof onBackgroundImageChange === 'function') {
       onBackgroundImageChange(backgroundImage || '', newOpacity);
     }
-  }, [backgroundImage, onBackgroundImageChange, localOpacity]);
+  }, [backgroundImage, onBackgroundImageChange]); // 移除localOpacity依赖
   
   // 默认背景图片列表
   const DEFAULT_BACKGROUNDS = [
