@@ -651,7 +651,9 @@ const Settings = React.memo(({
   // 优化初始化加载
   useEffect(() => {
     // 预加载默认背景图片（优先级低）
-    requestIdleCallback(() => {
+    // 不支持requestIdleCallback的浏览器使用setTimeout作为降级方案
+    const idleCallback = window.requestIdleCallback || ((callback) => setTimeout(callback, 1));
+    idleCallback(() => {
       preloadBackgrounds(DEFAULT_BACKGROUNDS);
     });
     
