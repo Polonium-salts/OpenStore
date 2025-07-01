@@ -470,7 +470,7 @@ const FastSlider = React.memo(({ value, min, max, step, onChange, theme }) => {
       setLocalValue(value);
       updateVisualStyle(value);
     }
-  }, [value, localValue, updateVisualStyle]);
+  }, [value, updateVisualStyle]); // 移除localValue依赖，避免循环更新
   
   // 处理滑块变化 - 实时更新视觉效果
   const handleChange = useCallback((event) => {
@@ -675,7 +675,7 @@ const Settings = React.memo(({
     }
   }, []);
 
-  // macOS兼容性修复
+  // macOS兼容性修复 - 只在组件首次挂载时执行
   useEffect(() => {
     if (isMacOS()) {
       console.log('Applying macOS compatibility fixes for Settings component');
@@ -730,8 +730,11 @@ const Settings = React.memo(({
         clearTimeout(secondTimer);
         if (cleanup) cleanup();
       };
+    } else {
+      // 非macOS环境直接标记为准备完成
+      setIsMacOSReady(true);
     }
-  }, []);
+  }, []); // 空依赖数组确保只在组件挂载时执行一次
 
   // 当backgroundImage或theme改变时，确保透明度正确显示
   useEffect(() => {
@@ -743,7 +746,7 @@ const Settings = React.memo(({
       // 同步更新CSS变量
       document.documentElement.style.setProperty('--app-bg-opacity', savedOpacity);
     }
-  }, [backgroundImage, theme, localOpacity]);
+  }, [backgroundImage, theme]); // 移除localOpacity依赖，避免循环更新
 
   // 优化文件上传处理
   const handleFileChange = useCallback((e) => {
