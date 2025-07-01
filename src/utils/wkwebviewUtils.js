@@ -572,33 +572,28 @@ export const initMacOSFixes = (options = {}) => {
   // 立即应用Settings页面修复
   applySettingsPageFixes();
   
-  // 移除定期检查机制以避免循环刷新
-  // 改为仅在必要时进行一次性检查
-  let hasChecked = false;
-  const oneTimeCheck = setTimeout(() => {
-    if (!hasChecked) {
-      hasChecked = true;
-      const settingsContainer = document.querySelector('[data-settings-container]') ||
-                               document.querySelector('[data-component="settings"]') || 
-                               document.querySelector('.settings-container') ||
-                               document.querySelector('div[class*="Settings"]') ||
-                               document.querySelector('div[class*="SettingsContainer"]');
-      if (settingsContainer) {
-        // 只进行一次最终检查
-        if (settingsContainer.offsetHeight === 0 || settingsContainer.offsetWidth === 0 || 
-            getComputedStyle(settingsContainer).visibility === 'hidden' ||
-            getComputedStyle(settingsContainer).opacity === '0') {
-          console.log('Final Settings container check - applying emergency fixes');
-          applySettingsPageFixes();
-        }
+  // 定期检查机制，确保Settings组件持续正常显示
+  const intervalCheck = setInterval(() => {
+    const settingsContainer = document.querySelector('[data-settings-container]') ||
+                             document.querySelector('[data-component="settings"]') || 
+                             document.querySelector('.settings-container') ||
+                             document.querySelector('div[class*="Settings"]') ||
+                             document.querySelector('div[class*="SettingsContainer"]');
+    if (settingsContainer) {
+      // 检查容器是否可见
+      if (settingsContainer.offsetHeight === 0 || settingsContainer.offsetWidth === 0 || 
+          getComputedStyle(settingsContainer).visibility === 'hidden' ||
+          getComputedStyle(settingsContainer).opacity === '0') {
+        console.log('Settings container visibility issue detected, applying emergency fixes');
+        applySettingsPageFixes();
       }
     }
-  }, 5000); // 5秒后进行一次最终检查
+  }, 2000); // 每2秒检查一次
   
   // 返回清理函数
   return () => {
     observer.disconnect();
-    clearTimeout(oneTimeCheck);
+    clearInterval(intervalCheck);
   };
 };
 
@@ -709,34 +704,18 @@ export const initWebKitFixes = (options = {}) => {
     platformCleanup = initLinuxWebKitGTKFixes(options);
   }
   
-  // 监听页面可见性变化（限制频率避免循环）
-  let visibilityTimeout;
+  // 监听页面可见性变化
   const handleVisibilityChange = () => {
-    if (!document.hidden && !visibilityTimeout) {
-      visibilityTimeout = setTimeout(() => {
-        // 只在非Settings页面或首次加载时应用修复
-        if (!window.location.hash.includes('settings') || document.readyState === 'loading') {
-          applyGlobalFixes();
-        }
-        visibilityTimeout = null;
-      }, 200);
+    if (!document.hidden) {
+      setTimeout(applyGlobalFixes, 50);
     }
   };
   
   document.addEventListener('visibilitychange', handleVisibilityChange);
   
-  // 监听窗口大小变化（限制频率避免循环）
-  let resizeTimeout;
+  // 监听窗口大小变化
   const handleResize = () => {
-    if (!resizeTimeout) {
-      resizeTimeout = setTimeout(() => {
-        // 只在非Settings页面时应用修复
-        if (!window.location.hash.includes('settings')) {
-          applyGlobalFixes();
-        }
-        resizeTimeout = null;
-      }, 300);
-    }
+    setTimeout(applyGlobalFixes, 100);
   };
   
   window.addEventListener('resize', handleResize);
@@ -796,34 +775,18 @@ export const initWKWebViewFixes = (options = {}) => {
     macOSCleanup = initMacOSFixes(options);
   }
   
-  // 监听页面可见性变化（限制频率避免循环）
-  let visibilityTimeout;
+  // 监听页面可见性变化
   const handleVisibilityChange = () => {
-    if (!document.hidden && !visibilityTimeout) {
-      visibilityTimeout = setTimeout(() => {
-        // 只在非Settings页面或首次加载时应用修复
-        if (!window.location.hash.includes('settings') || document.readyState === 'loading') {
-          applyGlobalFixes();
-        }
-        visibilityTimeout = null;
-      }, 200);
+    if (!document.hidden) {
+      setTimeout(applyGlobalFixes, 50);
     }
   };
   
   document.addEventListener('visibilitychange', handleVisibilityChange);
   
-  // 监听窗口大小变化（限制频率避免循环）
-  let resizeTimeout;
+  // 监听窗口大小变化
   const handleResize = () => {
-    if (!resizeTimeout) {
-      resizeTimeout = setTimeout(() => {
-        // 只在非Settings页面时应用修复
-        if (!window.location.hash.includes('settings')) {
-          applyGlobalFixes();
-        }
-        resizeTimeout = null;
-      }, 300);
-    }
+    setTimeout(applyGlobalFixes, 100);
   };
   
   window.addEventListener('resize', handleResize);

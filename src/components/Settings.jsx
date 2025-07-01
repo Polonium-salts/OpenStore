@@ -679,17 +679,17 @@ const Settings = React.memo(({
   // WebKit兼容性修复（支持macOS、iOS、Linux）
   useEffect(() => {
     if (isWebKit()) {
-      console.log('Applying WebKit compatibility fixes for Settings component');
+      console.log('Applying enhanced WebKit compatibility fixes for Settings component');
       
       // 初始化WebKit特定修复（支持所有WebKit平台）
       const cleanup = initWebKitFixes({
-        autoRepaint: false, // 禁用自动重绘避免循环
+        autoRepaint: true,
         repaintDelay: 100,
         settingsPageFix: true
       });
       
-      // 应用一次性修复
-      const applyFixesOnce = () => {
+      // 立即应用基础修复
+      const applyImmediateFixes = () => {
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
           // 防止白屏的关键样式
@@ -709,38 +709,93 @@ const Settings = React.memo(({
             applyMacOSFixes(settingsContainer);
           }
           
-          // 单次强制重绘
+          // 强制重绘
           forceRepaint(settingsContainer);
+        }
+      };
+      
+      // 立即应用修复
+      applyImmediateFixes();
+      
+      // 延迟应用修复以确保DOM已完全渲染
+      const timer = setTimeout(() => {
+        const settingsContainer = document.querySelector('[data-settings-container]');
+        if (settingsContainer) {
+          // 再次确保可见性
+          settingsContainer.style.visibility = 'visible !important';
+          settingsContainer.style.opacity = '1 !important';
+          
+          // 修复所有子元素
+          const childElements = settingsContainer.querySelectorAll('*');
+          childElements.forEach(child => {
+            child.style.visibility = 'visible !important';
+            child.style.opacity = '1 !important';
+            
+            if (child.offsetHeight === 0 || child.offsetWidth === 0) {
+              applyWebKitFixes(child);
+              if (isMacOS()) {
+                applyMacOSFixes(child);
+              }
+              forceRepaint(child);
+            }
+          });
+          
+          // 多次重绘确保渲染
+          forceRepaint(settingsContainer);
+          setTimeout(() => forceRepaint(settingsContainer), 100);
+          setTimeout(() => forceRepaint(settingsContainer), 200);
           
           // 标记WebKit准备完成
           setIsWebKitReady(true);
-          
-          return true; // 表示修复成功
         }
-        return false;
-      };
+      }, 150);
       
-      // 立即尝试应用修复
-      if (!applyFixesOnce()) {
-        // 如果立即修复失败，延迟重试一次
-        const timer = setTimeout(() => {
-          if (!applyFixesOnce()) {
-            console.warn('Settings container not found after delay, marking as ready anyway');
-            setIsWebKitReady(true);
+      // 额外的延迟修复，确保所有组件都已渲染
+      const secondTimer = setTimeout(() => {
+        const settingsContainer = document.querySelector('[data-settings-container]');
+        if (settingsContainer) {
+          // 最终检查和修复
+          const computedStyle = getComputedStyle(settingsContainer);
+          if (computedStyle.visibility === 'hidden' || computedStyle.opacity === '0' || settingsContainer.offsetHeight === 0) {
+            console.warn('Settings container still has visibility issues, applying emergency fixes');
+            settingsContainer.style.visibility = 'visible !important';
+            settingsContainer.style.opacity = '1 !important';
+            settingsContainer.style.display = 'flex !important';
+            settingsContainer.style.minHeight = '100vh';
+            forceRepaint(settingsContainer);
+            
+            // 强制触发重排
+            settingsContainer.offsetHeight;
+            document.body.offsetHeight;
           }
-        }, 200);
-        
-        return () => {
-          clearTimeout(timer);
-          if (cleanup) cleanup();
-        };
-      }
+          
+          // 确保准备状态已设置
+          setIsWebKitReady(true);
+        }
+      }, 500);
+      
+      // 持续监控机制
+      const monitorInterval = setInterval(() => {
+        const settingsContainer = document.querySelector('[data-settings-container]');
+        if (settingsContainer) {
+          const computedStyle = getComputedStyle(settingsContainer);
+          if (computedStyle.visibility === 'hidden' || computedStyle.opacity === '0') {
+            console.warn('Settings container became hidden, reapplying fixes');
+            settingsContainer.style.visibility = 'visible !important';
+            settingsContainer.style.opacity = '1 !important';
+            forceRepaint(settingsContainer);
+          }
+        }
+      }, 1000);
       
       return () => {
+        clearTimeout(timer);
+        clearTimeout(secondTimer);
+        clearInterval(monitorInterval);
         if (cleanup) cleanup();
       };
     } else {
-      // 非WebKit环境直接标记为准备完成
+      // 非WebKit环境也要确保准备状态
       setIsWebKitReady(true);
     }
   }, []);
@@ -1157,6 +1212,7 @@ const Settings = React.memo(({
       <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
       
       <SettingsSection theme={theme}>
+        <SectionTitle theme={theme}>{t('settings.appearance') || '外观设置'}</SectionTitle>
         
         <OptionGroup>
           <OptionLabel theme={theme}>{t('settings.theme') || '主题'}</OptionLabel>
@@ -1239,7 +1295,7 @@ const Settings = React.memo(({
         </OptionGroup>
       </SettingsSection>
       
-      <SettingsSection theme={theme}>
+
         <SectionTitle theme={theme}>{t('settings.background') || '背景设置'}</SectionTitle>
         
         <OptionGroup>
@@ -1273,138 +1329,6 @@ const Settings = React.memo(({
           {/* 透明度滑块 */}
           {opacitySlider}
         </OptionGroup>
-      </SettingsSection>
-      
-      {/* Download Directory Section */}
-      <SettingsSection theme={theme}>
-        <SectionTitle theme={theme}>{t('settings.downloadDirectory') || '下载设置'}</SectionTitle>
-        
-        <OptionGroup>
-          <OptionLabel theme={theme}>{t('settings.downloadPath') || '下载目录'}</OptionLabel>
-          <OptionDescription theme={theme}>
-            {t('settings.downloadPathDesc') || '设置应用下载文件的保存位置'}
-          </OptionDescription>
-          
-          <SystemInfoCard theme={theme} style={{ marginTop: '16px', marginBottom: '16px' }}>
-            <SystemInfoLabel theme={theme}>{t('settings.currentDownloadPath') || '当前下载目录'}</SystemInfoLabel>
-            <SystemInfoValue theme={theme}>{downloadDirectory}</SystemInfoValue>
-          </SystemInfoCard>
-          
-          <Button 
-            onClick={selectDownloadDirectory}
-            disabled={isLoadingDownloadDir}
-            theme={theme}
-          >
-            {isLoadingDownloadDir ? (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                </svg>
-                {t('settings.loading') || '加载中...'}
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14,2 14,8 20,8"></polyline>
-                  <line x1="16" y1="13" x2="8" y2="13"></line>
-                  <line x1="16" y1="17" x2="8" y2="17"></line>
-                  <polyline points="10,9 9,9 8,9"></polyline>
-                </svg>
-                {t('settings.selectDownloadDirectory') || '选择下载目录'}
-              </>
-            )}
-          </Button>
-          
-          <RefreshButton 
-            theme={theme}
-            onClick={fetchDownloadDirectory}
-            disabled={isLoadingDownloadDir}
-            style={{ marginTop: '12px' }}
-          >
-            {isLoadingDownloadDir ? (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                </svg>
-                {t('settings.refreshing') || '刷新中...'}
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="23 4 23 10 17 10"></polyline>
-                  <polyline points="1 20 1 14 7 14"></polyline>
-                  <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                </svg>
-                {t('settings.refreshDownloadDirectory') || '刷新下载目录'}
-              </>
-            )}
-          </RefreshButton>
-        </OptionGroup>
-      </SettingsSection>
-
-      {/* System Information Section */}
-      <SettingsSection theme={theme}>
-        <SectionTitle theme={theme}>{t('settings.systemInfo') || '系统信息'}</SectionTitle>
-        
-        <OptionGroup>
-          <OptionLabel theme={theme}>{t('settings.systemInfoDesc') || '当前系统详细信息'}</OptionLabel>
-          <OptionDescription theme={theme}>
-            {t('settings.systemInfoDescription') || '查看当前运行环境的系统信息，包括操作系统、架构、版本等详细信息'}
-          </OptionDescription>
-          
-          <SystemInfoGrid>
-            <SystemInfoCard theme={theme}>
-              <SystemInfoLabel theme={theme}>{t('settings.operatingSystem') || '操作系统'}</SystemInfoLabel>
-              <SystemInfoValue theme={theme}>{systemInfo.platform}</SystemInfoValue>
-            </SystemInfoCard>
-            
-            <SystemInfoCard theme={theme}>
-              <SystemInfoLabel theme={theme}>{t('settings.systemArchitecture') || '系统架构'}</SystemInfoLabel>
-              <SystemInfoValue theme={theme}>{systemInfo.arch}</SystemInfoValue>
-            </SystemInfoCard>
-            
-            <SystemInfoCard theme={theme}>
-              <SystemInfoLabel theme={theme}>{t('settings.systemVersion') || '系统版本'}</SystemInfoLabel>
-              <SystemInfoValue theme={theme}>{systemInfo.version}</SystemInfoValue>
-            </SystemInfoCard>
-            
-            <SystemInfoCard theme={theme}>
-              <SystemInfoLabel theme={theme}>{t('settings.systemType') || '系统类型'}</SystemInfoLabel>
-              <SystemInfoValue theme={theme}>{systemInfo.osType}</SystemInfoValue>
-            </SystemInfoCard>
-            
-            <SystemInfoCard theme={theme}>
-              <SystemInfoLabel theme={theme}>{t('settings.systemLanguage') || '系统语言'}</SystemInfoLabel>
-              <SystemInfoValue theme={theme}>{systemInfo.locale}</SystemInfoValue>
-            </SystemInfoCard>
-          </SystemInfoGrid>
-          
-          <RefreshButton 
-            theme={theme}
-            onClick={fetchSystemInfo}
-            disabled={isLoadingSystemInfo}
-          >
-            {isLoadingSystemInfo ? (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                </svg>
-                {t('settings.refreshing') || '刷新中...'}
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="23 4 23 10 17 10"></polyline>
-                  <polyline points="1 20 1 14 7 14"></polyline>
-                  <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                </svg>
-                {t('settings.refresh') || '刷新系统信息'}
-              </>
-            )}
-          </RefreshButton>
-        </OptionGroup>
-      </SettingsSection>
     </SettingsContainer>
   );
 });
