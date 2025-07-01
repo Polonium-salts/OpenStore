@@ -29,10 +29,6 @@ const AppContainer = styled.div`
   position: relative;
   overflow: hidden;
   
-  /* WebKit滚动修复 */
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: none;
-  
   /* Use CSS custom properties for dynamic values that can be updated directly */
   --bg-opacity: var(--app-bg-opacity, ${props => props.backgroundOpacity || 0.8});
   --bg-color-dark: rgba(29, 29, 31, var(--bg-opacity));
@@ -60,40 +56,12 @@ const MainContent = styled.div`
   overflow: hidden;
   position: relative;
   z-index: 1;
-  
-  /* WebKit滚动修复 */
-  -webkit-overflow-scrolling: touch;
 `;
 
 const ContentArea = styled.div`
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
   padding: 20px;
-  
-  /* WebKit滚动修复 - 防止回弹和滚动问题 */
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: none;
-  overscroll-behavior-y: none;
-  scroll-behavior: smooth;
-  
-  /* 确保在WebKit环境下正确滚动 */
-  @supports (-webkit-overflow-scrolling: touch) {
-    /* 禁用回弹效果 */
-    overscroll-behavior: none;
-    /* 确保滚动容器有明确的高度 */
-    min-height: 0;
-    /* 优化滚动性能 */
-    will-change: scroll-position;
-    /* 防止滚动时的视觉抖动 */
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
-    /* 确保内容可以正常滚动 */
-    position: relative;
-    /* 防止WebKit中的滚动问题 */
-    -webkit-transform-style: preserve-3d;
-    transform-style: preserve-3d;
-  }
 `;
 
 const AppGrid = styled.div`

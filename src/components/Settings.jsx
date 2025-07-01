@@ -36,12 +36,6 @@ const SettingsContainer = styled.div`
     z-index: 1;
     isolation: isolate;
     
-    /* WebKit滚动修复 - 防止回弹和滚动问题 */
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: none;
-    overscroll-behavior-y: none;
-    scroll-behavior: smooth;
-    
     /* 确保所有子元素都可见 */
     * {
       visibility: visible !important;
@@ -1163,7 +1157,6 @@ const Settings = React.memo(({
       <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
       
       <SettingsSection theme={theme}>
-        <SectionTitle theme={theme}>{t('settings.appearance') || '外观设置'}</SectionTitle>
         
         <OptionGroup>
           <OptionLabel theme={theme}>{t('settings.theme') || '主题'}</OptionLabel>

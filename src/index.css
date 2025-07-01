@@ -14,7 +14,7 @@
 body {
   margin: 0;
   padding: 0;
-  overflow: auto;
+  overflow: hidden;
   min-height: 100vh;
   width: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
@@ -27,21 +27,13 @@ body {
   transform: translateZ(0);
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-  
-  /* WebKit滚动修复 - 防止回弹和滚动问题 */
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: none;
-  overscroll-behavior-y: none;
 }
 
 #root {
-  min-height: 100vh;
+  height: 100vh;
   width: 100%;
-  overflow: visible;
-  contain: layout style;
-  
-  /* WebKit滚动修复 */
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  contain: strict;
 }
 
 button {
