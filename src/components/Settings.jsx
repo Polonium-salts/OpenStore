@@ -36,6 +36,12 @@ const SettingsContainer = styled.div`
     z-index: 1;
     isolation: isolate;
     
+    /* WebKit滚动修复 - 防止回弹和滚动问题 */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: none;
+    overscroll-behavior-y: none;
+    scroll-behavior: smooth;
+    
     /* 确保所有子元素都可见 */
     * {
       visibility: visible !important;
