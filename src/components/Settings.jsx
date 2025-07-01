@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 
 import { platform, arch, version, type as osType, locale } from '@tauri-apps/plugin-os';
-import { isMacOS, applyMacOSFixes, forceRepaint, initMacOSFixes } from '../utils/wkwebviewUtils';
+import { isMacOS, applyMacOSFixes, forceRepaint, initMacOSFixes, fixAllScrollContainers, fixSettingsPageScrolling } from '../utils/wkwebviewUtils';
 
 const SettingsContainer = styled.div`
   padding: 20px;
@@ -690,6 +690,12 @@ const Settings = React.memo(({
       
       // 延迟应用修复以确保DOM已完全渲染
       const timer = setTimeout(() => {
+        // 首先修复所有滚动容器
+        fixAllScrollContainers();
+        
+        // 应用Settings页面专门的滚动修复
+        fixSettingsPageScrolling();
+        
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
           // 应用macOS特定修复
@@ -701,18 +707,6 @@ const Settings = React.memo(({
           
           // 强制重绘
           forceRepaint(settingsContainer);
-          
-          // 修复滚动容器
-          const scrollContainer = settingsContainer.closest('[style*="overflow-y: auto"]') || 
-                                 settingsContainer.closest('[style*="overflow: auto"]') ||
-                                 document.querySelector('[style*="overflow-y: auto"]');
-          if (scrollContainer) {
-            scrollContainer.style.webkitOverflowScrolling = 'touch';
-            scrollContainer.style.scrollBehavior = 'smooth';
-            scrollContainer.style.touchAction = 'pan-y';
-            scrollContainer.style.overscrollBehavior = 'contain';
-            applyMacOSFixes(scrollContainer);
-          }
           
           // 修复所有子元素
           const childElements = settingsContainer.querySelectorAll('*');

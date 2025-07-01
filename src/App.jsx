@@ -15,7 +15,7 @@ import NotificationSystem from './components/NotificationSystem';
 import ConfirmDialogContainer from './components/ConfirmDialog';
 import PromptDialogContainer from './components/PromptDialog';
 import Messages from './components/Messages';
-import { initWKWebViewFixes } from './utils/wkwebviewUtils';
+import { initWKWebViewFixes, fixAllScrollContainers, isMacOS } from './utils/wkwebviewUtils';
 
 const AppContainer = styled.div`
   display: flex;
@@ -63,22 +63,41 @@ const ContentArea = styled.div`
   overflow-y: auto;
   padding: 20px;
   
-  /* macOS滚动修复 */
+  /* 强化的macOS滚动修复 */
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
   
   /* 防止滚动锁定和回弹问题 */
-  @media (max-width: 768px) {
-    -webkit-overflow-scrolling: touch;
-    overflow-scrolling: touch;
-  }
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: scroll-position;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
   
-  /* macOS WebView特定修复 */
+  /* 确保正确的定位上下文 */
+  position: relative;
+  z-index: 1;
+  
+  /* macOS特定的额外修复 */
   @supports (-webkit-overflow-scrolling: touch) {
     -webkit-overflow-scrolling: touch;
     -webkit-transform: translateZ(0);
     transform: translateZ(0);
     will-change: scroll-position;
+    
+    /* 防止滚动时的渲染问题 */
+    contain: layout style paint;
+    isolation: isolate;
+  }
+  
+  /* 移动设备特定修复 */
+  @media (max-width: 768px) {
+    -webkit-overflow-scrolling: touch;
+    overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
   }
 `;
 
@@ -770,6 +789,13 @@ const App = () => {
       repaintDelay: 100,
       selectors: ['[data-sidebar="true"]', '#root', 'body', '[data-app-container="true"]']
     });
+    
+    // 修复所有滚动容器
+    if (isMacOS()) {
+      setTimeout(() => {
+        fixAllScrollContainers();
+      }, 200);
+    }
     
     return cleanup;
   }, []);
