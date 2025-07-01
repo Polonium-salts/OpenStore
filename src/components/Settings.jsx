@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 
 import { platform, arch, version, type as osType, locale } from '@tauri-apps/plugin-os';
-import { isMacOS, applyMacOSFixes, forceRepaint, initMacOSFixes, fixAllScrollContainers, fixSettingsPageScrolling } from '../utils/wkwebviewUtils';
+import { isMacOS, applyMacOSFixes, forceRepaint, initMacOSFixes } from '../utils/wkwebviewUtils';
 
 const SettingsContainer = styled.div`
   padding: 20px;
@@ -28,19 +28,15 @@ const SettingsContainer = styled.div`
     -moz-osx-font-smoothing: grayscale;
     contain: layout style;
     will-change: auto;
+    /* 修复滚动问题：允许内容滚动但保持兼容性 */
     overflow: visible;
+    -webkit-overflow-scrolling: touch;
     min-height: 100vh;
     visibility: visible !important;
     opacity: 1 !important;
     position: relative;
     z-index: 1;
     isolation: isolate;
-    
-    /* 滚动修复 */
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-    touch-action: pan-y;
-    overscroll-behavior: contain;
     
     /* 确保所有子元素都可见 */
     * {
@@ -60,6 +56,13 @@ const SettingsContainer = styled.div`
       z-index: -1;
       -webkit-transform: translateZ(0);
       transform: translateZ(0);
+    }
+    
+    /* macOS滚动优化 */
+    @supports (-webkit-overflow-scrolling: touch) {
+      /* 确保触摸滚动在macOS上正常工作 */
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
     }
   ` : ''}
 `;
@@ -690,12 +693,6 @@ const Settings = React.memo(({
       
       // 延迟应用修复以确保DOM已完全渲染
       const timer = setTimeout(() => {
-        // 首先修复所有滚动容器
-        fixAllScrollContainers();
-        
-        // 应用Settings页面专门的滚动修复
-        fixSettingsPageScrolling();
-        
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
           // 应用macOS特定修复

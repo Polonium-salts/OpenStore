@@ -114,19 +114,8 @@ img {
     transform: translate3d(0, 0, 0);
     /* 优化滚动性能 */
     -webkit-overflow-scrolling: touch;
-  }
-  
-  /* macOS滚动修复 */
-  [style*="overflow-y: auto"],
-  [style*="overflow: auto"] {
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-    touch-action: pan-y;
-    overscroll-behavior: contain;
-    /* 防止滚动锁定 */
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-    will-change: scroll-position;
+    /* macOS滚动修复：允许内容区域滚动 */
+    overflow: hidden; /* 保持body隐藏，让内容区域处理滚动 */
   }
   
   #root {
@@ -136,6 +125,8 @@ img {
     /* 修复可能的白屏问题 */
     contain: layout style paint;
     isolation: isolate;
+    /* macOS滚动支持 */
+    overflow: hidden; /* 让子组件处理滚动 */
   }
   
   /* 修复WKWebView中的backdrop-filter问题 */
@@ -165,6 +156,25 @@ img {
       -webkit-text-size-adjust: 100%;
       /* 防止页面缩放 */
       touch-action: manipulation;
+    }
+  }
+}
+
+/* macOS特定滚动修复 */
+@media screen and (min-resolution: 1dppx) {
+  @supports (-webkit-overflow-scrolling: touch) {
+    /* macOS环境下的滚动优化 */
+    * {
+      /* 确保所有可滚动元素都有平滑滚动 */
+      scroll-behavior: smooth;
+    }
+    
+    /* 针对可能的滚动容器 */
+    [style*="overflow-y: auto"], [style*="overflow: auto"] {
+      -webkit-overflow-scrolling: touch;
+      /* 防止滚动时的渲染问题 */
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
     }
   }
 }

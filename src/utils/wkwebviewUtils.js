@@ -72,133 +72,6 @@ export const getIOSVersion = () => {
 };
 
 /**
- * 应用滚动修复到单个元素
- * @param {HTMLElement} element - 要修复的元素
- */
-const applyScrollFix = (element) => {
-  if (!element) return;
-  
-  console.log('Applying scroll fixes to:', element);
-  
-  // 基础滚动属性
-  element.style.setProperty('-webkit-overflow-scrolling', 'touch', 'important');
-  element.style.setProperty('scroll-behavior', 'smooth', 'important');
-  element.style.setProperty('touch-action', 'pan-y', 'important');
-  element.style.setProperty('overscroll-behavior', 'contain', 'important');
-  
-  // 硬件加速
-  element.style.setProperty('-webkit-transform', 'translateZ(0)', 'important');
-  element.style.setProperty('transform', 'translateZ(0)', 'important');
-  element.style.setProperty('will-change', 'scroll-position', 'important');
-  
-  // 防止滚动锁定
-  element.style.setProperty('-webkit-backface-visibility', 'hidden', 'important');
-  element.style.setProperty('backface-visibility', 'hidden', 'important');
-  
-  // 确保正确的定位
-  if (!element.style.position || element.style.position === 'static') {
-    element.style.setProperty('position', 'relative', 'important');
-  }
-  
-  // 强制重绘
-  element.offsetHeight;
-};
-
-/**
- * 修复所有滚动容器的macOS滚动问题
- */
-export const fixAllScrollContainers = () => {
-  if (!isMacOS()) return;
-  
-  console.log('Fixing all scroll containers for macOS');
-  
-  // 查找所有可能的滚动容器
-  const scrollSelectors = [
-    '[style*="overflow-y: auto"]',
-    '[style*="overflow: auto"]',
-    '.content-area',
-    '[data-scroll="true"]',
-    'div[class*="Content"]',
-    'div[class*="Scroll"]'
-  ];
-  
-  scrollSelectors.forEach(selector => {
-    const elements = document.querySelectorAll(selector);
-    elements.forEach(element => {
-      const computedStyle = window.getComputedStyle(element);
-      if (computedStyle.overflow === 'auto' || computedStyle.overflowY === 'auto' ||
-          element.style.overflow === 'auto' || element.style.overflowY === 'auto') {
-        applyScrollFix(element);
-      }
-    });
-  });
-  
-  // 特别处理主要内容区域
-  const mainContentArea = document.querySelector('[style*="overflow-y: auto"]') ||
-                         document.querySelector('.content-area') ||
-                         document.querySelector('div[class*="ContentArea"]');
-  
-  if (mainContentArea) {
-    console.log('Applying enhanced fixes to main content area');
-    applyScrollFix(mainContentArea);
-  }
-};
-
-/**
- * 专门针对Settings页面的滚动修复
- */
-export const fixSettingsPageScrolling = () => {
-  if (!isMacOS()) return;
-  
-  console.log('Applying Settings page scroll fixes for macOS');
-  
-  // 等待DOM完全加载
-  const applyFix = () => {
-    // 查找Settings容器
-    const settingsContainer = document.querySelector('[data-settings-container]') ||
-                             document.querySelector('.settings-container') ||
-                             document.querySelector('[class*="SettingsContainer"]');
-    
-    // 查找主要的滚动容器（通常是ContentArea）
-    const mainScrollContainer = document.querySelector('[style*="overflow-y: auto"]') ||
-                               document.querySelector('[data-scroll="true"]');
-    
-    // 应用强化的滚动修复
-    [settingsContainer, mainScrollContainer, document.body, document.documentElement].forEach(element => {
-      if (element) {
-        applyScrollFix(element);
-        
-        // Settings页面特定的额外修复
-        if (element === settingsContainer) {
-          element.style.setProperty('min-height', '100vh', 'important');
-          element.style.setProperty('overflow', 'visible', 'important');
-          element.style.setProperty('visibility', 'visible', 'important');
-          element.style.setProperty('opacity', '1', 'important');
-        }
-      }
-    });
-    
-    // 特别处理所有可能的滚动元素
-    const allScrollableElements = document.querySelectorAll('*');
-    allScrollableElements.forEach(element => {
-      const computedStyle = window.getComputedStyle(element);
-      if (computedStyle.overflow === 'auto' || computedStyle.overflowY === 'auto' ||
-          computedStyle.overflow === 'scroll' || computedStyle.overflowY === 'scroll') {
-        applyScrollFix(element);
-      }
-    });
-  };
-  
-  // 立即应用
-  applyFix();
-  
-  // 延迟应用，确保所有组件都已渲染
-  setTimeout(applyFix, 100);
-  setTimeout(applyFix, 300);
-  setTimeout(applyFix, 500);
-};
-
-/**
  * 强制重绘元素以解决WKWebView白屏问题
  * @param {HTMLElement|string} element - 要重绘的元素或选择器
  */
@@ -253,22 +126,6 @@ export const applyMacOSFixes = (element) => {
     // macOS Catalina及以上版本的特殊处理
     element.style.isolation = 'isolate';
     element.style.webkitOverflowScrolling = 'touch';
-  }
-  
-  // 强化滚动修复
-  const computedStyle = window.getComputedStyle(element);
-  if (element.style.overflow === 'auto' || element.style.overflowY === 'auto' ||
-      computedStyle.overflow === 'auto' || computedStyle.overflowY === 'auto') {
-    element.style.webkitOverflowScrolling = 'touch';
-    element.style.scrollBehavior = 'smooth';
-    element.style.touchAction = 'pan-y';
-    element.style.overscrollBehavior = 'contain';
-    // 防止滚动锁定的额外修复
-    element.style.webkitTransform = 'translateZ(0)';
-    element.style.transform = 'translateZ(0)';
-    element.style.willChange = 'scroll-position';
-    // 确保滚动区域可以正常工作
-    element.style.position = element.style.position || 'relative';
   }
   
   // 修复可能的层叠上下文问题
@@ -436,9 +293,6 @@ export const initMacOSFixes = (options = {}) => {
   
   // 立即应用修复
   applySettingsPageFixes();
-  
-  // 修复所有滚动容器
-  fixAllScrollContainers();
   
   // 定期检查机制，确保Settings组件持续正常显示
   const intervalCheck = setInterval(() => {
