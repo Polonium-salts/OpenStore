@@ -8,21 +8,54 @@ import { platform, arch, version, type as osType, locale } from '@tauri-apps/plu
 import { isMacOS, applyMacOSFixes, forceRepaint, initMacOSFixes } from '../utils/wkwebviewUtils';
 
 const SettingsContainer = styled.div`
-  height: 100%;
-  overflow-y: auto;
   padding: 20px;
-  background-color: ${props => props.theme === 'dark' ? '#1a1a1a' : 'white'};
-  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
-  transition: background-color 0.3s ease, color 0.3s ease;
-`;
-
-const SettingsContent = styled.div`
   width: 100%;
   max-width: 1000px;
   margin: 0 auto;
+  color: var(--app-text-color);
+  transition: color 0.3s ease;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  
+  /* macOS特定修复 */
+  ${props => props.isMacOS ? `
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    contain: layout style;
+    will-change: auto;
+    overflow: visible;
+    min-height: 100vh;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative;
+    z-index: 1;
+    isolation: isolate;
+    
+    /* 确保所有子元素都可见 */
+    * {
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+    
+    /* 防止白屏的额外修复 */
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: transparent;
+      z-index: -1;
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+    }
+  ` : ''}
 `;
 
 const SettingsTitle = styled.h2`
@@ -432,7 +465,7 @@ const FastSlider = React.memo(({ value, min, max, step, onChange, theme }) => {
       setLocalValue(value);
       updateVisualStyle(value);
     }
-  }, [value, updateVisualStyle]); // 移除localValue依赖，避免循环更新
+  }, [value, localValue, updateVisualStyle]);
   
   // 处理滑块变化 - 实时更新视觉效果
   const handleChange = useCallback((event) => {
@@ -618,11 +651,17 @@ const Settings = React.memo(({
   // 优化初始化加载
   useEffect(() => {
     // 预加载默认背景图片（优先级低）
-    // 不支持requestIdleCallback的浏览器使用setTimeout作为降级方案
-    const idleCallback = window.requestIdleCallback || ((callback) => setTimeout(callback, 1));
-    idleCallback(() => {
-      preloadBackgrounds(DEFAULT_BACKGROUNDS);
-    });
+    // 兼容性修复：requestIdleCallback在某些环境下不可用
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(() => {
+        preloadBackgrounds(DEFAULT_BACKGROUNDS);
+      });
+    } else {
+      // 降级到setTimeout
+      setTimeout(() => {
+        preloadBackgrounds(DEFAULT_BACKGROUNDS);
+      }, 100);
+    }
     
     // 获取当前CSS变量值
     const computedStyle = getComputedStyle(document.documentElement);
@@ -637,11 +676,8 @@ const Settings = React.memo(({
     }
   }, []);
 
-  // macOS兼容性修复 - 只在组件首次挂载时执行
+  // macOS兼容性修复
   useEffect(() => {
-    // 立即设置为准备完成，避免阻塞滚动功能
-    setIsMacOSReady(true);
-    
     if (isMacOS()) {
       console.log('Applying macOS compatibility fixes for Settings component');
       
@@ -652,7 +688,7 @@ const Settings = React.memo(({
         settingsPageFix: true
       });
       
-      // 延迟应用修复以确保DOM已完全渲染，但不阻塞渲染
+      // 延迟应用修复以确保DOM已完全渲染
       const timer = setTimeout(() => {
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
@@ -674,6 +710,9 @@ const Settings = React.memo(({
               forceRepaint(child);
             }
           });
+          
+          // 标记macOS准备完成
+          setIsMacOSReady(true);
         }
       }, 150);
       
@@ -682,6 +721,8 @@ const Settings = React.memo(({
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
           forceRepaint(settingsContainer);
+          // 确保准备状态已设置
+          setIsMacOSReady(true);
         }
       }, 500);
       
@@ -691,7 +732,7 @@ const Settings = React.memo(({
         if (cleanup) cleanup();
       };
     }
-  }, []); // 空依赖数组确保只在组件挂载时执行一次
+  }, []);
 
   // 当backgroundImage或theme改变时，确保透明度正确显示
   useEffect(() => {
@@ -703,7 +744,7 @@ const Settings = React.memo(({
       // 同步更新CSS变量
       document.documentElement.style.setProperty('--app-bg-opacity', savedOpacity);
     }
-  }, [backgroundImage, theme]); // 移除localOpacity依赖，避免循环更新
+  }, [backgroundImage, theme, localOpacity]);
 
   // 优化文件上传处理
   const handleFileChange = useCallback((e) => {
@@ -1070,7 +1111,31 @@ const Settings = React.memo(({
 
 
 
-  // 移除条件渲染逻辑，确保滚动容器始终可用
+  // 在macOS环境下，等待兼容性修复完成后再渲染
+  if (isMacOS() && !isMacOSReady) {
+    return (
+      <SettingsContainer 
+        theme={theme}
+        data-settings-container
+        isMacOS={isMacOS()}
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          minHeight: '50vh',
+          opacity: 0.7
+        }}
+      >
+        <div style={{ 
+          textAlign: 'center',
+          color: 'var(--app-text-color)',
+          fontSize: '16px'
+        }}>
+          {t('settings.loading') || '正在加载设置...'}
+        </div>
+      </SettingsContainer>
+    );
+  }
 
   return (
     <SettingsContainer 
@@ -1078,8 +1143,7 @@ const Settings = React.memo(({
       data-settings-container
       isMacOS={isMacOS()}
     >
-      <SettingsContent>
-        <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
+      <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
       
       <SettingsSection theme={theme}>
         <SectionTitle theme={theme}>{t('settings.appearance') || '外观设置'}</SectionTitle>
@@ -1331,7 +1395,6 @@ const Settings = React.memo(({
           </RefreshButton>
         </OptionGroup>
       </SettingsSection>
-      </SettingsContent>
     </SettingsContainer>
   );
 });

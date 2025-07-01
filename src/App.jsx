@@ -62,18 +62,6 @@ const ContentArea = styled.div`
   flex: 1;
   overflow-y: auto;
   padding: 20px;
-  
-  /* macOS滚动优化 */
-  -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
-  
-  /* 确保在macOS上滚动正常工作 */
-  @supports (-webkit-overflow-scrolling: touch) {
-    -webkit-overflow-scrolling: touch;
-    /* 防止滚动卡顿 */
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-  }
 `;
 
 const AppGrid = styled.div`
