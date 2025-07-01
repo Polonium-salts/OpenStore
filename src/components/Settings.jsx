@@ -8,88 +8,12 @@ import { platform, arch, version, type as osType, locale } from '@tauri-apps/plu
 import { isMacOS, applyMacOSFixes, forceRepaint, initMacOSFixes } from '../utils/wkwebviewUtils';
 
 const SettingsContainer = styled.div`
-  padding: 20px;
   height: 100%;
   overflow-y: auto;
-  color: var(--app-text-color);
-  transition: color 0.3s ease;
-  
-  /* macOS特定修复 */
-  ${props => props.isMacOS ? `
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    contain: layout style;
-    will-change: auto;
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-    visibility: visible !important;
-    opacity: 1 !important;
-    position: relative;
-    z-index: 1;
-    isolation: isolate;
-    
-    /* macOS滚动条交互修复 */
-    &::-webkit-scrollbar {
-      width: 12px;
-      height: 12px;
-      -webkit-appearance: none;
-      appearance: none;
-      background: transparent;
-    }
-    
-    &::-webkit-scrollbar-track {
-      background: rgba(0, 0, 0, 0.05);
-      border-radius: 6px;
-      margin: 2px;
-    }
-    
-    &::-webkit-scrollbar-thumb {
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 6px;
-      border: 2px solid transparent;
-      background-clip: content-box;
-      cursor: pointer;
-      min-height: 20px;
-      
-      &:hover {
-        background: rgba(0, 0, 0, 0.5);
-        background-clip: content-box;
-      }
-      
-      &:active {
-        background: rgba(0, 0, 0, 0.7);
-        background-clip: content-box;
-      }
-    }
-    
-    /* 确保滚动区域可以接收事件 */
-    pointer-events: auto;
-    touch-action: pan-y;
-    
-    /* 确保所有子元素都可见 */
-    * {
-      visibility: visible !important;
-      opacity: 1 !important;
-    }
-    
-    /* 防止白屏的额外修复 */
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: transparent;
-      z-index: -1;
-      -webkit-transform: translateZ(0);
-      transform: translateZ(0);
-    }
-  ` : ''}
+  padding: 20px;
+  background-color: ${props => props.theme === 'dark' ? '#1a1a1a' : 'white'};
+  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
+  transition: background-color 0.3s ease, color 0.3s ease;
 `;
 
 const SettingsContent = styled.div`
@@ -1146,31 +1070,7 @@ const Settings = React.memo(({
 
 
 
-  // 在macOS环境下，等待兼容性修复完成后再渲染
-  if (isMacOS() && !isMacOSReady) {
-    return (
-      <SettingsContainer 
-        theme={theme}
-        data-settings-container
-        isMacOS={isMacOS()}
-        style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          minHeight: '50vh',
-          opacity: 0.7
-        }}
-      >
-        <div style={{ 
-          textAlign: 'center',
-          color: 'var(--app-text-color)',
-          fontSize: '16px'
-        }}>
-          {t('settings.loading') || '正在加载设置...'}
-        </div>
-      </SettingsContainer>
-    );
-  }
+  // 移除条件渲染逻辑，确保滚动容器始终可用
 
   return (
     <SettingsContainer 
