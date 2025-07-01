@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 
 import { platform, arch, version, type as osType, locale } from '@tauri-apps/plugin-os';
-import { isMacOS, applyMacOSFixes, forceRepaint, initMacOSFixes } from '../utils/wkwebviewUtils';
+import { isWebKit, isMacOS, applyWebKitFixes, applyMacOSFixes, forceRepaint, initWebKitFixes } from '../utils/wkwebviewUtils';
 
 const SettingsContainer = styled.div`
   padding: 20px;
@@ -18,8 +18,8 @@ const SettingsContainer = styled.div`
   flex-direction: column;
   gap: 20px;
   
-  /* macOS特定修复 */
-  ${props => props.isMacOS ? `
+  /* WebKit兼容性修复（支持macOS、iOS、Linux） */
+  ${props => props.isWebKit ? `
     -webkit-transform: translateZ(0);
     transform: translateZ(0);
     -webkit-backface-visibility: hidden;
@@ -438,111 +438,88 @@ const Slider = styled.input`
   }
 `;
 
-// 优化的滑块组件，减少频繁重渲染
+// 自定义的分离式滑块组件，避免频繁重渲染
 const FastSlider = React.memo(({ value, min, max, step, onChange, theme }) => {
   const sliderRef = useRef(null);
-  const rafRef = useRef(null);
-  const debounceRef = useRef(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [localValue, setLocalValue] = useState(value);
-  const lastValueRef = useRef(value);
-  const lastUpdateTimeRef = useRef(0);
+  const isUpdatingRef = useRef(false);
+  const timeoutRef = useRef(null);
   
-  // 使用requestAnimationFrame优化视觉更新
+  // 使用RAF优化视觉更新
   const updateVisualStyle = useCallback((newValue) => {
-    const now = performance.now();
-    // 限制更新频率到60fps
-    if (now - lastUpdateTimeRef.current < 16) {
-      return;
-    }
-    
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-    }
-    
-    rafRef.current = requestAnimationFrame(() => {
-      if (Math.abs(newValue - lastValueRef.current) > 0.001) {
-        // 只在值真正改变时更新CSS变量
-        const currentOpacity = document.documentElement.style.getPropertyValue('--app-bg-opacity');
-        if (Math.abs(parseFloat(currentOpacity) - newValue) > 0.01) {
-          document.documentElement.style.setProperty('--app-bg-opacity', newValue);
-        }
-        lastValueRef.current = newValue;
-        lastUpdateTimeRef.current = now;
+    requestAnimationFrame(() => {
+      // 更新CSS变量 - 立即显示效果
+      document.documentElement.style.setProperty('--app-bg-opacity', newValue);
+      
+      // 更新显示的百分比文本
+      const percentEl = sliderRef.current?.parentElement?.querySelector('.slider-percent');
+      if (percentEl) {
+        percentEl.textContent = `${Math.round(newValue * 100)}%`;
       }
     });
   }, []);
   
   // 当外部value变化时同步，但避免循环更新
   useEffect(() => {
-    if (!isDragging && Math.abs(value - localValue) > 0.001) {
+    if (!isUpdatingRef.current && Math.abs(value - localValue) > 0.01) {
       setLocalValue(value);
       updateVisualStyle(value);
     }
-  }, [value, isDragging, localValue, updateVisualStyle]);
+  }, [value, localValue, updateVisualStyle]);
   
-  // 处理滑块变化 - 减少更新频率
+  // 处理滑块变化 - 实时更新视觉效果
   const handleChange = useCallback((event) => {
     const newValue = parseFloat(event.target.value);
     setLocalValue(newValue);
-    
-    // 立即更新视觉效果，但减少频率
     updateVisualStyle(newValue);
     
     // 防抖通知父组件
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
     }
     
-    debounceRef.current = setTimeout(() => {
+    isUpdatingRef.current = true;
+    timeoutRef.current = setTimeout(() => {
       onChange(newValue);
-    }, 300);
+      isUpdatingRef.current = false;
+    }, 100);
   }, [updateVisualStyle, onChange]);
-  
-  // 滑动开始
-  const handleChangeStart = useCallback(() => {
-    setIsDragging(true);
-  }, []);
   
   // 滑动结束时立即通知父组件
   const handleChangeEnd = useCallback(() => {
-    setIsDragging(false);
-    // 立即触发最终值
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
     }
+    isUpdatingRef.current = true;
     onChange(localValue);
+    setTimeout(() => {
+      isUpdatingRef.current = false;
+    }, 50);
   }, [onChange, localValue]);
   
-  // 清理定时器和RAF
+  // 清理定时器
   useEffect(() => {
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
     };
   }, []);
   
   return (
-    <div className="fast-slider">
+    <div ref={sliderRef} className="fast-slider">
       <SliderLabel theme={theme}>
         <span>透明</span>
-        <span>{Math.round(localValue * 100)}%</span>
+        <span className="slider-percent">{Math.round(localValue * 100)}%</span>
         <span>不透明</span>
       </SliderLabel>
       <Slider
-        ref={sliderRef}
         type="range"
         min={min}
         max={max}
         step={step}
         value={localValue}
         onChange={handleChange}
-        onMouseDown={handleChangeStart}
-        onTouchStart={handleChangeStart}
         onMouseUp={handleChangeEnd}
         onTouchEnd={handleChangeEnd}
         theme={theme}
@@ -579,35 +556,7 @@ const OptimizedBackgroundPreview = React.memo(({
   onUploadClick,
   children
 }) => {
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const imageRef = useRef(null);
-  
-  // 预加载图片 - 添加防抖
-  useEffect(() => {
-    if (imageUrl && !isCustom) {
-      const timer = setTimeout(() => {
-        const img = new Image();
-        img.onload = () => {
-          setImageLoaded(true);
-          setImageError(false);
-        };
-        img.onerror = () => {
-          setImageError(true);
-          setImageLoaded(false);
-        };
-        img.src = imageUrl;
-      }, 50); // 50ms防抖
-      
-      return () => clearTimeout(timer);
-    }
-  }, [imageUrl, isCustom]);
-  
-  // 重置状态当URL改变时
-  useEffect(() => {
-    setImageLoaded(false);
-    setImageError(false);
-  }, [imageUrl]);
+  // 处理背景预览组件逻辑，减少重渲染
 
   if (isCustom) {
     return (
@@ -619,14 +568,6 @@ const OptimizedBackgroundPreview = React.memo(({
       >
         {customImageUrl === 'loading' ? (
           <div>加载中...</div>
-        ) : customImageUrl ? (
-          <img 
-            ref={imageRef}
-            src={customImageUrl} 
-            alt="自定义背景" 
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            loading="lazy"
-          />
         ) : (
           !hideUploadButton && (
             <UploadButton 
@@ -650,42 +591,7 @@ const OptimizedBackgroundPreview = React.memo(({
       selected={selected}
       label={label}
       onClick={onClick}
-    >
-      {imageUrl && !imageError ? (
-        <img 
-          ref={imageRef}
-          src={imageUrl} 
-          alt={label}
-          loading="lazy"
-          style={{ 
-            width: '100%', 
-            height: '100%', 
-            objectFit: 'cover',
-            opacity: imageLoaded ? 1 : 0,
-            transition: 'opacity 0.3s ease'
-          }}
-        />
-      ) : (
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          height: '100%',
-          color: theme === 'dark' ? '#888' : '#666'
-        }}>
-          {imageError ? '加载失败' : label}
-        </div>
-      )}
-    </BackgroundPreview>
-  );
-}, (prevProps, nextProps) => {
-  // 自定义比较函数，只在关键属性变化时重渲染
-  return (
-    prevProps.imageUrl === nextProps.imageUrl &&
-    prevProps.theme === nextProps.theme &&
-    prevProps.selected === nextProps.selected &&
-    prevProps.customImageUrl === nextProps.customImageUrl &&
-    prevProps.isCustom === nextProps.isCustom
+    />
   );
 });
 
@@ -712,8 +618,8 @@ const Settings = React.memo(({
     return parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
   });
   
-  // macOS兼容性状态
-  const [isMacOSReady, setIsMacOSReady] = useState(!isMacOS());
+  // WebKit兼容性状态（支持macOS、iOS、Linux）
+  const [isWebKitReady, setIsWebKitReady] = useState(!isWebKit());
   
   const fileInputRef = useRef(null);
   const opacityUpdateTimeoutRef = useRef(null);
@@ -745,17 +651,9 @@ const Settings = React.memo(({
   // 优化初始化加载
   useEffect(() => {
     // 预加载默认背景图片（优先级低）
-    // 兼容性修复：requestIdleCallback在某些环境下不可用
-    if (typeof requestIdleCallback !== 'undefined') {
-      requestIdleCallback(() => {
-        preloadBackgrounds(DEFAULT_BACKGROUNDS);
-      });
-    } else {
-      // 降级到setTimeout
-      setTimeout(() => {
-        preloadBackgrounds(DEFAULT_BACKGROUNDS);
-      }, 100);
-    }
+    requestIdleCallback(() => {
+      preloadBackgrounds(DEFAULT_BACKGROUNDS);
+    });
     
     // 获取当前CSS变量值
     const computedStyle = getComputedStyle(document.documentElement);
@@ -770,83 +668,83 @@ const Settings = React.memo(({
     }
   }, []);
 
-  // 优化的macOS兼容性修复
+  // WebKit兼容性修复（支持macOS、iOS、Linux）
   useEffect(() => {
-    if (isMacOS()) {
-      console.log('Applying optimized macOS compatibility fixes for Settings component');
+    if (isWebKit()) {
+      console.log('Applying WebKit compatibility fixes for Settings component');
       
-      // 初始化macOS特定修复（使用优化后的配置）
-      const cleanup = initMacOSFixes({
-        autoRepaint: false, // 禁用自动重绘，减少频繁操作
-        repaintDelay: 200,
+      // 初始化WebKit特定修复（支持所有WebKit平台）
+      const cleanup = initWebKitFixes({
+        autoRepaint: true,
+        repaintDelay: 100,
         settingsPageFix: true
       });
       
-      // 单次延迟应用修复，减少多次DOM操作
+      // 延迟应用修复以确保DOM已完全渲染
       const timer = setTimeout(() => {
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
-          // 应用macOS特定修复
-          applyMacOSFixes(settingsContainer);
+          // 应用WebKit修复（支持所有WebKit平台）
+          applyWebKitFixes(settingsContainer);
+          
+          // 如果是macOS，应用额外的macOS特定修复
+          if (isMacOS()) {
+            applyMacOSFixes(settingsContainer);
+          }
           
           // 确保容器可见性
           settingsContainer.style.visibility = 'visible';
           settingsContainer.style.opacity = '1';
           
-          // 只对真正有问题的子元素进行修复
-          const childElements = settingsContainer.querySelectorAll('*');
-          let problematicElements = [];
+          // 强制重绘
+          forceRepaint(settingsContainer);
           
+          // 修复所有子元素
+          const childElements = settingsContainer.querySelectorAll('*');
           childElements.forEach(child => {
-            if (child.offsetHeight === 0 || child.offsetWidth === 0 ||
-                getComputedStyle(child).visibility === 'hidden' ||
-                getComputedStyle(child).opacity === '0') {
-              problematicElements.push(child);
+            if (child.offsetHeight === 0 || child.offsetWidth === 0) {
+              applyWebKitFixes(child);
+              if (isMacOS()) {
+                applyMacOSFixes(child);
+              }
+              forceRepaint(child);
             }
           });
           
-          // 批量处理有问题的元素
-          if (problematicElements.length > 0) {
-            problematicElements.forEach(child => {
-              applyMacOSFixes(child);
-            });
-            // 只在有问题的元素存在时才进行重绘
-            forceRepaint(settingsContainer);
-          }
-          
-          // 标记macOS准备完成
-          setIsMacOSReady(true);
-        } else {
-          // 如果容器不存在，直接标记为准备完成
-          setIsMacOSReady(true);
+          // 标记WebKit准备完成
+          setIsWebKitReady(true);
         }
-      }, 200); // 减少延迟时间
+      }, 150);
+      
+      // 额外的延迟修复，确保所有组件都已渲染
+      const secondTimer = setTimeout(() => {
+        const settingsContainer = document.querySelector('[data-settings-container]');
+        if (settingsContainer) {
+          forceRepaint(settingsContainer);
+          // 确保准备状态已设置
+          setIsWebKitReady(true);
+        }
+      }, 500);
       
       return () => {
         clearTimeout(timer);
+        clearTimeout(secondTimer);
         if (cleanup) cleanup();
       };
-    } else {
-      // 非macOS环境直接标记为准备完成
-      setIsMacOSReady(true);
     }
   }, []);
 
-  // 优化背景和主题变化时的透明度处理
+  // 当backgroundImage或theme改变时，确保透明度正确显示
   useEffect(() => {
-    // 添加防抖，避免频繁更新
-    const timeoutId = setTimeout(() => {
-      const savedOpacity = parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
-      if (Math.abs(savedOpacity - localOpacity) > 0.01) {
-        setLocalOpacity(savedOpacity);
-        setOpacity(savedOpacity);
-        // 同步更新CSS变量
-        document.documentElement.style.setProperty('--app-bg-opacity', savedOpacity);
-      }
-    }, 100); // 100ms防抖
-    
-    return () => clearTimeout(timeoutId);
-  }, [backgroundImage, theme]); // 移除localOpacity依赖，避免循环更新
+    // 这里我们只需要更新本地UI状态
+    const savedOpacity = parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
+    if (Math.abs(savedOpacity - localOpacity) > 0.01) {
+      setLocalOpacity(savedOpacity);
+      setOpacity(savedOpacity);
+      // 同步更新CSS变量
+      document.documentElement.style.setProperty('--app-bg-opacity', savedOpacity);
+    }
+  }, [backgroundImage, theme, localOpacity]);
 
   // 优化文件上传处理
   const handleFileChange = useCallback((e) => {
@@ -933,16 +831,8 @@ const Settings = React.memo(({
     reader.readAsDataURL(file);
   }, [opacity, onBackgroundImageChange]);
 
-  // 清理定时器和优化初始化
+  // 清理定时器
   useEffect(() => {
-    // 初始化时获取保存的透明度值
-    const savedOpacity = parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
-    if (Math.abs(savedOpacity - localOpacity) > 0.01) {
-      setLocalOpacity(savedOpacity);
-      setOpacity(savedOpacity);
-      document.documentElement.style.setProperty('--app-bg-opacity', savedOpacity);
-    }
-    
     return () => {
       if (opacityUpdateTimeoutRef.current) {
         clearTimeout(opacityUpdateTimeoutRef.current);
@@ -1033,14 +923,10 @@ const Settings = React.memo(({
     }
   };
 
-  // 组件挂载时获取系统信息和下载目录 - 添加防抖
+  // 组件挂载时获取系统信息和下载目录
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchSystemInfo();
-      fetchDownloadDirectory();
-    }, 100);
-    
-    return () => clearTimeout(timer);
+    fetchSystemInfo();
+    fetchDownloadDirectory();
   }, []);
 
   const handleThemeChange = (value) => {
@@ -1081,16 +967,10 @@ const Settings = React.memo(({
     // 立即更新localStorage，避免状态不一致
     localStorage.setItem('backgroundOpacity', newOpacity.toString());
     
-    // 防抖处理背景更新
-    if (opacityUpdateTimeoutRef.current) {
-      clearTimeout(opacityUpdateTimeoutRef.current);
+    // 触发背景更新 - 确保传入正确的backgroundImage参数
+    if (typeof onBackgroundImageChange === 'function') {
+      onBackgroundImageChange(backgroundImage || '', newOpacity);
     }
-    
-    opacityUpdateTimeoutRef.current = setTimeout(() => {
-      if (typeof onBackgroundImageChange === 'function') {
-        onBackgroundImageChange(backgroundImage || '', newOpacity);
-      }
-    }, 300);
   }, [backgroundImage, onBackgroundImageChange, localOpacity]);
   
   // 默认背景图片列表
@@ -1101,48 +981,40 @@ const Settings = React.memo(({
     { id: 'bg3', url: 'https://cdn.pixabay.com/photo/2020/10/11/08/00/lighthouse-5645042_1280.png', label: '灯塔' },
   ];
   
-  // 使用useMemo优化渲染复杂组件 - 减少依赖项
-  const backgroundSelector = useMemo(() => {
-    const isCustomSelected = backgroundImage === customBgPreviewUrl && customBgPreviewUrl;
-    
-    return (
-      <BackgroundPreviewContainer>
-        {DEFAULT_BACKGROUNDS.map(bg => (
-          <OptimizedBackgroundPreview 
-            key={bg.id}
-            imageUrl={bg.url}
-            theme={theme}
-            selected={backgroundImage === bg.url}
-            label={bg.label}
-            onClick={() => handleBackgroundChange(bg.id, bg.url)}
-          />
-        ))}
-        <OptimizedBackgroundPreview
-          isCustom={true}
+  // 使用useMemo优化渲染复杂组件 - 移动到组件内部
+  const backgroundSelector = useMemo(() => (
+    <BackgroundPreviewContainer>
+      {DEFAULT_BACKGROUNDS.map(bg => (
+        <OptimizedBackgroundPreview 
+          key={bg.id}
+          imageUrl={bg.url}
           theme={theme}
-          customImageUrl={customBgPreviewUrl}
-          selected={isCustomSelected}
-          onClick={() => handleBackgroundChange('custom')}
-          onUploadClick={handleUploadClick}
-        >
-          <UploadInput 
-            ref={fileInputRef}
-            type="file" 
-            accept="image/*"
-            onChange={handleFileChange}
-          />
-        </OptimizedBackgroundPreview>
-      </BackgroundPreviewContainer>
-    );
-  }, [theme, backgroundImage, customBgPreviewUrl]);
+          selected={backgroundImage === bg.url}
+          label={bg.label}
+          onClick={() => handleBackgroundChange(bg.id, bg.url)}
+        />
+      ))}
+      <OptimizedBackgroundPreview
+        isCustom={true}
+        theme={theme}
+        customImageUrl={customBgPreviewUrl}
+        selected={backgroundImage === customBgPreviewUrl && customBgPreviewUrl}
+        onClick={() => handleBackgroundChange('custom')}
+        onUploadClick={handleUploadClick}
+      >
+        <UploadInput 
+          ref={fileInputRef}
+          type="file" 
+          accept="image/*"
+          onChange={handleFileChange}
+        />
+      </OptimizedBackgroundPreview>
+    </BackgroundPreviewContainer>
+  ), [theme, backgroundImage, customBgPreviewUrl, handleBackgroundChange, handleFileChange, handleUploadClick]);
   
-  // 优化滑块渲染 - 减少依赖项和添加undefined检查
-  const opacitySlider = useMemo(() => {
-    if (!backgroundImage || backgroundImage === undefined) {
-      return null;
-    }
-    
-    return (
+  // 优化滑块渲染 - 添加undefined检查
+  const opacitySlider = useMemo(() => (
+    backgroundImage && backgroundImage !== undefined && (
       <SliderContainer>
         <OptionLabel theme={theme}>{t('settings.opacity')}</OptionLabel>
         <FastSlider
@@ -1154,8 +1026,8 @@ const Settings = React.memo(({
           theme={theme}
         />
       </SliderContainer>
-    );
-  }, [backgroundImage, localOpacity, theme, t]);
+    )
+  ), [backgroundImage, localOpacity, theme, handleOpacityChange, t]);
 
   // 为视图模式切换添加样式组件
   const ViewModeContainer = styled.div`
@@ -1239,13 +1111,13 @@ const Settings = React.memo(({
 
 
 
-  // 在macOS环境下，等待兼容性修复完成后再渲染
-  if (isMacOS() && !isMacOSReady) {
+  // 在WebKit环境下，等待兼容性修复完成后再渲染
+  if (isWebKit() && !isWebKitReady) {
     return (
       <SettingsContainer 
         theme={theme}
         data-settings-container
-        isMacOS={isMacOS()}
+        isWebKit={isWebKit()}
         style={{ 
           display: 'flex', 
           alignItems: 'center', 
@@ -1269,7 +1141,7 @@ const Settings = React.memo(({
     <SettingsContainer 
       theme={theme}
       data-settings-container
-      isMacOS={isMacOS()}
+      isWebKit={isWebKit()}
     >
       <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
       

@@ -1,10 +1,31 @@
 /**
- * WKWebView兼容性工具函数
- * 用于检测和修复WKWebView环境下的页面白屏和渲染问题
+ * WebKit兼容性工具函数
+ * 用于检测和修复WebKit环境下的页面白屏和渲染问题
+ * 支持平台：macOS (WKWebView)、iOS (WKWebView)、Linux (WebKitGTK)
+ * 基于Tauri官方文档：https://v2.tauri.org.cn/reference/webview-versions/#webkit-macos-ios--linux
  */
 
 /**
- * 检测是否为WKWebView环境
+ * 检测是否为WebKit环境（包括WKWebView和WebKitGTK）
+ * @returns {boolean} 是否为WebKit环境
+ */
+export const isWebKit = () => {
+  if (typeof window === 'undefined') return false;
+  
+  const userAgent = window.navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+  const isMacOS = /Macintosh|MacIntel|MacPPC|Mac68K/.test(userAgent);
+  const isLinux = /Linux/.test(userAgent);
+  const isWK = window.webkit && window.webkit.messageHandlers;
+  const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
+  const isWebKitGTK = isLinux && /WebKit/.test(userAgent);
+  
+  // 检测所有WebKit环境：WKWebView (iOS/macOS) 和 WebKitGTK (Linux)
+  return (isIOS || isMacOS) && (isWK || (isSafari && window.webkit)) || isWebKitGTK;
+};
+
+/**
+ * 检测是否为WKWebView环境（保持向后兼容）
  * @returns {boolean} 是否为WKWebView环境
  */
 export const isWKWebView = () => {
@@ -29,6 +50,28 @@ export const isMacOS = () => {
   
   const userAgent = window.navigator.userAgent;
   return /Macintosh|MacIntel|MacPPC|Mac68K/.test(userAgent);
+};
+
+/**
+ * 检测是否为Linux环境
+ * @returns {boolean} 是否为Linux环境
+ */
+export const isLinux = () => {
+  if (typeof window === 'undefined') return false;
+  
+  const userAgent = window.navigator.userAgent;
+  return /Linux/.test(userAgent) && !/Android/.test(userAgent);
+};
+
+/**
+ * 检测是否为WebKitGTK环境
+ * @returns {boolean} 是否为WebKitGTK环境
+ */
+export const isWebKitGTK = () => {
+  if (typeof window === 'undefined') return false;
+  
+  const userAgent = window.navigator.userAgent;
+  return isLinux() && /WebKit/.test(userAgent) && !/Chrome/.test(userAgent);
 };
 
 /**
@@ -72,6 +115,67 @@ export const getIOSVersion = () => {
 };
 
 /**
+ * 检测WebKitGTK版本
+ * @returns {string|null} WebKitGTK版本号，如果不是WebKitGTK则返回null
+ */
+export const getWebKitGTKVersion = () => {
+  if (typeof window === 'undefined' || !isWebKitGTK()) return null;
+  
+  const userAgent = window.navigator.userAgent;
+  // 尝试匹配WebKit版本号格式：WebKit/xxx.x.x
+  const match = userAgent.match(/WebKit\/(\d+\.\d+(?:\.\d+)?)/);
+  
+  if (match) {
+    return match[1];
+  }
+  
+  return null;
+};
+
+/**
+ * 检测Linux发行版信息
+ * @returns {Object|null} 包含发行版名称和版本的对象，如果不是Linux则返回null
+ */
+export const getLinuxDistribution = () => {
+  if (typeof window === 'undefined' || !isLinux()) return null;
+  
+  const userAgent = window.navigator.userAgent;
+  
+  // 检测常见的Linux发行版
+  if (/Ubuntu/.test(userAgent)) {
+    const match = userAgent.match(/Ubuntu\/(\d+\.\d+(?:\.\d+)?)/);
+    return { name: 'Ubuntu', version: match ? match[1] : null };
+  }
+  
+  if (/Debian/.test(userAgent)) {
+    return { name: 'Debian', version: null };
+  }
+  
+  if (/Fedora/.test(userAgent)) {
+    const match = userAgent.match(/Fedora\/(\d+)/);
+    return { name: 'Fedora', version: match ? match[1] : null };
+  }
+  
+  if (/CentOS/.test(userAgent)) {
+    return { name: 'CentOS', version: null };
+  }
+  
+  if (/RHEL/.test(userAgent)) {
+    return { name: 'RHEL', version: null };
+  }
+  
+  if (/SUSE/.test(userAgent)) {
+    return { name: 'SUSE', version: null };
+  }
+  
+  if (/Arch/.test(userAgent)) {
+    return { name: 'Arch', version: null };
+  }
+  
+  return { name: 'Linux', version: null };
+};
+
+/**
  * 强制重绘元素以解决WKWebView白屏问题
  * @param {HTMLElement|string} element - 要重绘的元素或选择器
  */
@@ -97,6 +201,67 @@ export const forceRepaint = (element) => {
   targetElement.style.display = 'none';
   targetElement.offsetHeight; // 触发重排
   targetElement.style.display = originalDisplay;
+};
+
+/**
+ * 应用Linux WebKitGTK特定的修复
+ * @param {HTMLElement} element - 要应用修复的元素
+ */
+export const applyLinuxWebKitGTKFixes = (element) => {
+  if (!isWebKitGTK() || !element) return;
+  
+  // Linux WebKitGTK特定的渲染修复
+  element.style.webkitTransform = 'translateZ(0)';
+  element.style.transform = 'translateZ(0)';
+  element.style.webkitBackfaceVisibility = 'hidden';
+  element.style.backfaceVisibility = 'hidden';
+  
+  // Linux特定的字体渲染优化
+  element.style.webkitFontSmoothing = 'antialiased';
+  element.style.mozOsxFontSmoothing = 'grayscale';
+  element.style.textRendering = 'optimizeLegibility';
+  
+  // 防止白屏的关键修复
+  element.style.contain = 'layout style';
+  element.style.willChange = 'auto';
+  
+  // WebKitGTK特定优化
+  const webkitVersion = getWebKitGTKVersion();
+  if (webkitVersion) {
+    const versionNumber = parseFloat(webkitVersion);
+    if (versionNumber >= 2.30) {
+      // WebKitGTK 2.30+的特殊处理
+      element.style.isolation = 'isolate';
+      element.style.overflowAnchor = 'none';
+    }
+  }
+  
+  // Linux发行版特定修复
+  const distro = getLinuxDistribution();
+  if (distro) {
+    switch (distro.name) {
+      case 'Ubuntu':
+      case 'Debian':
+        // Ubuntu/Debian特定修复
+        element.style.webkitTextSizeAdjust = '100%';
+        break;
+      case 'Fedora':
+      case 'RHEL':
+      case 'CentOS':
+        // Red Hat系列特定修复
+        element.style.webkitTapHighlightColor = 'transparent';
+        break;
+      case 'Arch':
+        // Arch Linux特定修复
+        element.style.webkitUserSelect = 'auto';
+        break;
+    }
+  }
+  
+  // 修复可能的层叠上下文问题
+  if (element.style.position === 'fixed' || element.style.position === 'absolute') {
+    element.style.zIndex = element.style.zIndex || '1';
+  }
 };
 
 /**
@@ -135,7 +300,45 @@ export const applyMacOSFixes = (element) => {
 };
 
 /**
- * 应用WKWebView兼容性修复
+ * 应用WebKit兼容性修复（支持所有WebKit平台）
+ * @param {HTMLElement} element - 要应用修复的元素
+ */
+export const applyWebKitFixes = (element) => {
+  if (!element) return;
+  
+  // 检查是否需要应用修复
+  const needsFix = isWebKit();
+  if (!needsFix) return;
+  
+  // 应用通用WebKit硬件加速
+  element.style.webkitTransform = 'translateZ(0)';
+  element.style.transform = 'translateZ(0)';
+  element.style.webkitBackfaceVisibility = 'hidden';
+  element.style.backfaceVisibility = 'hidden';
+  element.style.webkitPerspective = '1000';
+  element.style.perspective = '1000';
+  
+  // 优化渲染性能
+  element.style.willChange = 'transform, opacity';
+  element.style.contain = 'layout style paint';
+  
+  // iOS特定修复
+  const iosVersion = getIOSVersion();
+  if (iosVersion && iosVersion >= 13) {
+    // iOS 13+的特殊处理
+    element.style.isolation = 'isolate';
+  }
+  
+  // 平台特定修复
+  if (isMacOS()) {
+    applyMacOSFixes(element);
+  } else if (isWebKitGTK()) {
+    applyLinuxWebKitGTKFixes(element);
+  }
+};
+
+/**
+ * 应用WKWebView兼容性修复（保持向后兼容）
  * @param {HTMLElement} element - 要应用修复的元素
  */
 export const applyWKWebViewFixes = (element) => {
@@ -213,37 +416,27 @@ export const initMacOSFixes = (options = {}) => {
       settingsContainer.style.position = 'relative';
       settingsContainer.style.zIndex = '1';
       
-      // 优化重绘逻辑，减少不必要的操作
+      // 强制重绘
       if (autoRepaint) {
         setTimeout(() => forceRepaint(settingsContainer), repaintDelay);
       }
       
-      // 优化子元素修复，只处理有问题的元素
+      // 修复子元素
       const childElements = settingsContainer.querySelectorAll('*');
-      let problematicChildren = [];
-      
       childElements.forEach(child => {
-        // 只修复真正有问题的子元素
-        if (child.offsetHeight === 0 || child.offsetWidth === 0 || 
-            getComputedStyle(child).visibility === 'hidden' ||
-            getComputedStyle(child).opacity === '0') {
-          problematicChildren.push(child);
-        }
-      });
-      
-      // 批量处理有问题的子元素
-      if (problematicChildren.length > 0) {
-        problematicChildren.forEach(child => {
-          child.style.visibility = 'visible';
-          child.style.opacity = '1';
+        // 确保所有子元素都可见
+        child.style.visibility = 'visible';
+        child.style.opacity = '1';
+        
+        if (child.offsetHeight === 0 || child.offsetWidth === 0) {
           applyMacOSFixes(child);
           if (autoRepaint) {
             setTimeout(() => forceRepaint(child), repaintDelay + 50);
           }
-        });
-      }
+        }
+      });
       
-      // 减少额外渲染修复的频率
+      // 额外的渲染修复
       setTimeout(() => {
         if (settingsContainer.offsetHeight === 0) {
           console.warn('Settings container has zero height, applying emergency fixes');
@@ -251,7 +444,7 @@ export const initMacOSFixes = (options = {}) => {
           settingsContainer.style.minHeight = '100vh';
           forceRepaint(settingsContainer);
         }
-      }, repaintDelay + 200); // 增加延迟，减少检查频率
+      }, repaintDelay + 100);
     }
   };
   
@@ -260,58 +453,38 @@ export const initMacOSFixes = (options = {}) => {
     setTimeout(applySettingsPageFixes, 100);
   };
   
-  // 优化的DOM变化监听，添加防抖和减少触发频率
-  let debounceTimer = null;
-  let lastMutationTime = 0;
-  
-  const debouncedApplyFixes = () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      const now = Date.now();
-      if (now - lastMutationTime < 1000) return; // 至少间隔1秒
-      lastMutationTime = now;
-      applySettingsPageFixes();
-    }, 500); // 500ms防抖
-  };
-  
+  // 监听DOM变化，当Settings页面加载时应用修复
   const observer = new MutationObserver((mutations) => {
-    let shouldApplyFixes = false;
-    
     mutations.forEach((mutation) => {
       if (mutation.type === 'childList') {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === Node.ELEMENT_NODE) {
-            // 检查是否是Settings相关的元素
+            // 检查是否是Settings相关的元素 - 增加更多选择器
             if (node.matches && (node.matches('[data-settings-container]') ||
                                 node.matches('[data-component="settings"]') || 
                                 node.matches('.settings-container') ||
                                 node.matches('div[class*="Settings"]') ||
                                 node.matches('div[class*="SettingsContainer"]'))) {
               console.log('Settings element detected, applying fixes');
-              shouldApplyFixes = true;
+              setTimeout(applySettingsPageFixes, 50);
+              setTimeout(applySettingsPageFixes, 200);
             }
-            // 检查子元素（减少查询频率）
-            if (!shouldApplyFixes) {
-              const settingsElements = node.querySelectorAll('[data-settings-container], [data-component="settings"], .settings-container, div[class*="Settings"], div[class*="SettingsContainer"]');
-              if (settingsElements.length > 0) {
-                console.log('Settings child elements detected, applying fixes');
-                shouldApplyFixes = true;
-              }
+            // 检查子元素
+            const settingsElements = node.querySelectorAll('[data-settings-container], [data-component="settings"], .settings-container, div[class*="Settings"], div[class*="SettingsContainer"]');
+            if (settingsElements.length > 0) {
+              console.log('Settings child elements detected, applying fixes');
+              setTimeout(applySettingsPageFixes, 50);
+              setTimeout(applySettingsPageFixes, 200);
             }
           }
         });
       }
-      // 减少属性变化监听的触发
+      // 监听属性变化
       if (mutation.type === 'attributes' && mutation.target.matches && 
-          mutation.target.matches('[data-settings-container], [data-component="settings"], .settings-container, div[class*="Settings"], div[class*="SettingsContainer"]') &&
-          (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
-        shouldApplyFixes = true;
+          mutation.target.matches('[data-settings-container], [data-component="settings"], .settings-container, div[class*="Settings"], div[class*="SettingsContainer"]')) {
+        setTimeout(applySettingsPageFixes, 50);
       }
     });
-    
-    if (shouldApplyFixes) {
-      debouncedApplyFixes();
-    }
   });
   
   observer.observe(document.body, {
@@ -324,13 +497,8 @@ export const initMacOSFixes = (options = {}) => {
   // 立即应用修复
   applySettingsPageFixes();
   
-  // 优化的定期检查机制，减少频率并添加防抖
-  let lastCheckTime = 0;
+  // 定期检查机制，确保Settings组件持续正常显示
   const intervalCheck = setInterval(() => {
-    const now = Date.now();
-    if (now - lastCheckTime < 5000) return; // 至少间隔5秒
-    lastCheckTime = now;
-    
     const settingsContainer = document.querySelector('[data-settings-container]') ||
                              document.querySelector('[data-component="settings"]') || 
                              document.querySelector('.settings-container') ||
@@ -345,20 +513,150 @@ export const initMacOSFixes = (options = {}) => {
         applySettingsPageFixes();
       }
     }
-  }, 10000); // 每10秒检查一次，减少频率
+  }, 2000); // 每2秒检查一次
   
   // 返回清理函数
   return () => {
     observer.disconnect();
     clearInterval(intervalCheck);
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
+  };
+};
+
+/**
+ * 初始化Linux WebKitGTK特定的修复
+ * @param {Object} options - 配置选项
+ */
+export const initLinuxWebKitGTKFixes = (options = {}) => {
+  if (!isWebKitGTK()) return;
+  
+  const {
+    autoRepaint = true,
+    repaintDelay = 150
+  } = options;
+  
+  console.log('Initializing Linux WebKitGTK compatibility fixes');
+  
+  // Linux WebKitGTK特定的修复
+  const applyLinuxFixes = () => {
+    // 修复可能的字体渲染问题
+    document.body.style.textRendering = 'optimizeLegibility';
+    document.body.style.webkitFontSmoothing = 'antialiased';
+    
+    // 修复滚动性能
+    document.documentElement.style.scrollBehavior = 'smooth';
+    
+    // 应用WebKitGTK特定修复到关键元素
+    const criticalElements = document.querySelectorAll('body, #root, [data-app-container="true"]');
+    criticalElements.forEach(element => {
+      applyLinuxWebKitGTKFixes(element);
+      if (autoRepaint) {
+        setTimeout(() => forceRepaint(element), repaintDelay);
+      }
+    });
+  };
+  
+  // 监听DOM变化以应用修复
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === 'childList') {
+        mutation.addedNodes.forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            applyLinuxWebKitGTKFixes(node);
+          }
+        });
+      }
+    });
+  });
+  
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+  
+  // 立即应用修复
+  applyLinuxFixes();
+  
+  // 返回清理函数
+  return () => {
+    observer.disconnect();
+  };
+};
+
+/**
+ * 初始化WebKit兼容性修复（支持所有WebKit平台）
+ * @param {Object} options - 配置选项
+ * @param {boolean} options.autoRepaint - 是否自动重绘
+ * @param {number} options.repaintDelay - 重绘延迟时间（毫秒）
+ * @param {string[]} options.selectors - 需要修复的元素选择器数组
+ */
+export const initWebKitFixes = (options = {}) => {
+  const needsFix = isWebKit();
+  if (!needsFix) return;
+  
+  const {
+    autoRepaint = true,
+    repaintDelay = 100,
+    selectors = ['[data-sidebar="true"]', '#root', 'body', '[data-app-container="true"]']
+  } = options;
+  
+  console.log('Initializing WebKit compatibility fixes for all platforms');
+  
+  // 应用全局修复
+  const applyGlobalFixes = () => {
+    selectors.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach(element => {
+        applyWebKitFixes(element);
+        if (autoRepaint) {
+          setTimeout(() => forceRepaint(element), repaintDelay);
+        }
+      });
+    });
+  };
+  
+  // 立即应用修复
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyGlobalFixes);
+  } else {
+    applyGlobalFixes();
+  }
+  
+  // 初始化平台特定修复
+  let platformCleanup;
+  if (isMacOS()) {
+    platformCleanup = initMacOSFixes(options);
+  } else if (isWebKitGTK()) {
+    platformCleanup = initLinuxWebKitGTKFixes(options);
+  }
+  
+  // 监听页面可见性变化
+  const handleVisibilityChange = () => {
+    if (!document.hidden) {
+      setTimeout(applyGlobalFixes, 50);
+    }
+  };
+  
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  
+  // 监听窗口大小变化
+  const handleResize = () => {
+    setTimeout(applyGlobalFixes, 100);
+  };
+  
+  window.addEventListener('resize', handleResize);
+  
+  // 返回清理函数
+  return () => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.removeEventListener('resize', handleResize);
+    if (platformCleanup) {
+      platformCleanup();
     }
   };
 };
 
 /**
- * 初始化WKWebView兼容性修复
+ * 初始化WKWebView兼容性修复（保持向后兼容）
  * @param {Object} options - 配置选项
  * @param {boolean} options.autoRepaint - 是否自动重绘
  * @param {number} options.repaintDelay - 重绘延迟时间（毫秒）
@@ -451,7 +749,65 @@ export const getMacOSCSS = () => {
 };
 
 /**
- * 获取WKWebView专用CSS样式
+ * 获取Linux WebKitGTK专用CSS样式
+ * @returns {string} CSS样式字符串
+ */
+export const getLinuxWebKitGTKCSS = () => {
+  if (!isWebKitGTK()) return '';
+  
+  return `
+    /* Linux WebKitGTK兼容性修复 */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    contain: layout style;
+    will-change: auto;
+    overflow: visible;
+    min-height: 100vh;
+    scroll-behavior: smooth;
+    overscroll-behavior: none;
+  `;
+};
+
+/**
+ * 获取WebKit专用CSS样式（支持所有WebKit平台）
+ * @returns {string} CSS样式字符串
+ */
+export const getWebKitCSS = () => {
+  const needsFix = isWebKit();
+  if (!needsFix) return '';
+  
+  let css = `
+    /* WebKit兼容性修复（通用） */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-perspective: 1000;
+    perspective: 1000;
+    will-change: transform, opacity;
+    contain: layout style paint;
+    isolation: isolate;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  `;
+  
+  // 添加平台特定样式
+  if (isMacOS()) {
+    css += getMacOSCSS();
+  } else if (isWebKitGTK()) {
+    css += getLinuxWebKitGTKCSS();
+  }
+  
+  return css;
+};
+
+/**
+ * 获取WKWebView专用CSS样式（保持向后兼容）
  * @returns {string} CSS样式字符串
  */
 export const getWKWebViewCSS = () => {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { useTranslation } from 'react-i18next';
-import { isWKWebView, getWKWebViewCSS, applyWKWebViewFixes, forceRepaint, fixBackdropFilter } from '../utils/wkwebviewUtils';
+import { isWebKit, getWebKitCSS, applyWebKitFixes, forceRepaint, fixBackdropFilter } from '../utils/wkwebviewUtils';
 
 // 提取共用的透明度计算函数
 const getBackgroundColor = (props, defaultDark, defaultLight) => {
@@ -55,8 +55,8 @@ const SidebarContainer = styled.div`
   z-index: 5;
   will-change: transform, opacity;
   
-  /* WKWebView兼容性修复 */
-  ${getWKWebViewCSS()}
+  /* WebKit兼容性修复（支持所有WebKit平台） */
+  ${getWebKitCSS()}
 `;
 
 const StoreTitle = styled.h1`
@@ -213,7 +213,7 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
     const savedState = localStorage.getItem('sidebarCollapsed');
     return savedState ? JSON.parse(savedState) : defaultCollapsed;
   });
-  const [isWKWebViewEnv, setIsWKWebViewEnv] = useState(false);
+  const [isWebKitEnv, setIsWebKitEnv] = useState(false);
   
   useEffect(() => {
     // 当 collapsed 状态改变时保存到 localStorage
@@ -221,19 +221,19 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
   }, [collapsed]);
   
   useEffect(() => {
-    // WKWebView环境检测和初始化
-    const isWK = isWKWebView();
-    setIsWKWebViewEnv(isWK);
+    // WebKit环境检测和初始化（支持macOS、iOS、Linux）
+    const isWK = isWebKit();
+    setIsWebKitEnv(isWK);
     
     if (isWK) {
-      console.log('WKWebView environment detected, applying compatibility fixes');
+      console.log('WebKit environment detected, applying compatibility fixes');
       
       // 延迟应用修复，确保DOM已渲染
       const applyFixes = () => {
         const sidebar = document.querySelector('[data-sidebar="true"]');
         if (sidebar) {
-          // 应用WKWebView修复
-          applyWKWebViewFixes(sidebar);
+          // 应用WebKit修复（支持所有WebKit平台）
+          applyWebKitFixes(sidebar);
           // 修复backdrop-filter问题
           fixBackdropFilter(sidebar);
           // 强制重绘
@@ -403,7 +403,7 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
       hasBackgroundImage={hasBackgroundImage}
       backgroundOpacity={backgroundOpacity}
       data-sidebar="true"
-      data-wkwebview={isWKWebViewEnv}
+      data-webkit={isWebKitEnv}
     >
       <StoreTitle collapsed={collapsed} theme={theme}>OpenStore</StoreTitle>
       {collapseButton}

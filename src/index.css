@@ -22,7 +22,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   
-  /* WKWebView兼容性修复 */
+  /* WebKit兼容性修复（支持macOS、iOS、Linux） */
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
   -webkit-backface-visibility: hidden;
@@ -105,7 +105,7 @@ img {
   transition: opacity 0.2s;
 }
 
-/* WKWebView环境专用样式修复 */
+/* WebKit环境专用样式修复 */
 @supports (-webkit-overflow-scrolling: touch) {
   /* 检测到iOS WebKit环境时应用的样式 */
   body {
@@ -117,7 +117,7 @@ img {
   }
   
   #root {
-    /* 确保根元素在WKWebView中正确渲染 */
+    /* 确保根元素在WebKit中正确渲染 */
     -webkit-transform: translateZ(0);
     transform: translateZ(0);
     /* 修复可能的白屏问题 */
@@ -125,16 +125,16 @@ img {
     isolation: isolate;
   }
   
-  /* 修复WKWebView中的backdrop-filter问题 */
-  [data-wkwebview="true"] {
-    /* 在WKWebView环境下禁用可能有问题的效果 */
+  /* 修复WebKit中的backdrop-filter问题 */
+[data-webkit="true"] {
+/* 在WebKit环境下禁用可能有问题的效果 */
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     /* 使用替代的半透明效果 */
     background-color: rgba(42, 42, 45, 0.95) !important;
   }
   
-  /* 优化WKWebView中的动画性能 */
+  /* 优化WebKit中的动画性能 */
   * {
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
@@ -146,7 +146,7 @@ img {
 /* iOS设备特定修复 */
 @media screen and (-webkit-min-device-pixel-ratio: 1) {
   @supports (-webkit-appearance: none) {
-    /* iOS Safari/WKWebView特定样式 */
+    /* WebKit特定样式（iOS Safari/WKWebView/WebKitGTK） */
     body {
       /* 修复iOS下的渲染问题 */
       -webkit-text-size-adjust: 100%;

@@ -15,7 +15,7 @@ import NotificationSystem from './components/NotificationSystem';
 import ConfirmDialogContainer from './components/ConfirmDialog';
 import PromptDialogContainer from './components/PromptDialog';
 import Messages from './components/Messages';
-import { initWKWebViewFixes } from './utils/wkwebviewUtils';
+import { initWebKitFixes } from './utils/wkwebviewUtils';
 
 const AppContainer = styled.div`
   display: flex;
@@ -744,10 +744,10 @@ const App = () => {
     });
   }, []);
   
-  // WKWebView兼容性初始化
+  // WebKit兼容性初始化（支持macOS、iOS、Linux）
   useEffect(() => {
-    // 初始化WKWebView修复
-    const cleanup = initWKWebViewFixes({
+    // 初始化WebKit修复（支持所有WebKit平台）
+    const cleanup = initWebKitFixes({
       autoRepaint: true,
       repaintDelay: 100,
       selectors: ['[data-sidebar="true"]', '#root', 'body', '[data-app-container="true"]']
