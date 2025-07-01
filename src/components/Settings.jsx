@@ -624,28 +624,41 @@ const Settings = React.memo(({
   const fileInputRef = useRef(null);
   const opacityUpdateTimeoutRef = useRef(null);
   
-  // 主题相关CSS变量初始化
+  // 主题相关CSS变量初始化 - 优化为只在真正需要时更新
+  const themeVarsRef = useRef(null);
   useEffect(() => {
-    // 设置主题相关的CSS变量
-    if (theme === 'dark') {
-      document.documentElement.style.setProperty('--section-bg-color', '#333');
-      document.documentElement.style.setProperty('--shadow-color', 'rgba(0, 0, 0, 0.3)');
-      document.documentElement.style.setProperty('--input-bg-color', '#444');
-      document.documentElement.style.setProperty('--input-text-color', '#f5f5f7');
-      document.documentElement.style.setProperty('--input-hover-color', '#555');
-      document.documentElement.style.setProperty('--border-color', '#555');
-      document.documentElement.style.setProperty('--accent-color', '#4dabf7');
-      document.documentElement.style.setProperty('--accent-bg-color', 'rgba(77, 171, 247, 0.1)');
-    } else {
-      document.documentElement.style.setProperty('--section-bg-color', '#f5f5f7');
-      document.documentElement.style.setProperty('--shadow-color', 'rgba(0, 0, 0, 0.1)');
-      document.documentElement.style.setProperty('--input-bg-color', '#ffffff');
-      document.documentElement.style.setProperty('--input-text-color', '#1d1d1f');
-      document.documentElement.style.setProperty('--input-hover-color', '#e8e8ed');
-      document.documentElement.style.setProperty('--border-color', '#ced4da');
-      document.documentElement.style.setProperty('--accent-color', '#0066CC');
-      document.documentElement.style.setProperty('--accent-bg-color', 'rgba(0, 102, 204, 0.1)');
+    // 避免重复设置相同的主题变量
+    if (themeVarsRef.current === theme) {
+      return;
     }
+    
+    themeVarsRef.current = theme;
+    
+    // 批量设置CSS变量，减少DOM操作
+    const vars = theme === 'dark' ? {
+      '--section-bg-color': '#333',
+      '--shadow-color': 'rgba(0, 0, 0, 0.3)',
+      '--input-bg-color': '#444',
+      '--input-text-color': '#f5f5f7',
+      '--input-hover-color': '#555',
+      '--border-color': '#555',
+      '--accent-color': '#4dabf7',
+      '--accent-bg-color': 'rgba(77, 171, 247, 0.1)'
+    } : {
+      '--section-bg-color': '#f5f5f7',
+      '--shadow-color': 'rgba(0, 0, 0, 0.1)',
+      '--input-bg-color': '#ffffff',
+      '--input-text-color': '#1d1d1f',
+      '--input-hover-color': '#e8e8ed',
+      '--border-color': '#ced4da',
+      '--accent-color': '#0066CC',
+      '--accent-bg-color': 'rgba(0, 102, 204, 0.1)'
+    };
+    
+    // 一次性设置所有变量
+    Object.entries(vars).forEach(([key, value]) => {
+      document.documentElement.style.setProperty(key, value);
+    });
   }, [theme]);
   
   // 优化初始化加载
@@ -676,61 +689,38 @@ const Settings = React.memo(({
     }
   }, []);
 
-  // macOS兼容性修复
+  // macOS兼容性修复 - 简化逻辑，减少频繁操作
   useEffect(() => {
     if (isMacOS()) {
-      console.log('Applying macOS compatibility fixes for Settings component');
+      console.log('Applying simplified macOS compatibility fixes');
       
-      // 初始化macOS特定修复
+      // 简化的macOS修复，只在必要时执行
       const cleanup = initMacOSFixes({
-        autoRepaint: false, // 禁用自动重绘，避免频繁刷新
-        repaintDelay: 300, // 增加重绘延迟，减少频率
-        settingsPageFix: true
+        autoRepaint: false, // 完全禁用自动重绘
+        repaintDelay: 1000, // 大幅增加延迟
+        settingsPageFix: false // 禁用设置页面特殊修复
       });
       
-      // 延迟应用修复以确保DOM已完全渲染
+      // 单次延迟修复，避免多次操作
       const timer = setTimeout(() => {
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
-          // 应用macOS特定修复
-          applyMacOSFixes(settingsContainer);
-          
-          // 确保容器可见性
+          // 最小化DOM操作
           settingsContainer.style.visibility = 'visible';
           settingsContainer.style.opacity = '1';
           
-          // 强制重绘
-          forceRepaint(settingsContainer);
-          
-          // 修复所有子元素
-          const childElements = settingsContainer.querySelectorAll('*');
-          childElements.forEach(child => {
-            if (child.offsetHeight === 0 || child.offsetWidth === 0) {
-              applyMacOSFixes(child);
-              forceRepaint(child);
-            }
-          });
-          
-          // 标记macOS准备完成
+          // 标记macOS准备完成，不进行额外的重绘操作
           setIsMacOSReady(true);
         }
-      }, 150);
-      
-      // 额外的延迟修复，确保所有组件都已渲染
-      const secondTimer = setTimeout(() => {
-        const settingsContainer = document.querySelector('[data-settings-container]');
-        if (settingsContainer) {
-          forceRepaint(settingsContainer);
-          // 确保准备状态已设置
-          setIsMacOSReady(true);
-        }
-      }, 500);
+      }, 300); // 减少延迟时间
       
       return () => {
         clearTimeout(timer);
-        clearTimeout(secondTimer);
         if (cleanup) cleanup();
       };
+    } else {
+      // 非macOS环境直接标记为准备完成
+      setIsMacOSReady(true);
     }
   }, []);
 
@@ -1112,31 +1102,8 @@ const Settings = React.memo(({
 
 
 
-  // 在macOS环境下，等待兼容性修复完成后再渲染
-  if (isMacOS() && !isMacOSReady) {
-    return (
-      <SettingsContainer 
-        theme={theme}
-        data-settings-container
-        isMacOS={isMacOS()}
-        style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          minHeight: '50vh',
-          opacity: 0.7
-        }}
-      >
-        <div style={{ 
-          textAlign: 'center',
-          color: 'var(--app-text-color)',
-          fontSize: '16px'
-        }}>
-          {t('settings.loading') || '正在加载设置...'}
-        </div>
-      </SettingsContainer>
-    );
-  }
+  // 移除macOS加载状态检查，直接渲染以避免频繁刷新
+  // macOS兼容性问题通过CSS和简化的useEffect处理
 
   return (
     <SettingsContainer 
