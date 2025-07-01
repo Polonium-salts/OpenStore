@@ -715,6 +715,9 @@ const Settings = React.memo(({
 
   // macOS兼容性修复 - 只在组件首次挂载时执行
   useEffect(() => {
+    // 立即设置为准备完成，避免阻塞滚动功能
+    setIsMacOSReady(true);
+    
     if (isMacOS()) {
       console.log('Applying macOS compatibility fixes for Settings component');
       
@@ -725,7 +728,7 @@ const Settings = React.memo(({
         settingsPageFix: true
       });
       
-      // 延迟应用修复以确保DOM已完全渲染
+      // 延迟应用修复以确保DOM已完全渲染，但不阻塞渲染
       const timer = setTimeout(() => {
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
@@ -747,9 +750,6 @@ const Settings = React.memo(({
               forceRepaint(child);
             }
           });
-          
-          // 标记macOS准备完成
-          setIsMacOSReady(true);
         }
       }, 150);
       
@@ -758,8 +758,6 @@ const Settings = React.memo(({
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
           forceRepaint(settingsContainer);
-          // 确保准备状态已设置
-          setIsMacOSReady(true);
         }
       }, 500);
       
@@ -768,9 +766,6 @@ const Settings = React.memo(({
         clearTimeout(secondTimer);
         if (cleanup) cleanup();
       };
-    } else {
-      // 非macOS环境直接标记为准备完成
-      setIsMacOSReady(true);
     }
   }, []); // 空依赖数组确保只在组件挂载时执行一次
 
