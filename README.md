@@ -141,3 +141,24 @@ MIT
 	workLoop (chunk-OY5C42Z6.js:197)
 	flushWork (chunk-OY5C42Z6.js:176)
 	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+
+
+
+
+
+
+
+ReferenceError: Can't find variable: requestIdleCallback
+@http://localhost:1420/src/components/Settings.jsx:642:8
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
+Suspense
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
+App@http://localhost:1420/src/App.jsx:490:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:27:6
+ErrorBoundary@http://localhost:1420/src/components/ErrorBoundary.jsx:61:10
