@@ -739,7 +739,7 @@ export const initWebKitFixes = (options = {}) => {
     }
   };
   
-  window.addEventListener('resize', handleResize);}]}}}
+  window.addEventListener('resize', handleResize);
   
   // 返回清理函数
   return () => {
