@@ -62,6 +62,24 @@ const ContentArea = styled.div`
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+  
+  /* macOS滚动修复 */
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  
+  /* 防止滚动锁定和回弹问题 */
+  @media (max-width: 768px) {
+    -webkit-overflow-scrolling: touch;
+    overflow-scrolling: touch;
+  }
+  
+  /* macOS WebView特定修复 */
+  @supports (-webkit-overflow-scrolling: touch) {
+    -webkit-overflow-scrolling: touch;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: scroll-position;
+  }
 `;
 
 const AppGrid = styled.div`

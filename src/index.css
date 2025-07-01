@@ -116,6 +116,19 @@ img {
     -webkit-overflow-scrolling: touch;
   }
   
+  /* macOS滚动修复 */
+  [style*="overflow-y: auto"],
+  [style*="overflow: auto"] {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+    /* 防止滚动锁定 */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: scroll-position;
+  }
+  
   #root {
     /* 确保根元素在WKWebView中正确渲染 */
     -webkit-transform: translateZ(0);

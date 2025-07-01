@@ -128,6 +128,14 @@ export const applyMacOSFixes = (element) => {
     element.style.webkitOverflowScrolling = 'touch';
   }
   
+  // 滚动修复
+  if (element.style.overflow === 'auto' || element.style.overflowY === 'auto') {
+    element.style.webkitOverflowScrolling = 'touch';
+    element.style.scrollBehavior = 'smooth';
+    element.style.touchAction = 'pan-y';
+    element.style.overscrollBehavior = 'contain';
+  }
+  
   // 修复可能的层叠上下文问题
   if (element.style.position === 'fixed' || element.style.position === 'absolute') {
     element.style.zIndex = element.style.zIndex || '1';

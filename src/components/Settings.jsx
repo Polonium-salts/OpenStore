@@ -36,6 +36,12 @@ const SettingsContainer = styled.div`
     z-index: 1;
     isolation: isolate;
     
+    /* 滚动修复 */
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+    
     /* 确保所有子元素都可见 */
     * {
       visibility: visible !important;
@@ -695,6 +701,18 @@ const Settings = React.memo(({
           
           // 强制重绘
           forceRepaint(settingsContainer);
+          
+          // 修复滚动容器
+          const scrollContainer = settingsContainer.closest('[style*="overflow-y: auto"]') || 
+                                 settingsContainer.closest('[style*="overflow: auto"]') ||
+                                 document.querySelector('[style*="overflow-y: auto"]');
+          if (scrollContainer) {
+            scrollContainer.style.webkitOverflowScrolling = 'touch';
+            scrollContainer.style.scrollBehavior = 'smooth';
+            scrollContainer.style.touchAction = 'pan-y';
+            scrollContainer.style.overscrollBehavior = 'contain';
+            applyMacOSFixes(scrollContainer);
+          }
           
           // 修复所有子元素
           const childElements = settingsContainer.querySelectorAll('*');
