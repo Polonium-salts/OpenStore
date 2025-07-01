@@ -386,7 +386,60 @@ export const initMacOSFixes = (options = {}) => {
     settingsPageFix = true
   } = options;
   
-  console.log('Initializing macOS compatibility fixes');
+  console.log('Initializing macOS compatibility fixes with enhanced white screen prevention');
+  
+  // 增强的macOS白屏修复
+  const applyMacOSWhiteScreenFix = () => {
+    // 强制设置根元素样式
+    const root = document.getElementById('root');
+    if (root) {
+      // 防止白屏的关键样式
+      root.style.minHeight = '100vh';
+      root.style.visibility = 'visible !important';
+      root.style.opacity = '1 !important';
+      root.style.display = 'block';
+      root.style.position = 'relative';
+      root.style.zIndex = '1';
+      root.style.isolation = 'isolate';
+      
+      // 应用macOS特定修复
+      applyMacOSFixes(root);
+      
+      // 多次重绘确保渲染
+      if (autoRepaint) {
+        setTimeout(() => forceRepaint(root), repaintDelay);
+        setTimeout(() => forceRepaint(root), repaintDelay * 2);
+        setTimeout(() => forceRepaint(root), repaintDelay * 4);
+      }
+    }
+    
+    // 修复body元素
+    document.body.style.visibility = 'visible !important';
+    document.body.style.opacity = '1 !important';
+    document.body.style.minHeight = '100vh';
+    document.body.style.overflow = 'visible';
+    applyMacOSFixes(document.body);
+    
+    // 修复html元素
+    document.documentElement.style.visibility = 'visible !important';
+    document.documentElement.style.opacity = '1 !important';
+    document.documentElement.style.minHeight = '100vh';
+    
+    if (autoRepaint) {
+      setTimeout(() => forceRepaint(document.body), repaintDelay);
+      setTimeout(() => forceRepaint(document.documentElement), repaintDelay);
+    }
+    
+    // 强制触发重排和重绘
+    const forceReflow = () => {
+      document.body.offsetHeight; // 触发重排
+      if (root) root.offsetHeight;
+    };
+    
+    setTimeout(forceReflow, 50);
+    setTimeout(forceReflow, 150);
+    setTimeout(forceReflow, 300);
+  };
   
   // macOS特定的Settings页面修复
   const applySettingsPageFixes = () => {
@@ -400,33 +453,35 @@ export const initMacOSFixes = (options = {}) => {
                              document.querySelector('div[class*="SettingsContainer"]');
     
     if (settingsContainer) {
-      console.log('Applying Settings page fixes for macOS');
+      console.log('Applying enhanced Settings page fixes for macOS');
       
       // 应用macOS特定修复
       applyMacOSFixes(settingsContainer);
       
-      // 修复可能的渲染问题
+      // 增强的渲染修复
       settingsContainer.style.minHeight = '100vh';
       settingsContainer.style.overflow = 'visible';
-      settingsContainer.style.visibility = 'visible';
-      settingsContainer.style.opacity = '1';
+      settingsContainer.style.visibility = 'visible !important';
+      settingsContainer.style.opacity = '1 !important';
       settingsContainer.style.display = 'flex';
-      
-      // 确保层叠上下文正确
       settingsContainer.style.position = 'relative';
       settingsContainer.style.zIndex = '1';
+      settingsContainer.style.isolation = 'isolate';
+      settingsContainer.style.contain = 'layout style';
       
-      // 强制重绘
+      // 强制重绘多次
       if (autoRepaint) {
         setTimeout(() => forceRepaint(settingsContainer), repaintDelay);
+        setTimeout(() => forceRepaint(settingsContainer), repaintDelay * 2);
+        setTimeout(() => forceRepaint(settingsContainer), repaintDelay * 4);
       }
       
       // 修复子元素
       const childElements = settingsContainer.querySelectorAll('*');
       childElements.forEach(child => {
         // 确保所有子元素都可见
-        child.style.visibility = 'visible';
-        child.style.opacity = '1';
+        child.style.visibility = 'visible !important';
+        child.style.opacity = '1 !important';
         
         if (child.offsetHeight === 0 || child.offsetWidth === 0) {
           applyMacOSFixes(child);
@@ -436,15 +491,32 @@ export const initMacOSFixes = (options = {}) => {
         }
       });
       
-      // 额外的渲染修复
+      // 额外的渲染修复和检查
       setTimeout(() => {
         if (settingsContainer.offsetHeight === 0) {
           console.warn('Settings container has zero height, applying emergency fixes');
           settingsContainer.style.height = 'auto';
           settingsContainer.style.minHeight = '100vh';
+          settingsContainer.style.display = 'flex';
+          settingsContainer.style.flexDirection = 'column';
           forceRepaint(settingsContainer);
+          
+          // 强制触发重排
+          settingsContainer.offsetHeight;
+          document.body.offsetHeight;
         }
       }, repaintDelay + 100);
+      
+      // 延迟检查，确保持续可见
+      setTimeout(() => {
+        const computedStyle = getComputedStyle(settingsContainer);
+        if (computedStyle.visibility === 'hidden' || computedStyle.opacity === '0') {
+          console.warn('Settings container still hidden, applying final fixes');
+          settingsContainer.style.visibility = 'visible !important';
+          settingsContainer.style.opacity = '1 !important';
+          forceRepaint(settingsContainer);
+        }
+      }, repaintDelay + 300);
     }
   };
   
@@ -494,7 +566,10 @@ export const initMacOSFixes = (options = {}) => {
     attributeFilter: ['style', 'class']
   });
   
-  // 立即应用修复
+  // 立即应用白屏修复
+  applyMacOSWhiteScreenFix();
+  
+  // 立即应用Settings页面修复
   applySettingsPageFixes();
   
   // 定期检查机制，确保Settings组件持续正常显示

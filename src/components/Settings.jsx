@@ -651,9 +651,17 @@ const Settings = React.memo(({
   // 优化初始化加载
   useEffect(() => {
     // 预加载默认背景图片（优先级低）
-    requestIdleCallback(() => {
-      preloadBackgrounds(DEFAULT_BACKGROUNDS);
-    });
+    // 兼容性处理：某些WebKit环境不支持requestIdleCallback
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(() => {
+        preloadBackgrounds(DEFAULT_BACKGROUNDS);
+      });
+    } else {
+      // fallback: 使用setTimeout延迟执行
+      setTimeout(() => {
+        preloadBackgrounds(DEFAULT_BACKGROUNDS);
+      }, 100);
+    }
     
     // 获取当前CSS变量值
     const computedStyle = getComputedStyle(document.documentElement);
@@ -671,7 +679,7 @@ const Settings = React.memo(({
   // WebKit兼容性修复（支持macOS、iOS、Linux）
   useEffect(() => {
     if (isWebKit()) {
-      console.log('Applying WebKit compatibility fixes for Settings component');
+      console.log('Applying enhanced WebKit compatibility fixes for Settings component');
       
       // 初始化WebKit特定修复（支持所有WebKit平台）
       const cleanup = initWebKitFixes({
@@ -680,10 +688,19 @@ const Settings = React.memo(({
         settingsPageFix: true
       });
       
-      // 延迟应用修复以确保DOM已完全渲染
-      const timer = setTimeout(() => {
+      // 立即应用基础修复
+      const applyImmediateFixes = () => {
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
+          // 防止白屏的关键样式
+          settingsContainer.style.visibility = 'visible !important';
+          settingsContainer.style.opacity = '1 !important';
+          settingsContainer.style.display = 'flex';
+          settingsContainer.style.minHeight = '100vh';
+          settingsContainer.style.position = 'relative';
+          settingsContainer.style.zIndex = '1';
+          settingsContainer.style.isolation = 'isolate';
+          
           // 应用WebKit修复（支持所有WebKit平台）
           applyWebKitFixes(settingsContainer);
           
@@ -692,16 +709,28 @@ const Settings = React.memo(({
             applyMacOSFixes(settingsContainer);
           }
           
-          // 确保容器可见性
-          settingsContainer.style.visibility = 'visible';
-          settingsContainer.style.opacity = '1';
-          
           // 强制重绘
           forceRepaint(settingsContainer);
+        }
+      };
+      
+      // 立即应用修复
+      applyImmediateFixes();
+      
+      // 延迟应用修复以确保DOM已完全渲染
+      const timer = setTimeout(() => {
+        const settingsContainer = document.querySelector('[data-settings-container]');
+        if (settingsContainer) {
+          // 再次确保可见性
+          settingsContainer.style.visibility = 'visible !important';
+          settingsContainer.style.opacity = '1 !important';
           
           // 修复所有子元素
           const childElements = settingsContainer.querySelectorAll('*');
           childElements.forEach(child => {
+            child.style.visibility = 'visible !important';
+            child.style.opacity = '1 !important';
+            
             if (child.offsetHeight === 0 || child.offsetWidth === 0) {
               applyWebKitFixes(child);
               if (isMacOS()) {
@@ -710,6 +739,11 @@ const Settings = React.memo(({
               forceRepaint(child);
             }
           });
+          
+          // 多次重绘确保渲染
+          forceRepaint(settingsContainer);
+          setTimeout(() => forceRepaint(settingsContainer), 100);
+          setTimeout(() => forceRepaint(settingsContainer), 200);
           
           // 标记WebKit准备完成
           setIsWebKitReady(true);
@@ -720,17 +754,49 @@ const Settings = React.memo(({
       const secondTimer = setTimeout(() => {
         const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
-          forceRepaint(settingsContainer);
+          // 最终检查和修复
+          const computedStyle = getComputedStyle(settingsContainer);
+          if (computedStyle.visibility === 'hidden' || computedStyle.opacity === '0' || settingsContainer.offsetHeight === 0) {
+            console.warn('Settings container still has visibility issues, applying emergency fixes');
+            settingsContainer.style.visibility = 'visible !important';
+            settingsContainer.style.opacity = '1 !important';
+            settingsContainer.style.display = 'flex !important';
+            settingsContainer.style.minHeight = '100vh';
+            forceRepaint(settingsContainer);
+            
+            // 强制触发重排
+            settingsContainer.offsetHeight;
+            document.body.offsetHeight;
+          }
+          
           // 确保准备状态已设置
           setIsWebKitReady(true);
         }
       }, 500);
       
+      // 持续监控机制
+      const monitorInterval = setInterval(() => {
+        const settingsContainer = document.querySelector('[data-settings-container]');
+        if (settingsContainer) {
+          const computedStyle = getComputedStyle(settingsContainer);
+          if (computedStyle.visibility === 'hidden' || computedStyle.opacity === '0') {
+            console.warn('Settings container became hidden, reapplying fixes');
+            settingsContainer.style.visibility = 'visible !important';
+            settingsContainer.style.opacity = '1 !important';
+            forceRepaint(settingsContainer);
+          }
+        }
+      }, 1000);
+      
       return () => {
         clearTimeout(timer);
         clearTimeout(secondTimer);
+        clearInterval(monitorInterval);
         if (cleanup) cleanup();
       };
+    } else {
+      // 非WebKit环境也要确保准备状态
+      setIsWebKitReady(true);
     }
   }, []);
 
