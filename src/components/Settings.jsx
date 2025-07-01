@@ -9,14 +9,10 @@ import { isMacOS, applyMacOSFixes, forceRepaint, initMacOSFixes } from '../utils
 
 const SettingsContainer = styled.div`
   padding: 20px;
-  width: 100%;
-  max-width: 1000px;
-  margin: 0 auto;
+  height: 100%;
+  overflow-y: auto;
   color: var(--app-text-color);
   transition: color 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
   
   /* macOS特定修复 */
   ${props => props.isMacOS ? `
@@ -28,10 +24,8 @@ const SettingsContainer = styled.div`
     -moz-osx-font-smoothing: grayscale;
     contain: layout style;
     will-change: auto;
-    /* 修复滚动问题：允许内容滚动但保持兼容性 */
-    overflow: visible;
     -webkit-overflow-scrolling: touch;
-    min-height: 100vh;
+    scroll-behavior: smooth;
     visibility: visible !important;
     opacity: 1 !important;
     position: relative;
@@ -57,14 +51,16 @@ const SettingsContainer = styled.div`
       -webkit-transform: translateZ(0);
       transform: translateZ(0);
     }
-    
-    /* macOS滚动优化 */
-    @supports (-webkit-overflow-scrolling: touch) {
-      /* 确保触摸滚动在macOS上正常工作 */
-      -webkit-overflow-scrolling: touch;
-      scroll-behavior: smooth;
-    }
   ` : ''}
+`;
+
+const SettingsContent = styled.div`
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 `;
 
 const SettingsTitle = styled.h2`
@@ -1146,7 +1142,8 @@ const Settings = React.memo(({
       data-settings-container
       isMacOS={isMacOS()}
     >
-      <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
+      <SettingsContent>
+        <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
       
       <SettingsSection theme={theme}>
         <SectionTitle theme={theme}>{t('settings.appearance') || '外观设置'}</SectionTitle>
@@ -1398,6 +1395,7 @@ const Settings = React.memo(({
           </RefreshButton>
         </OptionGroup>
       </SettingsSection>
+      </SettingsContent>
     </SettingsContainer>
   );
 });
