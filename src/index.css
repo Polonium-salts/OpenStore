@@ -176,6 +176,64 @@ img {
       -webkit-transform: translateZ(0);
       transform: translateZ(0);
     }
+    
+    /* macOS滚动条交互修复 */
+    ::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+      /* 确保滚动条可见且可交互 */
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.05);
+      border-radius: 6px;
+      /* 增加点击区域 */
+      margin: 2px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 6px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+      /* 确保可以点击和拖拽 */
+      cursor: pointer;
+      min-height: 20px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 0, 0, 0.5);
+      background-clip: content-box;
+    }
+    
+    ::-webkit-scrollbar-thumb:active {
+      background: rgba(0, 0, 0, 0.7);
+      background-clip: content-box;
+    }
+    
+    /* 暗色主题下的滚动条 */
+    @media (prefers-color-scheme: dark) {
+      ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3);
+        background-clip: content-box;
+      }
+      
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.5);
+        background-clip: content-box;
+      }
+      
+      ::-webkit-scrollbar-thumb:active {
+        background: rgba(255, 255, 255, 0.7);
+        background-clip: content-box;
+      }
+    }
   }
 }
 

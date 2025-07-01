@@ -32,6 +32,44 @@ const SettingsContainer = styled.div`
     z-index: 1;
     isolation: isolate;
     
+    /* macOS滚动条交互修复 */
+    &::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.05);
+      border-radius: 6px;
+      margin: 2px;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 6px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+      cursor: pointer;
+      min-height: 20px;
+      
+      &:hover {
+        background: rgba(0, 0, 0, 0.5);
+        background-clip: content-box;
+      }
+      
+      &:active {
+        background: rgba(0, 0, 0, 0.7);
+        background-clip: content-box;
+      }
+    }
+    
+    /* 确保滚动区域可以接收事件 */
+    pointer-events: auto;
+    touch-action: pan-y;
+    
     /* 确保所有子元素都可见 */
     * {
       visibility: visible !important;
