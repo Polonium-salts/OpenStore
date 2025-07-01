@@ -268,17 +268,6 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
 
   const handleSelect = (category) => {
     onCategorySelect(category);
-    
-    // 如果选择的是设置页面且在macOS环境下，延迟应用修复
-    if (category === 'settings' && isWKWebView()) {
-      setTimeout(() => {
-        const settingsContainer = document.querySelector('[data-component="settings"]');
-        if (settingsContainer) {
-          applyWKWebViewFixes(settingsContainer);
-          forceRepaint(settingsContainer);
-        }
-      }, 200);
-    }
   };
   
   const toggleCollapse = () => {

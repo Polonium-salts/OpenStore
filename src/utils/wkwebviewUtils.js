@@ -17,8 +17,7 @@ export const isWKWebView = () => {
   const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
   
   // 更精确的WKWebView检测，包括macOS
-  // 在macOS环境下，即使不是严格的WKWebView，也可能需要兼容性修复
-  return (isIOS || isMacOS) && (isWK || (isSafari && window.webkit) || isMacOS);
+  return (isIOS || isMacOS) && (isWK || (isSafari && window.webkit));
 };
 
 /**
@@ -89,37 +88,15 @@ export const forceRepaint = (element) => {
   
   // 方法1: 强制重排
   const originalTransform = targetElement.style.transform;
-  targetElement.style.transform = 'translateZ(0.1px)';
+  targetElement.style.transform = 'translateZ(0)';
   targetElement.offsetHeight; // 触发重排
-  
-  // 恢复原始transform
-  setTimeout(() => {
-    targetElement.style.transform = originalTransform || 'translateZ(0)';
-  }, 10);
-  
-  // 针对设置页面的特殊重绘处理
-  if (targetElement.hasAttribute('data-component') && targetElement.getAttribute('data-component') === 'settings') {
-    // 强制重新计算所有子元素
-    const children = targetElement.querySelectorAll('*');
-    children.forEach(child => {
-      child.offsetHeight;
-    });
-    
-    // 延迟再次重绘确保渲染完成
-    setTimeout(() => {
-      targetElement.style.opacity = '0.99';
-      targetElement.offsetHeight;
-      targetElement.style.opacity = '1';
-    }, 50);
-  }
+  targetElement.style.transform = originalTransform;
   
   // 方法2: 临时修改display属性
-  if (targetElement.style.opacity !== '0') {
-    const originalDisplay = targetElement.style.display;
-    targetElement.style.display = 'none';
-    targetElement.offsetHeight; // 触发重排
-    targetElement.style.display = originalDisplay || 'flex';
-  }
+  const originalDisplay = targetElement.style.display;
+  targetElement.style.display = 'none';
+  targetElement.offsetHeight; // 触发重排
+  targetElement.style.display = originalDisplay;
 };
 
 /**
@@ -143,22 +120,6 @@ export const applyMacOSFixes = (element) => {
   element.style.contain = 'layout style';
   element.style.willChange = 'auto';
   
-  // 确保正确的显示属性
-  if (element.style.display === '' || element.style.display === 'none') {
-    element.style.display = 'flex';
-    element.style.flexDirection = 'column';
-  }
-  
-  // 设置最小高度以防止白屏
-  if (!element.style.minHeight) {
-    element.style.minHeight = '100vh';
-  }
-  
-  // 修复overflow问题
-  if (element.style.overflow === 'hidden') {
-    element.style.overflow = 'visible';
-  }
-  
   // macOS版本特定修复
   const macVersion = getMacOSVersion();
   if (macVersion && macVersion >= 10.15) {
@@ -170,17 +131,6 @@ export const applyMacOSFixes = (element) => {
   // 修复可能的层叠上下文问题
   if (element.style.position === 'fixed' || element.style.position === 'absolute') {
     element.style.zIndex = element.style.zIndex || '1';
-  }
-  
-  // 针对设置页面的特殊修复
-  if (element.hasAttribute('data-component') && element.getAttribute('data-component') === 'settings') {
-    element.style.isolation = 'isolate';
-    element.style.contain = 'layout style';
-    element.style.position = 'relative';
-    element.style.zIndex = '1';
-    
-    // 强制重新计算布局
-    element.offsetHeight;
   }
 };
 
@@ -239,18 +189,29 @@ export const initMacOSFixes = (options = {}) => {
   const applySettingsPageFixes = () => {
     if (!settingsPageFix) return;
     
-    // 查找Settings容器
-    const settingsContainer = document.querySelector('[data-component="settings"]') || 
+    // 查找Settings容器 - 增加更多选择器
+    const settingsContainer = document.querySelector('[data-settings-container]') ||
+                             document.querySelector('[data-component="settings"]') || 
                              document.querySelector('.settings-container') ||
-                             document.querySelector('div[class*="Settings"]');
+                             document.querySelector('div[class*="Settings"]') ||
+                             document.querySelector('div[class*="SettingsContainer"]');
     
     if (settingsContainer) {
+      console.log('Applying Settings page fixes for macOS');
+      
       // 应用macOS特定修复
       applyMacOSFixes(settingsContainer);
       
       // 修复可能的渲染问题
       settingsContainer.style.minHeight = '100vh';
       settingsContainer.style.overflow = 'visible';
+      settingsContainer.style.visibility = 'visible';
+      settingsContainer.style.opacity = '1';
+      settingsContainer.style.display = 'flex';
+      
+      // 确保层叠上下文正确
+      settingsContainer.style.position = 'relative';
+      settingsContainer.style.zIndex = '1';
       
       // 强制重绘
       if (autoRepaint) {
@@ -260,6 +221,10 @@ export const initMacOSFixes = (options = {}) => {
       // 修复子元素
       const childElements = settingsContainer.querySelectorAll('*');
       childElements.forEach(child => {
+        // 确保所有子元素都可见
+        child.style.visibility = 'visible';
+        child.style.opacity = '1';
+        
         if (child.offsetHeight === 0 || child.offsetWidth === 0) {
           applyMacOSFixes(child);
           if (autoRepaint) {
@@ -267,6 +232,16 @@ export const initMacOSFixes = (options = {}) => {
           }
         }
       });
+      
+      // 额外的渲染修复
+      setTimeout(() => {
+        if (settingsContainer.offsetHeight === 0) {
+          console.warn('Settings container has zero height, applying emergency fixes');
+          settingsContainer.style.height = 'auto';
+          settingsContainer.style.minHeight = '100vh';
+          forceRepaint(settingsContainer);
+        }
+      }, repaintDelay + 100);
     }
   };
   
@@ -275,35 +250,72 @@ export const initMacOSFixes = (options = {}) => {
     setTimeout(applySettingsPageFixes, 100);
   };
   
-  // 监听DOM变化
+  // 监听DOM变化，当Settings页面加载时应用修复
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
       if (mutation.type === 'childList') {
         mutation.addedNodes.forEach((node) => {
           if (node.nodeType === Node.ELEMENT_NODE) {
-            // 检查是否是Settings相关元素
-            if (node.matches && (node.matches('[data-component="settings"]') || 
+            // 检查是否是Settings相关的元素 - 增加更多选择器
+            if (node.matches && (node.matches('[data-settings-container]') ||
+                                node.matches('[data-component="settings"]') || 
                                 node.matches('.settings-container') ||
-                                node.matches('div[class*="Settings"]'))) {
+                                node.matches('div[class*="Settings"]') ||
+                                node.matches('div[class*="SettingsContainer"]'))) {
+              console.log('Settings element detected, applying fixes');
               setTimeout(applySettingsPageFixes, 50);
+              setTimeout(applySettingsPageFixes, 200);
+            }
+            // 检查子元素
+            const settingsElements = node.querySelectorAll('[data-settings-container], [data-component="settings"], .settings-container, div[class*="Settings"], div[class*="SettingsContainer"]');
+            if (settingsElements.length > 0) {
+              console.log('Settings child elements detected, applying fixes');
+              setTimeout(applySettingsPageFixes, 50);
+              setTimeout(applySettingsPageFixes, 200);
             }
           }
         });
+      }
+      // 监听属性变化
+      if (mutation.type === 'attributes' && mutation.target.matches && 
+          mutation.target.matches('[data-settings-container], [data-component="settings"], .settings-container, div[class*="Settings"], div[class*="SettingsContainer"]')) {
+        setTimeout(applySettingsPageFixes, 50);
       }
     });
   });
   
   observer.observe(document.body, {
     childList: true,
-    subtree: true
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['style', 'class']
   });
   
   // 立即应用修复
   applySettingsPageFixes();
   
+  // 定期检查机制，确保Settings组件持续正常显示
+  const intervalCheck = setInterval(() => {
+    const settingsContainer = document.querySelector('[data-settings-container]') ||
+                             document.querySelector('[data-component="settings"]') || 
+                             document.querySelector('.settings-container') ||
+                             document.querySelector('div[class*="Settings"]') ||
+                             document.querySelector('div[class*="SettingsContainer"]');
+    if (settingsContainer) {
+      // 检查容器是否可见
+      if (settingsContainer.offsetHeight === 0 || settingsContainer.offsetWidth === 0 || 
+          getComputedStyle(settingsContainer).visibility === 'hidden' ||
+          getComputedStyle(settingsContainer).opacity === '0') {
+        console.log('Settings container visibility issue detected, applying emergency fixes');
+        applySettingsPageFixes();
+      }
+    }
+  }, 2000); // 每2秒检查一次
+  
   // 返回清理函数
   return () => {
     observer.disconnect();
+    clearInterval(intervalCheck);
   };
 };
 

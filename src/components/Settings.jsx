@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import styled from 'styled-components';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 
 import { platform, arch, version, type as osType, locale } from '@tauri-apps/plugin-os';
-import { isMacOS, applyMacOSFixes, forceRepaint } from '../utils/wkwebviewUtils';
+import { isMacOS, applyMacOSFixes, forceRepaint, initMacOSFixes } from '../utils/wkwebviewUtils';
 
 const SettingsContainer = styled.div`
   padding: 20px;
@@ -17,7 +17,6 @@ const SettingsContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 20px;
-  min-height: 100vh;
   
   /* macOS特定修复 */
   ${props => props.isMacOS ? `
@@ -30,7 +29,32 @@ const SettingsContainer = styled.div`
     contain: layout style;
     will-change: auto;
     overflow: visible;
+    min-height: 100vh;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative;
+    z-index: 1;
     isolation: isolate;
+    
+    /* 确保所有子元素都可见 */
+    * {
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+    
+    /* 防止白屏的额外修复 */
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: transparent;
+      z-index: -1;
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+    }
   ` : ''}
 `;
 
@@ -594,6 +618,9 @@ const Settings = React.memo(({
     return parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
   });
   
+  // macOS兼容性状态
+  const [isMacOSReady, setIsMacOSReady] = useState(!isMacOS());
+  
   const fileInputRef = useRef(null);
   const opacityUpdateTimeoutRef = useRef(null);
   
@@ -644,59 +671,57 @@ const Settings = React.memo(({
   // macOS兼容性修复
   useEffect(() => {
     if (isMacOS()) {
-      console.log('Applying macOS compatibility fixes for Settings page');
+      console.log('Applying macOS compatibility fixes for Settings component');
       
-      // 延迟应用修复，确保DOM已渲染
-      const applyFixes = () => {
-        const settingsContainer = document.querySelector('[data-component="settings"]') || 
-                                 document.querySelector('[data-settings-container]') ||
-                                 document.querySelector('.settings-container');
-        
+      // 初始化macOS特定修复
+      const cleanup = initMacOSFixes({
+        autoRepaint: true,
+        repaintDelay: 100,
+        settingsPageFix: true
+      });
+      
+      // 延迟应用修复以确保DOM已完全渲染
+      const timer = setTimeout(() => {
+        const settingsContainer = document.querySelector('[data-settings-container]');
         if (settingsContainer) {
           // 应用macOS特定修复
           applyMacOSFixes(settingsContainer);
           
-          // 修复可能的渲染问题
-          settingsContainer.style.minHeight = '100vh';
-          settingsContainer.style.overflow = 'visible';
-          settingsContainer.style.display = 'flex';
-          settingsContainer.style.flexDirection = 'column';
+          // 确保容器可见性
+          settingsContainer.style.visibility = 'visible';
+          settingsContainer.style.opacity = '1';
           
           // 强制重绘
           forceRepaint(settingsContainer);
           
-          // 修复子元素
+          // 修复所有子元素
           const childElements = settingsContainer.querySelectorAll('*');
           childElements.forEach(child => {
             if (child.offsetHeight === 0 || child.offsetWidth === 0) {
               applyMacOSFixes(child);
-              setTimeout(() => forceRepaint(child), 50);
+              forceRepaint(child);
             }
           });
+          
+          // 标记macOS准备完成
+          setIsMacOSReady(true);
         }
-      };
+      }, 150);
       
-      // 立即应用修复
-      setTimeout(applyFixes, 100);
-      
-      // 监听页面可见性变化
-      const handleVisibilityChange = () => {
-        if (!document.hidden) {
-          setTimeout(applyFixes, 50);
+      // 额外的延迟修复，确保所有组件都已渲染
+      const secondTimer = setTimeout(() => {
+        const settingsContainer = document.querySelector('[data-settings-container]');
+        if (settingsContainer) {
+          forceRepaint(settingsContainer);
+          // 确保准备状态已设置
+          setIsMacOSReady(true);
         }
-      };
-      
-      // 监听窗口大小变化
-      const handleResize = () => {
-        setTimeout(applyFixes, 100);
-      };
-      
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      window.addEventListener('resize', handleResize);
+      }, 500);
       
       return () => {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('resize', handleResize);
+        clearTimeout(timer);
+        clearTimeout(secondTimer);
+        if (cleanup) cleanup();
       };
     }
   }, []);
@@ -1078,10 +1103,35 @@ const Settings = React.memo(({
 
 
 
+  // 在macOS环境下，等待兼容性修复完成后再渲染
+  if (isMacOS() && !isMacOSReady) {
+    return (
+      <SettingsContainer 
+        theme={theme}
+        data-settings-container
+        isMacOS={isMacOS()}
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          minHeight: '50vh',
+          opacity: 0.7
+        }}
+      >
+        <div style={{ 
+          textAlign: 'center',
+          color: 'var(--app-text-color)',
+          fontSize: '16px'
+        }}>
+          {t('settings.loading') || '正在加载设置...'}
+        </div>
+      </SettingsContainer>
+    );
+  }
+
   return (
     <SettingsContainer 
       theme={theme}
-      data-component="settings"
       data-settings-container
       isMacOS={isMacOS()}
     >
