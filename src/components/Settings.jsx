@@ -7,7 +7,9 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { platform, arch, version, type as osType, locale } from '@tauri-apps/plugin-os';
 import { isWebKit, isMacOS, applyWebKitFixes, applyMacOSFixes, forceRepaint, initWebKitFixes } from '../utils/wkwebviewUtils';
 
-const SettingsContainer = styled.div`
+const SettingsContainer = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'isWebKit'
+})`
   padding: 20px;
   width: 100%;
   max-width: 1000px;
