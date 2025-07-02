@@ -1212,11 +1212,7 @@ const Settings = React.memo(({
   }
 
   return (
-    <SettingsContainer 
-      theme={theme}
-      data-settings-container
-      isWebKit={isWebKit()}
-    >
+    <SettingsContainer>
       <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
       
       <SettingsSection theme={theme}>
