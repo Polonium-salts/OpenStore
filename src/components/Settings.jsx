@@ -141,7 +141,9 @@ const RadioGroup = styled.div`
   margin-top: 4px;
 `;
 
-const RadioLabel = styled.label`
+const RadioLabel = styled.label.withConfig({
+  shouldForwardProp: (prop) => prop !== 'selected'
+})`
   display: flex;
   align-items: center;
   cursor: pointer;
@@ -196,63 +198,6 @@ const SelectDropdown = styled.select`
   }
 `;
 
-// FilterTabs 和 FilterTab 组件样式
-const FilterTabs = styled.div`
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-  padding: 4px;
-  background-color: ${props => props.theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'};
-  border-radius: 12px;
-  overflow-x: auto;
-  
-  &::-webkit-scrollbar {
-    height: 4px;
-  }
-  
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  
-  &::-webkit-scrollbar-thumb {
-    background: ${props => props.theme === 'dark' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)'};
-    border-radius: 2px;
-  }
-`;
-
-const FilterTab = styled.button`
-  padding: 12px 20px;
-  border: none;
-  border-radius: 8px;
-  background-color: ${props => props.active 
-    ? (props.theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)')
-    : 'transparent'
-  };
-  color: ${props => props.active 
-    ? (props.theme === 'dark' ? '#ffffff' : '#000000')
-    : (props.theme === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)')
-  };
-  font-size: 14px;
-  font-weight: ${props => props.active ? '600' : '500'};
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  min-width: fit-content;
-  
-  &:hover {
-    background-color: ${props => props.active 
-      ? (props.theme === 'dark' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)')
-      : (props.theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)')
-    };
-    color: ${props => props.theme === 'dark' ? '#ffffff' : '#000000'};
-    transform: translateY(-1px);
-  }
-  
-  &:active {
-    transform: translateY(0);
-  }
-`;
-
 // 新增用于背景图片的组件
 const BackgroundPreviewContainer = styled.div`
   display: flex;
@@ -262,7 +207,9 @@ const BackgroundPreviewContainer = styled.div`
   margin-bottom: 20px;
 `;
 
-const BackgroundPreview = styled.div`
+const BackgroundPreview = styled.div.withConfig({
+  shouldForwardProp: (prop) => prop !== 'selected' && prop !== 'imageUrl' && prop !== 'label'
+})`
   width: 140px;
   height: 90px;
   border-radius: 12px;
@@ -297,7 +244,9 @@ const BackgroundPreview = styled.div`
   }
 `;
 
-const CustomBackgroundPreview = styled(BackgroundPreview)`
+const CustomBackgroundPreview = styled(BackgroundPreview).withConfig({
+  shouldForwardProp: (prop) => prop !== 'customImageUrl'
+})`
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -656,10 +605,10 @@ const OptimizedBackgroundPreview = React.memo(({
 const Settings = React.memo(({ 
   theme, 
   language,
-  viewMode,
+  viewMode = 'grid',
   onThemeChange,
-  onLanguageChange,
-  onViewModeChange,
+  onLanguageChange = () => {},
+  onViewModeChange = () => {},
   backgroundImage,
   onBackgroundImageChange
 }) => {
@@ -677,9 +626,6 @@ const Settings = React.memo(({
   
   // WebKit兼容性状态（支持macOS、iOS、Linux）
   const [isWebKitReady, setIsWebKitReady] = useState(!isWebKit());
-  
-  // 添加选项卡状态
-  const [activeTab, setActiveTab] = useState('appearance');
   
   const fileInputRef = useRef(null);
   const opacityUpdateTimeoutRef = useRef(null);
@@ -1271,307 +1217,260 @@ const Settings = React.memo(({
     >
       <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
       
-      {/* 添加选项卡导航 */}
-      <FilterTabs theme={theme}>
-        <FilterTab 
-          theme={theme}
-          active={activeTab === 'appearance'}
-          onClick={() => setActiveTab('appearance')}
-        >
-          {t('settings.appearance') || '外观设置'}
-        </FilterTab>
-        <FilterTab 
-          theme={theme}
-          active={activeTab === 'background'}
-          onClick={() => setActiveTab('background')}
-        >
-          {t('settings.background') || '背景设置'}
-        </FilterTab>
-        <FilterTab 
-          theme={theme}
-          active={activeTab === 'download'}
-          onClick={() => setActiveTab('download')}
-        >
-          {t('settings.downloadDirectory') || '下载设置'}
-        </FilterTab>
-        <FilterTab 
-          theme={theme}
-          active={activeTab === 'system'}
-          onClick={() => setActiveTab('system')}
-        >
-          {t('settings.systemInfo') || '系统信息'}
-        </FilterTab>
-      </FilterTabs>
-      
-      {/* 外观设置选项卡 */}
-      {activeTab === 'appearance' && (
-        <SettingsSection theme={theme}>
-          <SectionTitle theme={theme}>{t('settings.appearance') || '外观设置'}</SectionTitle>
-          
-          <OptionGroup>
-            <OptionLabel theme={theme}>{t('settings.theme') || '主题'}</OptionLabel>
-            <OptionDescription theme={theme}>
-              {t('settings.themeDesc') || '选择应用的显示主题，影响整体界面颜色'}
-            </OptionDescription>
-            <RadioGroup>
-              <RadioLabel theme={theme} selected={theme === 'light'}>
-                <RadioInput
-                  type="radio"
-                  name="theme"
-                  value="light"
-                  checked={theme === 'light'}
-                  onChange={(e) => handleThemeChange(e.target.value)}
-                />
-                {t('settings.light') || '浅色'}
-              </RadioLabel>
-              <RadioLabel theme={theme} selected={theme === 'dark'}>
-                <RadioInput
-                  type="radio"
-                  name="theme"
-                  value="dark"
-                  checked={theme === 'dark'}
-                  onChange={(e) => handleThemeChange(e.target.value)}
-                />
-                {t('settings.dark') || '深色'}
-              </RadioLabel>
-            </RadioGroup>
-          </OptionGroup>
-          
-          {/* 视图模式设置 */}
-          <OptionGroup>
-            <OptionLabel theme={theme}>{t('settings.viewMode') || '视图模式'}</OptionLabel>
-            <OptionDescription theme={theme}>
-              {t('settings.viewModeDesc') || '选择应用内容的显示方式'}
-            </OptionDescription>
-            <RadioGroup>
-              <ViewModeButton 
-                theme={theme}
-                selected={viewMode === 'grid'}
-                onClick={() => onViewModeChange('grid')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="14" width="7" height="7"></rect>
-                  <rect x="3" y="14" width="7" height="7"></rect>
-                </svg>
-              </ViewModeButton>
-              <ViewModeButton 
-                theme={theme}
-                selected={viewMode === 'list'}
-                onClick={() => onViewModeChange('list')}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="8" y1="6" x2="21" y2="6"></line>
-                  <line x1="8" y1="12" x2="21" y2="12"></line>
-                  <line x1="8" y1="18" x2="21" y2="18"></line>
-                  <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                  <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                  <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                </svg>
-              </ViewModeButton>
-            </RadioGroup>
-          </OptionGroup>
-          
-          <OptionGroup>
-            <OptionLabel theme={theme}>{t('settings.language') || '语言'}</OptionLabel>
-            <OptionDescription theme={theme}>
-              {t('settings.languageDesc') || '选择应用界面语言'}
-            </OptionDescription>
-            <SelectDropdown
-              theme={theme}
-              value={language}
-              onChange={(e) => onLanguageChange(e.target.value)}
-            >
-              <option value="zh-CN">简体中文</option>
-              <option value="en-US">English</option>
-            </SelectDropdown>
-          </OptionGroup>
-        </SettingsSection>
-      )}
-      
-      {/* 背景设置选项卡 */}
-      {activeTab === 'background' && (
-        <SettingsSection theme={theme}>
-          <SectionTitle theme={theme}>{t('settings.background') || '背景设置'}</SectionTitle>
-          
-          <OptionGroup>
-            <OptionLabel theme={theme}>{t('settings.background') || '背景图片'}</OptionLabel>
-            <OptionDescription theme={theme}>
-              {t('settings.backgroundDesc') || '选择或上传自定义背景图片'}
-            </OptionDescription>
-            {backgroundSelector}
-            
-            <InputGroup>
-              <Input 
-                type="text"
-                value={customBgUrl}
-                onChange={handleUrlChange}
-                placeholder={t('settings.backgroundURL') || '输入图片URL'}
-                theme={theme}
+      <SettingsSection theme={theme}>
+        <SectionTitle theme={theme}>{t('settings.appearance') || '外观设置'}</SectionTitle>
+        
+        <OptionGroup>
+          <OptionLabel theme={theme}>{t('settings.theme') || '主题'}</OptionLabel>
+          <OptionDescription theme={theme}>
+            {t('settings.themeDesc') || '选择应用的显示主题，影响整体界面颜色'}
+          </OptionDescription>
+          <RadioGroup>
+            <RadioLabel theme={theme} selected={theme === 'light'}>
+              <RadioInput
+                type="radio"
+                name="theme"
+                value="light"
+                checked={theme === 'light'}
+                onChange={(e) => handleThemeChange(e.target.value)}
               />
-              <Button onClick={handleLoadUrlImage}>{t('settings.load') || '加载'}</Button>
-            </InputGroup>
-            
-            {customBgPreviewUrl && (
-              <Button 
-                variant="danger" 
-                onClick={handleRemoveCustomBackground}
-                theme={theme}
-              >
-                {t('settings.removeCustomBackground') || '删除自定义背景'}
-              </Button>
-            )}
-            
-            {/* 透明度滑块 */}
-            {opacitySlider}
-          </OptionGroup>
-        </SettingsSection>
-      )}
+              {t('settings.light') || '浅色'}
+            </RadioLabel>
+            <RadioLabel theme={theme} selected={theme === 'dark'}>
+              <RadioInput
+                type="radio"
+                name="theme"
+                value="dark"
+                checked={theme === 'dark'}
+                onChange={(e) => handleThemeChange(e.target.value)}
+              />
+              {t('settings.dark') || '深色'}
+            </RadioLabel>
+          </RadioGroup>
+        </OptionGroup>
+        
+        {/* 视图模式设置 */}
+        <OptionGroup>
+          <OptionLabel theme={theme}>{t('settings.viewMode') || '视图模式'}</OptionLabel>
+          <OptionDescription theme={theme}>
+            {t('settings.viewModeDesc') || '选择应用内容的显示方式'}
+          </OptionDescription>
+          <RadioGroup>
+            <ViewModeButton 
+              theme={theme}
+              selected={viewMode === 'grid'}
+              onClick={() => onViewModeChange('grid')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </ViewModeButton>
+            <ViewModeButton 
+              theme={theme}
+              selected={viewMode === 'list'}
+              onClick={() => onViewModeChange('list')}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+            </ViewModeButton>
+          </RadioGroup>
+        </OptionGroup>
+        
+        <OptionGroup>
+          <OptionLabel theme={theme}>{t('settings.language') || '语言'}</OptionLabel>
+          <OptionDescription theme={theme}>
+            {t('settings.languageDesc') || '选择应用界面语言'}
+          </OptionDescription>
+          <SelectDropdown
+            theme={theme}
+            value={language}
+            onChange={(e) => onLanguageChange(e.target.value)}
+          >
+            <option value="zh-CN">简体中文</option>
+            <option value="en-US">English</option>
+          </SelectDropdown>
+        </OptionGroup>
+      </SettingsSection>
       
-      {/* 下载设置选项卡 */}
-      {activeTab === 'download' && (
-        <SettingsSection theme={theme}>
-          <SectionTitle theme={theme}>{t('settings.downloadDirectory') || '下载设置'}</SectionTitle>
+      <SettingsSection theme={theme}>
+        <SectionTitle theme={theme}>{t('settings.background') || '背景设置'}</SectionTitle>
+        
+        <OptionGroup>
+          <OptionLabel theme={theme}>{t('settings.background') || '背景图片'}</OptionLabel>
+          <OptionDescription theme={theme}>
+            {t('settings.backgroundDesc') || '选择或上传自定义背景图片'}
+          </OptionDescription>
+          {backgroundSelector}
           
-          <OptionGroup>
-            <OptionLabel theme={theme}>{t('settings.downloadPath') || '下载目录'}</OptionLabel>
-            <OptionDescription theme={theme}>
-              {t('settings.downloadPathDesc') || '设置应用下载文件的保存位置'}
-            </OptionDescription>
-            
-            <SystemInfoCard theme={theme} style={{ marginTop: '16px', marginBottom: '16px' }}>
-              <SystemInfoLabel theme={theme}>{t('settings.currentDownloadPath') || '当前下载目录'}</SystemInfoLabel>
-              <SystemInfoValue theme={theme}>{downloadDirectory}</SystemInfoValue>
+          <InputGroup>
+            <Input 
+              type="text"
+              value={customBgUrl}
+              onChange={handleUrlChange}
+              placeholder={t('settings.backgroundURL') || '输入图片URL'}
+              theme={theme}
+            />
+            <Button onClick={handleLoadUrlImage}>{t('settings.load') || '加载'}</Button>
+          </InputGroup>
+          
+          {customBgPreviewUrl && (
+            <Button 
+              variant="danger" 
+              onClick={handleRemoveCustomBackground}
+              theme={theme}
+            >
+              {t('settings.removeCustomBackground') || '删除自定义背景'}
+            </Button>
+          )}
+          
+          {/* 透明度滑块 */}
+          {opacitySlider}
+        </OptionGroup>
+      </SettingsSection>
+      
+      {/* Download Directory Section */}
+      <SettingsSection theme={theme}>
+        <SectionTitle theme={theme}>{t('settings.downloadDirectory') || '下载设置'}</SectionTitle>
+        
+        <OptionGroup>
+          <OptionLabel theme={theme}>{t('settings.downloadPath') || '下载目录'}</OptionLabel>
+          <OptionDescription theme={theme}>
+            {t('settings.downloadPathDesc') || '设置应用下载文件的保存位置'}
+          </OptionDescription>
+          
+          <SystemInfoCard theme={theme} style={{ marginTop: '16px', marginBottom: '16px' }}>
+            <SystemInfoLabel theme={theme}>{t('settings.currentDownloadPath') || '当前下载目录'}</SystemInfoLabel>
+            <SystemInfoValue theme={theme}>{downloadDirectory}</SystemInfoValue>
+          </SystemInfoCard>
+          
+          <Button 
+            onClick={selectDownloadDirectory}
+            disabled={isLoadingDownloadDir}
+            theme={theme}
+          >
+            {isLoadingDownloadDir ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                </svg>
+                {t('settings.loading') || '加载中...'}
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14,2 14,8 20,8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                  <polyline points="10,9 9,9 8,9"></polyline>
+                </svg>
+                {t('settings.selectDownloadDirectory') || '选择下载目录'}
+              </>
+            )}
+          </Button>
+          
+          <RefreshButton 
+            theme={theme}
+            onClick={fetchDownloadDirectory}
+            disabled={isLoadingDownloadDir}
+            style={{ marginTop: '12px' }}
+          >
+            {isLoadingDownloadDir ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                </svg>
+                {t('settings.refreshing') || '刷新中...'}
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                {t('settings.refreshDownloadDirectory') || '刷新下载目录'}
+              </>
+            )}
+          </RefreshButton>
+        </OptionGroup>
+      </SettingsSection>
+
+      {/* System Information Section */}
+      <SettingsSection theme={theme}>
+        <SectionTitle theme={theme}>{t('settings.systemInfo') || '系统信息'}</SectionTitle>
+        
+        <OptionGroup>
+          <OptionLabel theme={theme}>{t('settings.systemInfoDesc') || '当前系统详细信息'}</OptionLabel>
+          <OptionDescription theme={theme}>
+            {t('settings.systemInfoDescription') || '查看当前运行环境的系统信息，包括操作系统、架构、版本等详细信息'}
+          </OptionDescription>
+          
+          <SystemInfoGrid>
+            <SystemInfoCard theme={theme}>
+              <SystemInfoLabel theme={theme}>{t('settings.operatingSystem') || '操作系统'}</SystemInfoLabel>
+              <SystemInfoValue theme={theme}>{systemInfo.platform}</SystemInfoValue>
             </SystemInfoCard>
             
-            <Button 
-              onClick={selectDownloadDirectory}
-              disabled={isLoadingDownloadDir}
-              theme={theme}
-            >
-              {isLoadingDownloadDir ? (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                  </svg>
-                  {t('settings.loading') || '加载中...'}
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14,2 14,8 20,8"></polyline>
-                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                    <polyline points="10,9 9,9 8,9"></polyline>
-                  </svg>
-                  {t('settings.selectDownloadDirectory') || '选择下载目录'}
-                </>
-              )}
-            </Button>
+            <SystemInfoCard theme={theme}>
+              <SystemInfoLabel theme={theme}>{t('settings.systemArchitecture') || '系统架构'}</SystemInfoLabel>
+              <SystemInfoValue theme={theme}>{systemInfo.arch}</SystemInfoValue>
+            </SystemInfoCard>
             
-            <RefreshButton 
-              theme={theme}
-              onClick={fetchDownloadDirectory}
-              disabled={isLoadingDownloadDir}
-              style={{ marginTop: '12px' }}
-            >
-              {isLoadingDownloadDir ? (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                  </svg>
-                  {t('settings.refreshing') || '刷新中...'}
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="23 4 23 10 17 10"></polyline>
-                    <polyline points="1 20 1 14 7 14"></polyline>
-                    <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                  </svg>
-                  {t('settings.refreshDownloadDirectory') || '刷新下载目录'}
-                </>
-              )}
-            </RefreshButton>
-          </OptionGroup>
-        </SettingsSection>
-      )}
-
-      {/* 系统信息选项卡 */}
-      {activeTab === 'system' && (
-        <SettingsSection theme={theme}>
-          <SectionTitle theme={theme}>{t('settings.systemInfo') || '系统信息'}</SectionTitle>
+            <SystemInfoCard theme={theme}>
+              <SystemInfoLabel theme={theme}>{t('settings.systemVersion') || '系统版本'}</SystemInfoLabel>
+              <SystemInfoValue theme={theme}>{systemInfo.version}</SystemInfoValue>
+            </SystemInfoCard>
+            
+            <SystemInfoCard theme={theme}>
+              <SystemInfoLabel theme={theme}>{t('settings.systemType') || '系统类型'}</SystemInfoLabel>
+              <SystemInfoValue theme={theme}>{systemInfo.osType}</SystemInfoValue>
+            </SystemInfoCard>
+            
+            <SystemInfoCard theme={theme}>
+              <SystemInfoLabel theme={theme}>{t('settings.systemLanguage') || '系统语言'}</SystemInfoLabel>
+              <SystemInfoValue theme={theme}>{systemInfo.locale}</SystemInfoValue>
+            </SystemInfoCard>
+          </SystemInfoGrid>
           
-          <OptionGroup>
-            <OptionLabel theme={theme}>{t('settings.systemInfoDesc') || '当前系统详细信息'}</OptionLabel>
-            <OptionDescription theme={theme}>
-              {t('settings.systemInfoDescription') || '查看当前运行环境的系统信息，包括操作系统、架构、版本等详细信息'}
-            </OptionDescription>
-            
-            <SystemInfoGrid>
-              <SystemInfoCard theme={theme}>
-                <SystemInfoLabel theme={theme}>{t('settings.operatingSystem') || '操作系统'}</SystemInfoLabel>
-                <SystemInfoValue theme={theme}>{systemInfo.platform}</SystemInfoValue>
-              </SystemInfoCard>
-              
-              <SystemInfoCard theme={theme}>
-                <SystemInfoLabel theme={theme}>{t('settings.systemArchitecture') || '系统架构'}</SystemInfoLabel>
-                <SystemInfoValue theme={theme}>{systemInfo.arch}</SystemInfoValue>
-              </SystemInfoCard>
-              
-              <SystemInfoCard theme={theme}>
-                <SystemInfoLabel theme={theme}>{t('settings.systemVersion') || '系统版本'}</SystemInfoLabel>
-                <SystemInfoValue theme={theme}>{systemInfo.version}</SystemInfoValue>
-              </SystemInfoCard>
-              
-              <SystemInfoCard theme={theme}>
-                <SystemInfoLabel theme={theme}>{t('settings.systemType') || '系统类型'}</SystemInfoLabel>
-                <SystemInfoValue theme={theme}>{systemInfo.osType}</SystemInfoValue>
-              </SystemInfoCard>
-              
-              <SystemInfoCard theme={theme}>
-                <SystemInfoLabel theme={theme}>{t('settings.systemLanguage') || '系统语言'}</SystemInfoLabel>
-                <SystemInfoValue theme={theme}>{systemInfo.locale}</SystemInfoValue>
-              </SystemInfoCard>
-            </SystemInfoGrid>
-            
-            <RefreshButton 
-              theme={theme}
-              onClick={fetchSystemInfo}
-              disabled={isLoadingSystemInfo}
-            >
-              {isLoadingSystemInfo ? (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                  </svg>
-                  {t('settings.refreshing') || '刷新中...'}
-                </>
-              ) : (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="23 4 23 10 17 10"></polyline>
-                    <polyline points="1 20 1 14 7 14"></polyline>
-                    <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                  </svg>
-                  {t('settings.refresh') || '刷新系统信息'}
-                </>
-              )}
-            </RefreshButton>
-          </OptionGroup>
-        </SettingsSection>
-      )}
+          <RefreshButton 
+            theme={theme}
+            onClick={fetchSystemInfo}
+            disabled={isLoadingSystemInfo}
+          >
+            {isLoadingSystemInfo ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                </svg>
+                {t('settings.refreshing') || '刷新中...'}
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="23 4 23 10 17 10"></polyline>
+                  <polyline points="1 20 1 14 7 14"></polyline>
+                  <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                {t('settings.refresh') || '刷新系统信息'}
+              </>
+            )}
+          </RefreshButton>
+        </OptionGroup>
+      </SettingsSection>
     </SettingsContainer>
   );
 });
 
-// 添加默认值
-Settings.defaultProps = {
-  viewMode: 'grid',
-  onViewModeChange: () => {},
-  onLanguageChange: () => {}
-};
+
 
 export default Settings;

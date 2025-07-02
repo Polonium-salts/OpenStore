@@ -237,7 +237,9 @@ const CollapseButton = styled.button`
   }
 `;
 
-const CollapsibleContent = styled.div`
+const CollapsibleContent = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['collapsed'].includes(prop)
+})`
   overflow: hidden;
   transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
   max-height: ${props => props.collapsed ? '0' : '2000px'};

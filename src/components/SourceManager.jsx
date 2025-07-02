@@ -115,7 +115,9 @@ const Tabs = styled.div`
   margin-bottom: 20px;
 `;
 
-const Tab = styled.div`
+const Tab = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['active'].includes(prop)
+})`
   padding: 8px 16px;
   cursor: pointer;
   border-bottom: 2px solid ${props => props.active ? '#0066CC' : 'transparent'};

@@ -24,7 +24,9 @@ const getBorderColor = (props, defaultDark, defaultLight) => {
   return props.theme === 'dark' ? defaultDark : defaultLight;
 };
 
-const SidebarContainer = styled.div`
+const SidebarContainer = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['collapsed', 'theme', 'hasBackgroundImage', 'backgroundOpacity'].includes(prop)
+})`
   width: ${props => props.collapsed ? '60px' : '200px'};
   height: 100%;
   --sidebar-opacity: ${props => props.backgroundOpacity || 0.8};
@@ -59,7 +61,9 @@ const SidebarContainer = styled.div`
   ${getWebKitCSS()}
 `;
 
-const StoreTitle = styled.h1`
+const StoreTitle = styled.h1.withConfig({
+  shouldForwardProp: (prop) => !['collapsed', 'theme'].includes(prop)
+})`
   font-size: 20px;
   font-weight: 600;
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
@@ -70,7 +74,9 @@ const StoreTitle = styled.h1`
   overflow: hidden;
 `;
 
-const SidebarSection = styled.div`
+const SidebarSection = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['hasTopMargin', 'fillSpace'].includes(prop)
+})`
   margin-bottom: 20px;
   margin-top: ${props => props.hasTopMargin ? '40px' : '0'};
   flex: ${props => props.fillSpace ? '1' : '0'};
@@ -78,7 +84,9 @@ const SidebarSection = styled.div`
   flex-direction: column;
 `;
 
-const SidebarTitle = styled.h3`
+const SidebarTitle = styled.h3.withConfig({
+  shouldForwardProp: (prop) => !['collapsed', 'theme'].includes(prop)
+})`
   font-size: 11px;
   font-weight: 600;
   color: ${props => props.theme === 'dark' ? '#999' : '#86868b'};
@@ -91,7 +99,9 @@ const SidebarTitle = styled.h3`
   overflow: hidden;
 `;
 
-const SidebarItem = styled.div`
+const SidebarItem = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['collapsed', 'theme', 'marginBottom', 'selected'].includes(prop)
+})`
   display: flex;
   align-items: center;
   padding: 8px 14px;
@@ -116,14 +126,18 @@ const SidebarItem = styled.div`
   `}
 `;
 
-const ItemText = styled.span`
+const ItemText = styled.span.withConfig({
+  shouldForwardProp: (prop) => !['collapsed'].includes(prop)
+})`
   transition: opacity 0.2s ease;
   opacity: ${props => props.collapsed ? 0 : 1};
   white-space: nowrap;
   overflow: hidden;
 `;
 
-const Icon = styled.div`
+const Icon = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['collapsed', 'theme', 'selected', 'color'].includes(prop)
+})`
   width: 22px;
   height: 22px;
   margin-right: ${props => props.collapsed ? 0 : '8px'};
@@ -145,7 +159,9 @@ const Icon = styled.div`
   }
 `;
 
-const CollapseButton = styled.button`
+const CollapseButton = styled.button.withConfig({
+  shouldForwardProp: (prop) => !['collapsed', 'theme'].includes(prop)
+})`
   position: absolute;
   top: 10px;
   right: ${props => props.collapsed ? '50%' : '10px'};
@@ -183,7 +199,9 @@ const CollapseButton = styled.button`
   }
 `;
 
-const Divider = styled.div`
+const Divider = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['collapsed', 'theme', 'hasBackgroundImage', 'backgroundOpacity'].includes(prop)
+})`
   height: 1px;
   background-color: ${props => getBorderColor(props, '#444', '#e8e8ed')};
   margin: 10px 10px;
