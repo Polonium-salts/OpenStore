@@ -144,20 +144,10 @@ MIT
 
 
 
-  [Error] Warning: React does not recognize the `isWebKit` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `iswebkit` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
+[Error] Warning: React does not recognize the `backgroundImage` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `backgroundimage` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
 div
 @http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
-@http://localhost:1420/src/components/Settings.jsx:648:8
-div
-@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
-Suspense
-div
-@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
-div
-@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
-div
-@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
-App@http://localhost:1420/src/App.jsx:490:31
+App@http://localhost:1420/src/App.jsx?t=1751425169009:490:31
 TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
 ErrorBoundary@http://localhost:1420/src/components/ErrorBoundary.jsx:61:10
 	printWarning (chunk-OY5C42Z6.js:521)
@@ -171,9 +161,33 @@ ErrorBoundary@http://localhost:1420/src/components/ErrorBoundary.jsx:61:10
 	completeWork (chunk-OY5C42Z6.js:16341)
 	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
 	performUnitOfWork (chunk-OY5C42Z6.js:19259)
-	workLoopConcurrent (chunk-OY5C42Z6.js:19242)
-	renderRootConcurrent (chunk-OY5C42Z6.js:19217)
-	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
+	performConcurrentWorkOnRoot
+	workLoop (chunk-OY5C42Z6.js:197)
+	flushWork (chunk-OY5C42Z6.js:176)
+	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+[Error] Warning: React does not recognize the `backgroundOpacity` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `backgroundopacity` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
+div
+@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
+App@http://localhost:1420/src/App.jsx?t=1751425169009:490:31
+TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
+ErrorBoundary@http://localhost:1420/src/components/ErrorBoundary.jsx:61:10
+	printWarning (chunk-OY5C42Z6.js:521)
+	error (chunk-OY5C42Z6.js:505)
+	validateProperty$1 (chunk-OY5C42Z6.js:3433)
+	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
+	validateProperties$2 (chunk-OY5C42Z6.js:3484)
+	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
+	setInitialProperties (chunk-OY5C42Z6.js:7567)
+	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
+	completeWork (chunk-OY5C42Z6.js:16341)
+	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
+	performUnitOfWork (chunk-OY5C42Z6.js:19259)
+	workLoopSync (chunk-OY5C42Z6.js:19190)
+	renderRootSync (chunk-OY5C42Z6.js:19169)
+	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
 	performConcurrentWorkOnRoot
 	workLoop (chunk-OY5C42Z6.js:197)
 	flushWork (chunk-OY5C42Z6.js:176)
