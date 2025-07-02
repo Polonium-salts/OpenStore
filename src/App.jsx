@@ -17,7 +17,9 @@ import PromptDialogContainer from './components/PromptDialog';
 import Messages from './components/Messages';
 import { initWebKitFixes } from './utils/wkwebviewUtils';
 
-const AppContainer = styled.div`
+const AppContainer = styled.div.withConfig({
+  shouldForwardProp: (prop) => !['backgroundImage', 'backgroundOpacity'].includes(prop)
+})`
   display: flex;
   height: 100vh;
   background-color: var(--app-bg-color);
