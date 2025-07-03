@@ -56,7 +56,12 @@ export const getDownloadSettings = async () => {
     proxyUrl: 'http://localhost:3000/proxy-download',
     retryCount: 3,
     timeout: 30000,
-    cacheEnabled: true
+    cacheEnabled: true,
+    useMultiThread: true,
+    threadCount: 8,
+    chunkSize: 1024 * 1024,
+    enableSpeedTest: true,
+    autoRun: false
   });
 };
 
@@ -83,7 +88,12 @@ export const resetDownloadSettings = async () => {
     proxyUrl: 'http://localhost:3000/proxy-download',
     retryCount: 3,
     timeout: 30000,
-    cacheEnabled: true
+    cacheEnabled: true,
+    useMultiThread: true,
+    threadCount: 8,
+    chunkSize: 1024 * 1024,
+    enableSpeedTest: true,
+    autoRun: false
   });
 };
 
@@ -146,4 +156,4 @@ export default {
   setTheme,
   getPerformanceSettings,
   setPerformanceSettings
-}; 
+};

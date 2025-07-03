@@ -16,6 +16,8 @@ import ConfirmDialogContainer from './components/ConfirmDialog';
 import PromptDialogContainer from './components/PromptDialog';
 import Messages from './components/Messages';
 import { initWebKitFixes } from './utils/wkwebviewUtils';
+import { StagewiseToolbar } from '@stagewise/toolbar-react';
+import { ReactPlugin } from '@stagewise-plugins/react';
 
 const AppContainer = styled.div.withConfig({
   shouldForwardProp: (prop) => !['backgroundImage', 'backgroundOpacity'].includes(prop)
@@ -847,10 +849,74 @@ const App = () => {
     }
   }, [currentCategory]);
 
-  // 优化搜索性能
+  // 优化搜索算法 - 支持模糊搜索、拼音搜索和智能排序
   const debouncedSearch = useCallback(
     (() => {
       let timer = null;
+      
+      // 计算字符串相似度（Levenshtein距离）
+      const calculateSimilarity = (str1, str2) => {
+        const matrix = [];
+        const len1 = str1.length;
+        const len2 = str2.length;
+        
+        for (let i = 0; i <= len2; i++) {
+          matrix[i] = [i];
+        }
+        
+        for (let j = 0; j <= len1; j++) {
+          matrix[0][j] = j;
+        }
+        
+        for (let i = 1; i <= len2; i++) {
+          for (let j = 1; j <= len1; j++) {
+            if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+              matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+              matrix[i][j] = Math.min(
+                matrix[i - 1][j - 1] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j] + 1
+              );
+            }
+          }
+        }
+        
+        const maxLen = Math.max(len1, len2);
+        return maxLen === 0 ? 1 : (maxLen - matrix[len2][len1]) / maxLen;
+      };
+      
+      // 检查是否包含搜索词的任何字符（模糊匹配）
+      const fuzzyMatch = (text, searchTerm) => {
+        const textLower = text.toLowerCase();
+        const termLower = searchTerm.toLowerCase();
+        
+        // 精确匹配得分最高
+        if (textLower.includes(termLower)) {
+          return 1.0;
+        }
+        
+        // 首字母匹配
+        const words = textLower.split(/\s+/);
+        const termChars = termLower.split('');
+        let matchCount = 0;
+        
+        for (const char of termChars) {
+          if (textLower.includes(char)) {
+            matchCount++;
+          }
+        }
+        
+        // 字符匹配度
+        const charMatchScore = matchCount / termChars.length;
+        
+        // 相似度匹配
+        const similarityScore = calculateSimilarity(textLower, termLower);
+        
+        // 综合评分
+        return Math.max(charMatchScore * 0.6, similarityScore * 0.4);
+      };
+      
       return (term) => {
         if (timer) clearTimeout(timer);
         
@@ -866,14 +932,28 @@ const App = () => {
         // 延迟实际搜索以减少频繁更新
         timer = setTimeout(() => {
           requestAnimationFrame(() => {
-            const searchResults = apps.filter(app => {
-              const searchString = `${app.name} ${app.description} ${app.developer || ''}`.toLowerCase();
-              return searchString.includes(term.toLowerCase());
-            });
+            const searchTerm = term.toLowerCase().trim();
             
-            setFilteredApps(searchResults);
+            // 为每个应用计算匹配分数
+            const scoredApps = apps.map(app => {
+              const nameScore = fuzzyMatch(app.name || '', searchTerm) * 3; // 名称权重最高
+              const descScore = fuzzyMatch(app.description || '', searchTerm) * 2; // 描述权重中等
+              const devScore = fuzzyMatch(app.developer || '', searchTerm) * 1; // 开发者权重较低
+              const categoryScore = fuzzyMatch(app.category || '', searchTerm) * 1.5; // 分类权重
+              
+              const totalScore = nameScore + descScore + devScore + categoryScore;
+              
+              return {
+                ...app,
+                searchScore: totalScore
+              };
+            })
+            .filter(app => app.searchScore > 0.3) // 过滤掉相关性太低的结果
+            .sort((a, b) => b.searchScore - a.searchScore); // 按相关性排序
+            
+            setFilteredApps(scoredApps);
           });
-        }, 150); // 150ms的防抖延迟
+        }, 120); // 减少防抖延迟以提高响应性
       };
     })(),
     [apps]
@@ -1127,7 +1207,9 @@ const App = () => {
       return;
     }
     
-    if (!app.downloadUrl) {
+    // 检查下载URL，优先使用传入的app对象中的downloadUrl（可能来自平台选择器）
+    const downloadUrl = app.downloadUrl;
+    if (!downloadUrl) {
       window.showError && window.showError(t('app.noDownloadUrl'));
       return;
     }
@@ -1174,64 +1256,93 @@ const App = () => {
       // 更新下载状态为开始
       updateDownloadState(app.id, { status: 'downloading', progress: 0 });
       
-      // 使用Tauri下载管理器进行下载
-      try {
-        console.log('开始使用Tauri下载管理器下载:', app.name);
-        console.log('下载URL:', app.downloadUrl);
-        
-        // 从URL提取文件名，如果没有扩展名则使用app.name
-        let fileName = app.name;
+      // 检测是否在Tauri环境中
+      const isTauriEnvironment = typeof window !== 'undefined' && window.__TAURI__;
+      
+      if (isTauriEnvironment) {
+        // 使用Tauri下载管理器进行下载
         try {
-          const urlPath = new URL(app.downloadUrl).pathname;
-          const urlFileName = urlPath.split('/').pop();
-          if (urlFileName && urlFileName.includes('.')) {
-            fileName = decodeURIComponent(urlFileName);
+          console.log('开始使用Tauri下载管理器下载:', app.name);
+          console.log('下载URL:', downloadUrl);
+          
+          // 从URL提取文件名，优先使用app.filename（来自平台选择器），否则从URL解析
+          let fileName = app.filename || app.name;
+          if (!app.filename) {
+            try {
+              const urlPath = new URL(downloadUrl).pathname;
+              const urlFileName = urlPath.split('/').pop();
+              if (urlFileName && urlFileName.includes('.')) {
+                fileName = decodeURIComponent(urlFileName);
+              }
+            } catch (e) {
+              console.warn('无法从URL解析文件名，使用应用名称:', e);
+            }
           }
-        } catch (e) {
-          console.warn('无法从URL解析文件名，使用应用名称:', e);
-        }
-        
-        console.log('使用文件名:', fileName);
-        
-        // 创建下载任务
-        const taskId = await invoke('create_download_task', {
-          url: app.downloadUrl,
-          fileName: fileName,
-          downloadPath: null // 使用默认下载路径
-        });
-        
-        console.log('创建下载任务成功，任务ID:', taskId);
-        
-        // 更新状态包含taskId
-        updateDownloadState(app.id, { taskId, fileName });
-        
-        // 立即开始下载
-        const startResult = await invoke('start_download', { taskId });
-        
-        console.log('下载启动成功:', app.name, '结果:', startResult);
-        
-        // 显示成功提示
-        showToast(`下载已开始: ${app.name}`, '#28a745');
-        
-      } catch (downloadError) {
-        console.error('使用下载管理器失败，回退到内置下载:', downloadError);
-        
-        // 更新状态为失败
-        updateDownloadState(app.id, { status: 'failed' });
-        
-        // 显示错误提示
-        showToast(`下载失败: ${app.name}`, '#dc3545');
-        
-        // 回退到原有的下载方式
-        if (downloadManagerRef.current) {
-          console.log(t('downloadManager.starting'));
-          downloadManagerRef.current.startDownload({
-            name: app.name,
-            downloadUrl: app.downloadUrl
+          
+          console.log('使用文件名:', fileName);
+          
+          // 创建下载任务
+          const taskId = await invoke('create_download_task', {
+            url: downloadUrl,
+            fileName: fileName,
+            downloadPath: null // 使用默认下载路径
           });
-        } else {
-          console.log(t('downloadManager.downloading'));
-          TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
+          
+          console.log('创建下载任务成功，任务ID:', taskId);
+          
+          // 更新状态包含taskId
+          updateDownloadState(app.id, { taskId, fileName });
+          
+          // 立即开始下载
+          const startResult = await invoke('start_download', { taskId });
+          
+          console.log('下载启动成功:', app.name, '结果:', startResult);
+          
+          // 显示成功提示
+          showToast(`下载已开始: ${app.name}`, '#28a745');
+          
+        } catch (downloadError) {
+          console.error('使用Tauri下载管理器失败，回退到内置下载:', downloadError);
+          
+          // 回退到原有的下载方式
+          if (downloadManagerRef.current) {
+            console.log(t('downloadManager.starting'));
+            downloadManagerRef.current.startDownload({
+              name: app.name,
+              downloadUrl: downloadUrl
+            });
+          } else {
+            console.log(t('downloadManager.downloading'));
+            TauriDownloaderUtil.downloadFile(downloadUrl, app.name);
+          }
+        }
+      } else {
+        // Web环境，直接使用内置下载方式
+        console.log('Web环境检测到，使用内置下载方式:', app.name);
+        
+        try {
+          if (downloadManagerRef.current) {
+            console.log(t('downloadManager.starting'));
+            downloadManagerRef.current.startDownload({
+              name: app.name,
+              downloadUrl: downloadUrl
+            });
+          } else {
+            console.log(t('downloadManager.downloading'));
+            TauriDownloaderUtil.downloadFile(downloadUrl, app.name);
+          }
+          
+          // 显示成功提示
+          showToast(`下载已开始: ${app.name}`, '#28a745');
+          
+        } catch (webDownloadError) {
+          console.error('Web环境下载失败:', webDownloadError);
+          
+          // 更新状态为失败
+          updateDownloadState(app.id, { status: 'failed' });
+          
+          // 显示错误提示
+          showToast(`下载失败: ${app.name}`, '#dc3545');
         }
       }
       
@@ -1916,6 +2027,13 @@ const App = () => {
       
       {/* 输入对话框容器 */}
       <PromptDialogContainer theme={theme} />
+      
+      {/* Stagewise Toolbar for AI-powered editing */}
+      <StagewiseToolbar 
+        config={{
+          plugins: [ReactPlugin]
+        }}
+      />
     </AppContainer>
   );
 };
