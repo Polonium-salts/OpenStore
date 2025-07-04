@@ -21,10 +21,11 @@
     "development": "开发",
     "education": "教育",
     "entertainment": "娱乐",
+    "settings.downloads": "设置",
     "ai": "AI大模型"
   },
   "settings": {
-    "title": "",
+    "title": "设置",
     "appearance": "外观",
     "theme": "主题",
     "themeDesc": "更改应用程序的外观模式",
@@ -80,7 +81,14 @@
     "retryCountDesc": "下载失败时的最大重试次数",
     "timeout": "超时时间",
     "timeoutDesc": "单个请求的超时时间（秒）",
-    "autoRun": "下载完成后自动运行"
+    "autoRun": "下载完成后自动运行",
+    "autoExtract": "下载完成后自动解压",
+    "showNotifications": "显示下载通知",
+    "showNotificationsDesc": "下载完成或失败时显示系统通知",
+    "useProxy": "使用代理",
+    "useProxyDesc": "通过代理服务器进行下载，适用于网络受限环境",
+    "proxyUrl": "代理地址",
+    "proxyUrlDesc": "代理服务器的完整地址，格式：http://host:port"
   },
   "sourceManager": {
     "title": "软件源管理",
