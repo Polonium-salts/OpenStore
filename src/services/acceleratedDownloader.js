@@ -6,14 +6,17 @@
  * 默认配置
  */
 const DEFAULT_CONFIG = {
-  chunkCount: 8,           // 默认分片数
-  chunkSize: 1024 * 1024,  // 默认分片大小 (1MB)
-  retryCount: 3,           // 失败重试次数
-  retryDelay: 1000,        // 重试延迟(ms)
-  timeout: 60000,          // 超时时间(ms) - 增加了超时时间
+  chunkCount: 16,          // 增加默认分片数到16
+  chunkSize: 2 * 1024 * 1024,  // 增加分片大小到2MB
+  retryCount: 5,           // 增加重试次数
+  retryDelay: 500,         // 减少重试延迟
+  timeout: 120000,         // 增加超时时间到2分钟
   useMultiThread: true,    // 默认启用多线程
   enableSpeedTest: true,   // 启用下载速度测试
-  progressInterval: 500,   // 进度更新间隔(ms) - 减少了间隔以提供更及时的进度更新
+  progressInterval: 200,   // 减少进度更新间隔以提供更及时的反馈
+  maxConcurrentChunks: 8,  // 最大并发下载块数
+  adaptiveChunkSize: true, // 启用自适应分片大小
+  connectionPoolSize: 4,   // HTTP连接池大小
 };
 
 /**
@@ -120,39 +123,51 @@ export const createAcceleratedDownload = (url, fileName, options = {}, callbacks
       const signal = controller.signal;
       const timeoutId = setTimeout(() => controller.abort(), config.timeout);
       
-      const response = await fetch(url, { 
-        method: 'HEAD',
-        signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`服务器响应错误: ${response.status} ${response.statusText}`);
+      try {
+        const response = await fetch(url, { 
+          method: 'HEAD',
+          signal,
+          mode: 'cors',
+          credentials: 'omit'
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`服务器响应错误: ${response.status} ${response.statusText}`);
+        }
+        
+        // 获取文件大小
+        const contentLength = response.headers.get('content-length');
+        if (contentLength) {
+          totalSize = parseInt(contentLength, 10);
+          log(`文件大小: ${formatSize(totalSize)}`);
+        } else {
+          log('无法获取文件大小，将使用后端下载', 'warning');
+          return false;
+        }
+        
+        // 检查服务器是否支持范围请求
+        const acceptRanges = response.headers.get('accept-ranges');
+        const supportsRanges = acceptRanges && acceptRanges !== 'none';
+        
+        if (!supportsRanges) {
+          log('服务器不支持范围请求，将使用后端下载', 'warning');
+          return false;
+        }
+        
+        return true;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        // 如果是跨域错误或网络错误，回退到后端下载
+        if (fetchError.name === 'TypeError' || fetchError.message.includes('CORS') || fetchError.message.includes('network')) {
+          log('检测到跨域限制或网络问题，将使用后端下载', 'warning');
+          return false;
+        }
+        throw fetchError;
       }
-      
-      // 获取文件大小
-      const contentLength = response.headers.get('content-length');
-      if (contentLength) {
-        totalSize = parseInt(contentLength, 10);
-        log(`文件大小: ${formatSize(totalSize)}`);
-      } else {
-        log('无法获取文件大小，将使用单线程下载', 'warning');
-        return false;
-      }
-      
-      // 检查服务器是否支持范围请求
-      const acceptRanges = response.headers.get('accept-ranges');
-      const supportsRanges = acceptRanges && acceptRanges !== 'none';
-      
-      if (!supportsRanges) {
-        log('服务器不支持范围请求，将使用单线程下载', 'warning');
-        return false;
-      }
-      
-      return true;
     } catch (error) {
-      log(`分析文件失败: ${error.message}`, 'error');
+      log(`分析文件失败: ${error.message}，将使用后端下载`, 'warning');
       return false;
     }
   };
@@ -161,15 +176,36 @@ export const createAcceleratedDownload = (url, fileName, options = {}, callbacks
   const splitDownloadTasks = () => {
     if (totalSize <= 0) return false;
     
-    // 确保文件有足够大小才分片
-    if (totalSize < config.chunkSize * 2) {
-      log(`文件较小 (${formatSize(totalSize)})，使用较少分片`);
-      config.chunkCount = 2;
+    // 自适应分片策略
+    let optimalChunkCount = config.chunkCount;
+    let adaptiveChunkSize = config.chunkSize;
+    
+    if (config.adaptiveChunkSize) {
+      // 根据文件大小自适应调整分片策略
+      if (totalSize < 10 * 1024 * 1024) { // 小于10MB
+        optimalChunkCount = Math.min(4, config.chunkCount);
+        adaptiveChunkSize = Math.max(512 * 1024, totalSize / 4); // 最小512KB
+      } else if (totalSize < 100 * 1024 * 1024) { // 小于100MB
+        optimalChunkCount = Math.min(8, config.chunkCount);
+        adaptiveChunkSize = 2 * 1024 * 1024; // 2MB
+      } else if (totalSize < 1024 * 1024 * 1024) { // 小于1GB
+        optimalChunkCount = Math.min(16, config.chunkCount);
+        adaptiveChunkSize = 4 * 1024 * 1024; // 4MB
+      } else { // 大于1GB
+        optimalChunkCount = config.chunkCount;
+        adaptiveChunkSize = 8 * 1024 * 1024; // 8MB
+      }
     }
     
-    const optimalChunkCount = Math.min(
-      config.chunkCount,
-      Math.ceil(totalSize / config.chunkSize)
+    // 确保文件有足够大小才分片
+    if (totalSize < adaptiveChunkSize * 2) {
+      log(`文件较小 (${formatSize(totalSize)})，使用较少分片`);
+      optimalChunkCount = 2;
+    }
+    
+    optimalChunkCount = Math.min(
+      optimalChunkCount,
+      Math.ceil(totalSize / adaptiveChunkSize)
     );
     
     const chunkSize = Math.ceil(totalSize / optimalChunkCount);
@@ -189,10 +225,11 @@ export const createAcceleratedDownload = (url, fileName, options = {}, callbacks
         completed: false,
         data: null,
         retries: 0,
+        priority: i < config.maxConcurrentChunks ? 'high' : 'normal', // 设置优先级
       });
     }
     
-    log(`已将下载分为 ${chunks.length} 个分块`);
+    log(`已将下载分为 ${chunks.length} 个分块，自适应分片大小: ${formatSize(chunkSize)}`);
     return true;
   };
   
@@ -212,59 +249,78 @@ export const createAcceleratedDownload = (url, fileName, options = {}, callbacks
         controller.abort();
       }, config.timeout);
       
-      const response = await fetch(url, {
-        headers: {
-          Range: `bytes=${chunk.start}-${chunk.end}`,
-        },
-        signal,
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`分块 ${chunk.id} 下载失败: ${response.status}`);
-      }
-      
-      const reader = response.body.getReader();
-      let receivedLength = 0;
-      let chunks = [];
-      
-      while (true) {
-        if (cancelRequested) {
-          reader.cancel();
-          return null;
+      try {
+        const response = await fetch(url, {
+          headers: {
+            Range: `bytes=${chunk.start}-${chunk.end}`,
+          },
+          signal,
+          mode: 'cors',
+          credentials: 'omit'
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`分块 ${chunk.id} 下载失败: ${response.status}`);
         }
         
-        if (pauseRequested) {
-          reader.cancel();
-          return null;
+        const reader = response.body.getReader();
+        let receivedLength = 0;
+        let chunks = [];
+        
+        while (true) {
+          if (cancelRequested) {
+            reader.cancel();
+            return null;
+          }
+          
+          if (pauseRequested) {
+            reader.cancel();
+            return null;
+          }
+          
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            break;
+          }
+          
+          chunks.push(value);
+          receivedLength += value.length;
+          downloadedSize += value.length;
+          chunk.downloaded = receivedLength;
+          
+          updateProgress();
         }
         
-        const { done, value } = await reader.read();
+        log(`分块 ${chunk.id} 下载完成`);
         
-        if (done) {
-          break;
+        const data = new Uint8Array(receivedLength);
+        let position = 0;
+        for (const chunk of chunks) {
+          data.set(chunk, position);
+          position += chunk.length;
         }
         
-        chunks.push(value);
-        receivedLength += value.length;
-        downloadedSize += value.length;
-        chunk.downloaded = receivedLength;
+        return data;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
         
-        updateProgress();
+        // 如果是跨域错误，直接抛出让上层处理
+        if (fetchError.name === 'TypeError' || fetchError.message.includes('CORS') || fetchError.message.includes('network')) {
+          log(`分块 ${chunk.id} 遇到跨域限制，回退到后端下载`, 'warning');
+          throw new Error('CORS_ERROR'); // 特殊错误标识
+        }
+        
+        throw fetchError;
       }
-      
-      log(`分块 ${chunk.id} 下载完成`);
-      
-      const data = new Uint8Array(receivedLength);
-      let position = 0;
-      for (const chunk of chunks) {
-        data.set(chunk, position);
-        position += chunk.length;
-      }
-      
-      return data;
     } catch (error) {
+      // 如果是跨域错误，直接抛出让上层处理
+      if (error.message === 'CORS_ERROR') {
+        throw error;
+      }
+      
       log(`分块 ${chunk.id} 下载错误: ${error.message}`, 'error');
       
       // 达到最大重试次数
@@ -336,29 +392,80 @@ export const createAcceleratedDownload = (url, fileName, options = {}, callbacks
     }
   };
   
-  // 单线程下载
+  // 回退到后端下载
+  const fallbackToBackendDownload = async () => {
+    try {
+      log('回退到后端下载模式');
+      updateStatus(DownloadStatus.DOWNLOADING);
+      
+      // 通知调用者使用后端下载
+      if (onError) {
+        onError(new Error('FALLBACK_TO_BACKEND'));
+      }
+      
+      return false; // 返回false表示需要使用后端下载
+    } catch (error) {
+      log(`回退处理失败: ${error.message}`, 'error');
+      return false;
+    }
+  };
+  
+  // 单线程下载（仅用于同域名文件）
   const performSingleThreadDownload = async () => {
     try {
       log('使用单线程下载模式');
       updateStatus(DownloadStatus.DOWNLOADING);
       
-      // 创建下载链接
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
+      // 尝试直接下载（仅适用于同域名文件）
+      const controller = new AbortController();
+      const signal = controller.signal;
+      const timeoutId = setTimeout(() => controller.abort(), config.timeout);
       
-      // 假设下载成功
-      setTimeout(() => {
-        document.body.removeChild(a);
-      }, 100);
-      
-      return true;
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          signal,
+          mode: 'cors',
+          credentials: 'omit'
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const blob = await response.blob();
+        
+        // 创建下载链接
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = fileName;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        
+        setTimeout(() => {
+          URL.revokeObjectURL(downloadUrl);
+          document.body.removeChild(a);
+        }, 100);
+        
+        return true;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        
+        // 如果是跨域错误，回退到后端下载
+        if (fetchError.name === 'TypeError' || fetchError.message.includes('CORS') || fetchError.message.includes('network')) {
+          log('单线程下载遇到跨域限制，回退到后端下载', 'warning');
+          return await fallbackToBackendDownload();
+        }
+        
+        throw fetchError;
+      }
     } catch (error) {
       log(`单线程下载失败: ${error.message}`, 'error');
-      return false;
+      return await fallbackToBackendDownload();
     }
   };
   
@@ -371,20 +478,10 @@ export const createAcceleratedDownload = (url, fileName, options = {}, callbacks
       // 分析文件
       const supportsMultiThread = await analyzeFile();
       
-      // 如果不支持多线程下载或用户禁用多线程，使用单线程下载
+      // 如果不支持多线程下载或用户禁用多线程，回退到后端下载
       if (!supportsMultiThread || !config.useMultiThread) {
-        log('使用单线程下载', 'info');
-        const result = await performSingleThreadDownload();
-        if (result) {
-          endTime = Date.now();
-          updateStatus(DownloadStatus.COMPLETED);
-          
-          if (onComplete) onComplete(mergedData);
-        } else {
-          updateStatus(DownloadStatus.FAILED);
-          if (onError) onError(new Error('单线程下载失败'));
-        }
-        
+        log('不支持多线程下载，回退到后端下载', 'info');
+        await fallbackToBackendDownload();
         return;
       }
       
@@ -398,67 +495,122 @@ export const createAcceleratedDownload = (url, fileName, options = {}, callbacks
       
       // 开始多线程下载
       updateStatus(DownloadStatus.DOWNLOADING);
-      log(`开始多线程下载 (${chunks.length} 线程)`);
+      log(`开始多线程下载 (${chunks.length} 分块，最大并发: ${config.maxConcurrentChunks})`);
       
       // 启动进度更新定时器
-      progressTimer = setInterval(updateProgress, 200); // 更高频率的进度更新
+      progressTimer = setInterval(updateProgress, config.progressInterval);
       
-      // 创建下载任务并并行执行
-      const downloadPromises = chunks.map(async (chunk) => {
-        const data = await downloadChunk(chunk);
-        if (data) {
-          chunk.data = data;
-          chunk.completed = true;
-          completedChunks++;
-          
-          log(`分块 ${chunk.id} 下载完成 (${completedChunks}/${chunks.length})`);
-          updateProgress(); // 立即更新进度
-          
-          // 所有分块下载完成后合并
-          if (completedChunks === chunks.length) {
-            clearInterval(progressTimer);
-            const mergedData = await mergeChunks();
-            endTime = Date.now();
-            
-            if (mergedData) {
-              const duration = (endTime - startTime) / 1000;
-              const speedMBps = (totalSize / 1024 / 1024) / duration;
-              log(`下载完成! 总时间: ${duration.toFixed(1)}秒, 平均速度: ${speedMBps.toFixed(2)} MB/s`);
-              
-              updateStatus(DownloadStatus.COMPLETED);
-              if (onComplete) {
-                onComplete({
-                  id: downloadId,
-                  name: fileName,
-                  size: totalSize,
-                  duration: endTime - startTime,
-                });
-              }
-            } else {
-              updateStatus(DownloadStatus.FAILED);
-              if (onError) onError(new Error('合并文件失败'));
-            }
+      // 并发控制：使用信号量限制同时下载的分块数
+      let activeDownloads = 0;
+      let downloadQueue = [...chunks];
+      let completedCount = 0;
+      
+      const processDownloadQueue = async () => {
+        while (downloadQueue.length > 0 && !cancelRequested && !pauseRequested) {
+          if (activeDownloads >= config.maxConcurrentChunks) {
+            // 等待有下载完成
+            await new Promise(resolve => setTimeout(resolve, 50));
+            continue;
           }
-        } else if (cancelRequested) {
-          updateStatus(DownloadStatus.CANCELED);
-        } else if (pauseRequested) {
-          updateStatus(DownloadStatus.PAUSED);
-        } else {
-          // 分块下载失败
-          log(`分块 ${chunk.id} 下载失败`, 'error');
+          
+          const chunk = downloadQueue.shift();
+          activeDownloads++;
+          
+          // 异步处理单个分块下载
+          (async () => {
+            try {
+              const data = await downloadChunk(chunk);
+              if (data) {
+                chunk.data = data;
+                chunk.completed = true;
+                completedCount++;
+                
+                log(`分块 ${chunk.id} 下载完成 (${completedCount}/${chunks.length})`);
+                updateProgress();
+                
+                // 检查是否所有分块都完成
+                if (completedCount === chunks.length) {
+                  clearInterval(progressTimer);
+                  const mergedData = await mergeChunks();
+                  endTime = Date.now();
+                  
+                  if (mergedData) {
+                    const duration = (endTime - startTime) / 1000;
+                    const speedMBps = (totalSize / 1024 / 1024) / duration;
+                    log(`下载完成! 总时间: ${duration.toFixed(1)}秒, 平均速度: ${speedMBps.toFixed(2)} MB/s`);
+                    
+                    updateStatus(DownloadStatus.COMPLETED);
+                    if (onComplete) {
+                      onComplete({
+                        id: downloadId,
+                        name: fileName,
+                        size: totalSize,
+                        duration: endTime - startTime,
+                      });
+                    }
+                  } else {
+                    updateStatus(DownloadStatus.FAILED);
+                    if (onError) onError(new Error('合并文件失败'));
+                  }
+                }
+              } else if (cancelRequested) {
+                updateStatus(DownloadStatus.CANCELED);
+              } else if (pauseRequested) {
+                updateStatus(DownloadStatus.PAUSED);
+              } else {
+                // 分块下载失败，重新加入队列重试
+                if (chunk.retries < config.retryCount) {
+                  chunk.retries++;
+                  downloadQueue.unshift(chunk); // 优先重试
+                  log(`分块 ${chunk.id} 下载失败，重新加入队列重试 (${chunk.retries}/${config.retryCount})`, 'warning');
+                } else {
+                  log(`分块 ${chunk.id} 达到最大重试次数，下载失败`, 'error');
+                  updateStatus(DownloadStatus.FAILED);
+                  if (onError) onError(new Error(`分块 ${chunk.id} 下载失败`));
+                }
+              }
+            } catch (error) {
+              // 如果是跨域错误，立即回退到后端下载
+              if (error.message === 'CORS_ERROR') {
+                clearInterval(progressTimer);
+                log('检测到跨域限制，回退到后端下载', 'warning');
+                await fallbackToBackendDownload();
+                return;
+              }
+              // 处理其他错误
+              log(`分块 ${chunk.id} 处理异常: ${error.message}`, 'error');
+              if (chunk.retries < config.retryCount) {
+                chunk.retries++;
+                downloadQueue.unshift(chunk);
+                log(`分块 ${chunk.id} 异常后重试 (${chunk.retries}/${config.retryCount})`, 'warning');
+              } else {
+                log(`分块 ${chunk.id} 达到最大重试次数，下载失败`, 'error');
+                updateStatus(DownloadStatus.FAILED);
+                if (onError) onError(new Error(`分块 ${chunk.id} 下载失败`));
+              }
+            } finally {
+              activeDownloads--;
+            }
+          })();
         }
-      });
+      };
       
-      // 等待所有任务完成或失败
-      await Promise.all(downloadPromises).catch(error => {
-        log(`下载过程出错: ${error.message}`, 'error');
-        if (currentStatus !== DownloadStatus.COMPLETED) {
-          updateStatus(DownloadStatus.FAILED);
-          if (onError) onError(error);
-        }
-      });
+      // 启动下载队列处理
+      await processDownloadQueue();
+      
+      // 等待所有活跃下载完成
+      while (activeDownloads > 0 && !cancelRequested) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
       
     } catch (error) {
+      // 如果是跨域错误，回退到后端下载
+      if (error.message === 'CORS_ERROR') {
+        log('检测到跨域限制，回退到后端下载', 'warning');
+        await fallbackToBackendDownload();
+        return;
+      }
+      
       log(`下载过程出错: ${error.message}`, 'error');
       updateStatus(DownloadStatus.FAILED);
       if (onError) onError(error);

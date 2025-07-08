@@ -6,7 +6,6 @@ import { open } from '@tauri-apps/plugin-dialog';
 
 import { platform, arch, version, type as osType, locale } from '@tauri-apps/plugin-os';
 import { isWebKit, isMacOS, applyWebKitFixes, applyMacOSFixes, forceRepaint, initWebKitFixes } from '../utils/wkwebviewUtils';
-import { getDownloadSettings, setDownloadSettings } from '../utils/settingsUtil';
 
 const SettingsContainer = styled.div.withConfig({
   shouldForwardProp: (prop) => prop !== 'isWebKit'
@@ -399,69 +398,10 @@ const Input = styled.input`
     border-color: var(--accent-color);
     box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.25);
   }
-`;
-
-const NumberInput = styled(Input)`
-  width: 120px;
-  text-align: center;
-`;
-
-const CheckboxContainer = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 8px;
-`;
-
-const Checkbox = styled.input`
-  width: 18px;
-  height: 18px;
-  accent-color: var(--accent-color);
-  cursor: pointer;
-`;
-
-const CheckboxLabel = styled.label`
-  font-size: 15px;
-  color: var(--app-text-color);
-  cursor: pointer;
-  user-select: none;
-`;
-
-const SettingRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--border-color);
   
-  &:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
+  &::placeholder {
+    color: ${props => props.theme === 'dark' ? '#777' : '#aaa'};
   }
-`;
-
-const SettingInfo = styled.div`
-  flex: 1;
-`;
-
-const SettingTitle = styled.div`
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--app-text-color);
-  margin-bottom: 4px;
-`;
-
-const SettingDesc = styled.div`
-  font-size: 13px;
-  color: ${props => props.theme === 'dark' ? '#aaa' : '#666'};
-  line-height: 1.4;
-`;
-
-const SettingControl = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
 `;
 
 const SliderContainer = styled.div`
@@ -989,17 +929,6 @@ const Settings = React.memo(({
   // Download directory states
   const [downloadDirectory, setDownloadDirectory] = useState('检测中...');
   const [isLoadingDownloadDir, setIsLoadingDownloadDir] = useState(false);
-  
-  // Download settings states
-  const [downloadSettings, setDownloadSettingsState] = useState({
-    useMultiThread: true,
-    threadCount: 8,
-    chunkSize: 1024 * 1024,
-    retryCount: 3,
-    timeout: 30000,
-    enableSpeedTest: true
-  });
-  const [isLoadingDownloadSettings, setIsLoadingDownloadSettings] = useState(false);
 
   // 获取系统信息的函数
   const fetchSystemInfo = async () => {
@@ -1068,42 +997,10 @@ const Settings = React.memo(({
     }
   };
 
-  // 获取下载设置的函数
-  const fetchDownloadSettings = async () => {
-    setIsLoadingDownloadSettings(true);
-    try {
-      const settings = await getDownloadSettings();
-      setDownloadSettingsState(settings);
-    } catch (error) {
-      console.error('获取下载设置失败:', error);
-    } finally {
-      setIsLoadingDownloadSettings(false);
-    }
-  };
-  
-  // 保存下载设置的函数
-  const saveDownloadSettings = async (newSettings) => {
-    try {
-      await setDownloadSettings(newSettings);
-      setDownloadSettingsState(newSettings);
-      window.showSuccess && window.showSuccess('下载设置保存成功！');
-    } catch (error) {
-      console.error('保存下载设置失败:', error);
-      window.showError && window.showError('保存下载设置失败: ' + error);
-    }
-  };
-  
-  // 处理下载设置变更
-  const handleDownloadSettingChange = (key, value) => {
-    const newSettings = { ...downloadSettings, [key]: value };
-    saveDownloadSettings(newSettings);
-  };
-  
   // 组件挂载时获取系统信息和下载目录
   useEffect(() => {
     fetchSystemInfo();
     fetchDownloadDirectory();
-    fetchDownloadSettings();
   }, []);
 
   const handleThemeChange = (value) => {
@@ -1316,7 +1213,7 @@ const Settings = React.memo(({
 
   return (
     <SettingsContainer>
-      <SettingsTitle theme={theme}>{t('settings.title') || ''}</SettingsTitle>
+      <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
       
       <SettingsSection theme={theme}>
         <SectionTitle theme={theme}>{t('settings.appearance') || '外观设置'}</SectionTitle>
@@ -1503,147 +1400,6 @@ const Settings = React.memo(({
               </>
             )}
           </RefreshButton>
-        </OptionGroup>
-        
-        <OptionGroup>
-          <OptionLabel theme={theme}>{t('settings.downloadOptions') || '下载选项'}</OptionLabel>
-          <OptionDescription theme={theme}>
-            {t('settings.downloadOptionsDesc') || '配置下载行为和性能设置'}
-          </OptionDescription>
-          
-          <SettingRow>
-            <SettingInfo>
-              <SettingTitle>{t('settings.useMultiThread') || '启用多线程下载'}</SettingTitle>
-              <SettingDesc theme={theme}>
-                {t('settings.useMultiThreadDesc') || '使用多线程技术加速下载，可显著提高下载速度'}
-              </SettingDesc>
-            </SettingInfo>
-            <SettingControl>
-              <Checkbox
-                type="checkbox"
-                checked={downloadSettings.useMultiThread}
-                onChange={(e) => handleDownloadSettingChange('useMultiThread', e.target.checked)}
-                disabled={isLoadingDownloadSettings}
-              />
-            </SettingControl>
-          </SettingRow>
-          
-          {downloadSettings.useMultiThread && (
-            <>
-              <SettingRow>
-                <SettingInfo>
-                  <SettingTitle>{t('settings.threadCount') || '线程数量'}</SettingTitle>
-                  <SettingDesc theme={theme}>
-                    {t('settings.threadCountDesc') || '同时下载的线程数，建议设置为4-16之间'}
-                  </SettingDesc>
-                </SettingInfo>
-                <SettingControl>
-                  <NumberInput
-                    type="number"
-                    min="1"
-                    max="32"
-                    value={downloadSettings.threadCount}
-                    onChange={(e) => handleDownloadSettingChange('threadCount', parseInt(e.target.value) || 8)}
-                    disabled={isLoadingDownloadSettings}
-                  />
-                </SettingControl>
-              </SettingRow>
-              
-              <SettingRow>
-                <SettingInfo>
-                  <SettingTitle>{t('settings.chunkSize') || '分块大小'}</SettingTitle>
-                  <SettingDesc theme={theme}>
-                    {t('settings.chunkSizeDesc') || '每个下载分块的大小（MB），影响内存使用和下载效率'}
-                  </SettingDesc>
-                </SettingInfo>
-                <SettingControl>
-                  <NumberInput
-                    type="number"
-                    min="0.5"
-                    max="10"
-                    step="0.5"
-                    value={downloadSettings.chunkSize / (1024 * 1024)}
-                    onChange={(e) => handleDownloadSettingChange('chunkSize', (parseFloat(e.target.value) || 1) * 1024 * 1024)}
-                    disabled={isLoadingDownloadSettings}
-                  />
-                  <span style={{ color: 'var(--app-text-color)', fontSize: '14px' }}>MB</span>
-                </SettingControl>
-              </SettingRow>
-              
-              <SettingRow>
-                <SettingInfo>
-                  <SettingTitle>{t('settings.enableSpeedTest') || '启用速度测试'}</SettingTitle>
-                  <SettingDesc theme={theme}>
-                    {t('settings.enableSpeedTestDesc') || '下载前测试网络速度以优化下载策略'}
-                  </SettingDesc>
-                </SettingInfo>
-                <SettingControl>
-                  <Checkbox
-                    type="checkbox"
-                    checked={downloadSettings.enableSpeedTest}
-                    onChange={(e) => handleDownloadSettingChange('enableSpeedTest', e.target.checked)}
-                    disabled={isLoadingDownloadSettings}
-                  />
-                </SettingControl>
-              </SettingRow>
-            </>
-          )}
-          
-          <SettingRow>
-            <SettingInfo>
-              <SettingTitle>{t('settings.retryCount') || '重试次数'}</SettingTitle>
-              <SettingDesc theme={theme}>
-                {t('settings.retryCountDesc') || '下载失败时的最大重试次数'}
-              </SettingDesc>
-            </SettingInfo>
-            <SettingControl>
-              <NumberInput
-                type="number"
-                min="0"
-                max="10"
-                value={downloadSettings.retryCount}
-                onChange={(e) => handleDownloadSettingChange('retryCount', parseInt(e.target.value) || 3)}
-                disabled={isLoadingDownloadSettings}
-              />
-            </SettingControl>
-          </SettingRow>
-          
-          <SettingRow>
-            <SettingInfo>
-              <SettingTitle>{t('settings.timeout') || '超时时间'}</SettingTitle>
-              <SettingDesc theme={theme}>
-                {t('settings.timeoutDesc') || '单个请求的超时时间（秒）'}
-              </SettingDesc>
-            </SettingInfo>
-            <SettingControl>
-              <NumberInput
-                type="number"
-                min="5"
-                max="300"
-                value={downloadSettings.timeout / 1000}
-                onChange={(e) => handleDownloadSettingChange('timeout', (parseInt(e.target.value) || 30) * 1000)}
-                disabled={isLoadingDownloadSettings}
-              />
-              <span style={{ color: 'var(--app-text-color)', fontSize: '14px' }}>秒</span>
-            </SettingControl>
-          </SettingRow>
-          
-          <SettingRow>
-            <SettingInfo>
-              <SettingTitle>{t('settings.autoRun') || '下载完成后自动运行'}</SettingTitle>
-              <SettingDesc theme={theme}>
-                {t('settings.autoRunDesc') || '下载完成后自动运行可执行文件（仅适用于可执行文件）'}
-              </SettingDesc>
-            </SettingInfo>
-            <SettingControl>
-              <Checkbox
-                type="checkbox"
-                checked={downloadSettings.autoRun}
-                onChange={(e) => handleDownloadSettingChange('autoRun', e.target.checked)}
-                disabled={isLoadingDownloadSettings}
-              />
-            </SettingControl>
-          </SettingRow>
         </OptionGroup>
       </SettingsSection>
 

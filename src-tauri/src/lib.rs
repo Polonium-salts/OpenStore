@@ -440,39 +440,81 @@ async fn perform_download(
 
     println!("开始执行下载任务: {} - {}", task.id, task.url);
 
-    // 创建HTTP客户端，添加用户代理、超时设置、SSL证书验证跳过和禁用代理
+    // 验证URL格式
+    if !task.url.starts_with("http://") && !task.url.starts_with("https://") {
+        return Err("无效的URL格式，必须以http://或https://开头".into());
+    }
+    
+    // 解析URL以获取主机信息
+    let url = reqwest::Url::parse(&task.url)
+        .map_err(|e| format!("URL解析失败: {}", e))?;
+    let host = url.host_str().unwrap_or("未知主机");
+    println!("目标主机: {}", host);
+
+    // 创建HTTP客户端，优化连接设置以提升下载速度
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
-        .timeout(Duration::from_secs(60))  // 增加超时时间到60秒
-        .connect_timeout(Duration::from_secs(30))  // 连接超时30秒
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .timeout(Duration::from_secs(180))  // 增加超时时间到3分钟
+        .connect_timeout(Duration::from_secs(45))  // 连接超时45秒
+        .pool_idle_timeout(Duration::from_secs(120))  // 连接池空闲超时
+        .pool_max_idle_per_host(6)  // 减少每个主机最大空闲连接数
         .danger_accept_invalid_certs(true)
         .no_proxy()
-        .tcp_keepalive(Duration::from_secs(60))  // 启用TCP keepalive
-        .build()?;
+        .tcp_keepalive(Duration::from_secs(30))  // 减少TCP keepalive时间
+        .tcp_nodelay(true)  // 禁用Nagle算法以减少延迟
+        .redirect(reqwest::redirect::Policy::limited(10))  // 限制重定向次数
+        .build().map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
+        
+    println!("HTTP客户端创建成功，开始网络连接测试...");
 
     // 发送HEAD请求获取文件大小，带重试机制
     println!("发送HEAD请求获取文件大小: {}", task.url);
     let mut total_size = 0;
-    let mut retries = 3;
+    let mut retries = 5;
+    let mut head_success = false;
 
     while retries > 0 {
         match client.head(&task.url).send().await {
             Ok(resp) => {
-                total_size = resp.content_length().unwrap_or(0);
-                println!("从HEAD请求获取文件大小: {} bytes", total_size);
-                break;
+                let status = resp.status();
+                if status.is_success() {
+                    total_size = resp.content_length().unwrap_or(0);
+                    println!("HEAD请求成功，文件大小: {} bytes", total_size);
+                    head_success = true;
+                    break;
+                } else {
+                    println!("HEAD请求返回错误状态码: {}", status);
+                    retries -= 1;
+                    if retries > 0 {
+                        let wait_time = 3 - retries + 1; // 递增等待时间
+                        tokio::time::sleep(Duration::from_secs(wait_time)).await;
+                    }
+                }
             }
             Err(e) => {
                 retries -= 1;
+                println!("HEAD请求失败 (剩余{}次重试): {}", retries, e);
+                
                 if retries == 0 {
-                    println!("HEAD请求失败，将在GET请求中尝试获取文件大小: {}", e);
-                    // 不返回错误，继续执行GET请求
+                    println!("HEAD请求完全失败，将在GET请求中尝试获取文件大小");
                     break;
                 }
-                println!("HEAD请求失败，剩余重试次数: {}, 错误: {}", retries, e);
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                
+                // 根据错误类型调整等待时间
+                let wait_time = if e.is_timeout() {
+                    5 // 超时错误等待更长时间
+                } else if e.is_connect() {
+                    3 // 连接错误
+                } else {
+                    2 // 其他错误
+                };
+                tokio::time::sleep(Duration::from_secs(wait_time)).await;
             }
         }
+    }
+    
+    if !head_success {
+        println!("HEAD请求未成功，将尝试直接使用GET请求");
     }
 
     // 更新任务信息
@@ -499,8 +541,9 @@ async fn perform_download(
     };
 
     // 开始下载，带重试机制
-    let mut retries = 3;
+    let mut retries = 5;
     let mut response = None;
+    let mut last_error = String::new();
 
     while retries > 0 {
         let mut request = client.get(&task.url);
@@ -508,22 +551,58 @@ async fn perform_download(
         // 如果文件已存在且有内容，使用Range请求头进行断点续传
         if existing_size > 0 {
             request = request.header("Range", format!("bytes={}-", existing_size));
+            println!("使用断点续传，从字节 {} 开始下载", existing_size);
         }
 
         match request.send().await {
             Ok(resp) => {
-                response = Some(resp);
-                break;
+                let status = resp.status();
+                if status.is_success() || status == reqwest::StatusCode::PARTIAL_CONTENT {
+                    println!("GET请求成功，状态码: {}", status);
+                    response = Some(resp);
+                    break;
+                } else {
+                    last_error = format!("服务器返回错误状态码: {}", status);
+                    println!("{}", last_error);
+                    
+                    // 对于某些状态码，不需要重试
+                    if status == reqwest::StatusCode::NOT_FOUND 
+                        || status == reqwest::StatusCode::FORBIDDEN 
+                        || status == reqwest::StatusCode::UNAUTHORIZED {
+                        return Err(format!("下载失败: {}", last_error).into());
+                    }
+                    
+                    retries -= 1;
+                    if retries > 0 {
+                        let wait_time = 6 - retries; // 递增等待时间
+                        tokio::time::sleep(Duration::from_secs(wait_time)).await;
+                    }
+                }
             }
             Err(e) => {
                 retries -= 1;
+                last_error = format!("网络请求错误: {}", e);
+                println!("GET请求失败 (剩余{}次重试): {}", retries, last_error);
+                
                 if retries == 0 {
-                    return Err(format!("GET请求失败: {}", e).into());
+                    return Err(format!("GET请求失败: {}", last_error).into());
                 }
-                println!("GET请求失败，剩余重试次数: {}, 错误: {}", retries, e);
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                
+                // 根据错误类型调整等待时间
+                let wait_time = if e.is_timeout() {
+                    8 // 超时错误等待更长时间
+                } else if e.is_connect() {
+                    5 // 连接错误
+                } else {
+                    3 // 其他错误
+                };
+                tokio::time::sleep(Duration::from_secs(wait_time)).await;
             }
         }
+    }
+    
+    if response.is_none() {
+        return Err(format!("GET请求完全失败: {}", last_error).into());
     }
 
     let mut response = response.unwrap();
@@ -577,22 +656,31 @@ async fn perform_download(
     let _ = app.emit("download_progress", &task);
 
     let mut consecutive_errors = 0;
-    const MAX_CONSECUTIVE_ERRORS: u32 = 5;
+    const MAX_CONSECUTIVE_ERRORS: u32 = 3;
+    let mut total_retries = 0;
+    const MAX_TOTAL_RETRIES: u32 = 10;
     
     while let Some(chunk_result) = response.chunk().await.transpose() {
         let chunk = match chunk_result {
             Ok(chunk) => chunk,
             Err(e) => {
                 consecutive_errors += 1;
-                println!("下载块时出错 (第{}次): {}", consecutive_errors, e);
+                total_retries += 1;
+                println!("下载块时出错 (连续第{}次，总第{}次): {}", consecutive_errors, total_retries, e);
+                
+                // 如果总重试次数过多，直接失败
+                if total_retries >= MAX_TOTAL_RETRIES {
+                    return Err(format!("下载失败，已达到最大重试次数: {}", e).into());
+                }
                 
                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
                     println!("尝试重新建立连接...");
                     
                     // 尝试重新建立连接
-                    let mut reconnect_retries = 3;
+                    let mut reconnect_retries = 5;
                     while reconnect_retries > 0 {
-                        tokio::time::sleep(Duration::from_secs(5)).await;
+                        let wait_time = std::cmp::min(2_u64.pow(5 - reconnect_retries), 30); // 指数退避，最大30秒
+                        tokio::time::sleep(Duration::from_secs(wait_time)).await;
                         
                         let mut request = client.get(&task.url);
                         if downloaded > 0 {
@@ -604,6 +692,7 @@ async fn perform_download(
                                 println!("重新连接成功，继续下载");
                                 response = new_response;
                                 consecutive_errors = 0;
+                                last_activity = Instant::now();
                                 break;
                             }
                             Err(reconnect_err) => {
@@ -618,8 +707,9 @@ async fn perform_download(
                     continue;
                 }
                 
-                // 等待一段时间后重试
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                // 短暂等待后重试
+                let wait_time = std::cmp::min(consecutive_errors as u64, 10); // 最大等待10秒
+                tokio::time::sleep(Duration::from_secs(wait_time)).await;
                 continue;
             }
         };
@@ -628,25 +718,11 @@ async fn perform_download(
         consecutive_errors = 0;
         last_activity = Instant::now();
         
-        // 检查是否长时间无活动（可能连接已断开）
-        if last_activity.elapsed() > ACTIVITY_TIMEOUT {
-            println!("检测到长时间无活动，可能连接已断开，尝试重新连接...");
-            
-            let mut request = client.get(&task.url);
-            if downloaded > 0 {
-                request = request.header("Range", format!("bytes={}-", downloaded));
-            }
-            
-            match request.send().await {
-                Ok(new_response) => {
-                    println!("重新连接成功");
-                    response = new_response;
-                    last_activity = Instant::now();
-                }
-                Err(e) => {
-                    return Err(format!("连接超时重连失败: {}", e).into());
-                }
-            }
+        // 如果块为空，可能是连接问题，跳过这次循环
+        if chunk.is_empty() {
+            println!("收到空数据块，可能连接异常");
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            continue;
         }
         
         // 非阻塞检查控制信号
@@ -710,11 +786,11 @@ async fn perform_download(
         file.write_all(&chunk).await?;
         downloaded += chunk.len() as u64;
 
-        // 每100ms或每下载64KB更新一次进度
+        // 优化进度更新频率：每50ms或每下载128KB更新一次进度
         let now = Instant::now();
         let downloaded_since_last = downloaded - last_downloaded;
-        if now.duration_since(last_update) >= Duration::from_millis(100)
-            || downloaded_since_last >= 65536
+        if now.duration_since(last_update) >= Duration::from_millis(50)
+            || downloaded_since_last >= 131072  // 128KB
         {
             let speed = {
                 let time_elapsed = now.duration_since(last_update).as_secs_f64();

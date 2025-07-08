@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import styled from 'styled-components';
-import { createAcceleratedDownload, DownloadStatus as AcceleratedDownloadStatus } from '../services/acceleratedDownloader';
-import { getDownloadSettings, setDownloadSettings } from '../utils/settingsUtil';
 
 // 样式组件
 const DownloadManagerContainer = styled.div`
@@ -277,48 +275,14 @@ const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
-const DownloadManager = ({ theme = 'light' }) => {
+const DownloadManager = ({ theme = 'light', onDownloadRemoved }) => {
   const [downloads, setDownloads] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newDownload, setNewDownload] = useState({
     url: '',
     fileName: '',
-    downloadPath: '',
-    useMultiThread: true,
-    threadCount: 8
+    downloadPath: ''
   });
-  const [downloadSettings, setDownloadSettingsState] = useState({
-    useMultiThread: true,
-    threadCount: 8,
-    chunkSize: 1024 * 1024,
-    retryCount: 3
-  });
-  const [activeDownloads, setActiveDownloads] = useState(new Map());
-
-  // 加载下载设置
-  const loadDownloadSettings = async () => {
-    try {
-      const settings = await getDownloadSettings();
-      setDownloadSettingsState({
-        useMultiThread: settings.useMultiThread ?? true,
-        threadCount: settings.threadCount ?? 8,
-        chunkSize: settings.chunkSize ?? 1024 * 1024,
-        retryCount: settings.retryCount ?? 3
-      });
-    } catch (error) {
-      console.error('加载下载设置失败:', error);
-    }
-  };
-
-  // 保存下载设置
-  const saveDownloadSettings = async (newSettings) => {
-    try {
-      await setDownloadSettings(newSettings);
-      setDownloadSettingsState(prev => ({ ...prev, ...newSettings }));
-    } catch (error) {
-      console.error('保存下载设置失败:', error);
-    }
-  };
 
   // 加载下载任务
   const loadDownloads = async () => {
@@ -338,121 +302,16 @@ const DownloadManager = ({ theme = 'light' }) => {
     }
 
     try {
-      let taskId;
-      
-      // 如果启用多线程下载，使用加速下载器
-      if (newDownload.useMultiThread) {
-        taskId = `multi_${Date.now()}`;
-        
-        const acceleratedDownload = createAcceleratedDownload(
-          newDownload.url,
-          newDownload.fileName,
-          {
-            chunkCount: newDownload.threadCount,
-            chunkSize: downloadSettings.chunkSize,
-            retryCount: downloadSettings.retryCount,
-            useMultiThread: true
-          },
-          {
-            onProgress: (progress) => {
-              setDownloads(prev => prev.map(task => 
-                task.id === taskId ? {
-                  ...task,
-                  progress: progress.progress,
-                  downloaded_size: progress.downloaded,
-                  total_size: progress.total,
-                  speed: progress.speed,
-                  status: 'Downloading'
-                } : task
-              ));
-            },
-            onStatusChange: (status) => {
-              const statusMap = {
-                [AcceleratedDownloadStatus.PENDING]: 'Pending',
-                [AcceleratedDownloadStatus.ANALYZING]: 'Downloading',
-                [AcceleratedDownloadStatus.DOWNLOADING]: 'Downloading',
-                [AcceleratedDownloadStatus.MERGING]: 'Downloading',
-                [AcceleratedDownloadStatus.COMPLETED]: 'Completed',
-                [AcceleratedDownloadStatus.FAILED]: 'Failed',
-                [AcceleratedDownloadStatus.CANCELED]: 'Cancelled',
-                [AcceleratedDownloadStatus.PAUSED]: 'Paused'
-              };
-              
-              setDownloads(prev => prev.map(task => 
-                task.id === taskId ? {
-                  ...task,
-                  status: statusMap[status] || status
-                } : task
-              ));
-            },
-            onComplete: () => {
-              setDownloads(prev => prev.map(task => 
-                task.id === taskId ? {
-                  ...task,
-                  status: 'Completed',
-                  progress: 100
-                } : task
-              ));
-              activeDownloads.delete(taskId);
-              window.showSuccess && window.showSuccess(`文件 "${newDownload.fileName}" 下载完成`);
-            },
-            onError: (error) => {
-              setDownloads(prev => prev.map(task => 
-                task.id === taskId ? {
-                  ...task,
-                  status: 'Failed'
-                } : task
-              ));
-              activeDownloads.delete(taskId);
-              window.showError && window.showError(`下载失败: ${error.message}`);
-            }
-          }
-        );
-        
-        // 添加到活动下载列表
-        setActiveDownloads(prev => new Map(prev.set(taskId, acceleratedDownload)));
-        
-        // 添加到下载列表
-        const newTask = {
-          id: taskId,
-          url: newDownload.url,
-          file_name: newDownload.fileName,
-          file_path: newDownload.downloadPath || '',
-          total_size: 0,
-          downloaded_size: 0,
-          status: 'Pending',
-          progress: 0,
-          speed: '0 B/s',
-          is_multi_thread: true,
-          thread_count: newDownload.threadCount
-        };
-        
-        setDownloads(prev => [...prev, newTask]);
-        
-        // 开始下载
-        acceleratedDownload.start();
-        
-      } else {
-        // 使用传统下载方式
-        taskId = await invoke('create_download_task', {
-          url: newDownload.url,
-          fileName: newDownload.fileName,
-          downloadPath: newDownload.downloadPath || null
-        });
-        
-        loadDownloads();
-      }
+      const taskId = await invoke('create_download_task', {
+        url: newDownload.url,
+        fileName: newDownload.fileName,
+        downloadPath: newDownload.downloadPath || null
+      });
       
       console.log('创建下载任务成功:', taskId);
       setShowAddModal(false);
-      setNewDownload({ 
-        url: '', 
-        fileName: '', 
-        downloadPath: '',
-        useMultiThread: true,
-        threadCount: 8
-      });
-      
+      setNewDownload({ url: '', fileName: '', downloadPath: '' });
+      loadDownloads();
     } catch (error) {
       console.error('创建下载任务失败:', error);
       window.showError && window.showError('创建下载任务失败: ' + error);
@@ -462,13 +321,7 @@ const DownloadManager = ({ theme = 'light' }) => {
   // 开始下载
   const startDownload = async (taskId) => {
     try {
-      // 检查是否为多线程下载
-      const activeDownload = activeDownloads.get(taskId);
-      if (activeDownload) {
-        activeDownload.start();
-      } else {
-        await invoke('start_download', { taskId });
-      }
+      await invoke('start_download', { taskId });
     } catch (error) {
       console.error('开始下载失败:', error);
       window.showError && window.showError('开始下载失败: ' + error);
@@ -478,13 +331,7 @@ const DownloadManager = ({ theme = 'light' }) => {
   // 恢复下载
   const resumeDownload = async (taskId) => {
     try {
-      // 检查是否为多线程下载
-      const activeDownload = activeDownloads.get(taskId);
-      if (activeDownload) {
-        activeDownload.resume();
-      } else {
-        await invoke('resume_download', { taskId });
-      }
+      await invoke('resume_download', { taskId });
     } catch (error) {
       console.error('恢复下载失败:', error);
       window.showError && window.showError('恢复下载失败: ' + error);
@@ -494,13 +341,7 @@ const DownloadManager = ({ theme = 'light' }) => {
   // 暂停下载
   const pauseDownload = async (taskId) => {
     try {
-      // 检查是否为多线程下载
-      const activeDownload = activeDownloads.get(taskId);
-      if (activeDownload) {
-        activeDownload.pause();
-      } else {
-        await invoke('pause_download', { taskId });
-      }
+      await invoke('pause_download', { taskId });
     } catch (error) {
       console.error('暂停下载失败:', error);
     }
@@ -509,18 +350,7 @@ const DownloadManager = ({ theme = 'light' }) => {
   // 取消下载
   const cancelDownload = async (taskId) => {
     try {
-      // 检查是否为多线程下载
-      const activeDownload = activeDownloads.get(taskId);
-      if (activeDownload) {
-        activeDownload.cancel();
-        setActiveDownloads(prev => {
-          const newMap = new Map(prev);
-          newMap.delete(taskId);
-          return newMap;
-        });
-      } else {
-        await invoke('cancel_download', { taskId });
-      }
+      await invoke('cancel_download', { taskId });
     } catch (error) {
       console.error('取消下载失败:', error);
     }
@@ -531,6 +361,13 @@ const DownloadManager = ({ theme = 'light' }) => {
     try {
       await invoke('remove_download_task', { taskId });
       loadDownloads();
+      
+      // 如果有回调函数，通过taskId映射获取appId并通知App.jsx清除下载状态
+      if (onDownloadRemoved && window.taskIdToAppIdMap && window.taskIdToAppIdMap.has(taskId)) {
+        const appId = window.taskIdToAppIdMap.get(taskId);
+        window.taskIdToAppIdMap.delete(taskId); // 清除映射
+        onDownloadRemoved(appId);
+      }
     } catch (error) {
       console.error('删除下载任务失败:', error);
     }
@@ -623,7 +460,6 @@ const DownloadManager = ({ theme = 'light' }) => {
 
     setupListeners();
     loadDownloads();
-    loadDownloadSettings();
 
     return () => {
       if (unlistenProgress) unlistenProgress();
@@ -709,11 +545,6 @@ const DownloadManager = ({ theme = 'light' }) => {
                     {formatFileSize(download.downloaded_size || 0)} / {formatFileSize(download.total_size || 0)}
                   </span>
                   <span>{download.speed || '0.0 B/s'}</span>
-                  {download.is_multi_thread && (
-                    <span style={{ color: '#007bff', fontSize: '11px' }}>
-                      多线程({download.thread_count || 8})
-                    </span>
-                  )}
                 </ProgressText>
               </ProgressContainer>
 
@@ -841,33 +672,6 @@ const DownloadManager = ({ theme = 'light' }) => {
                 placeholder="留空使用默认下载目录"
               />
             </FormGroup>
-            
-            <FormGroup>
-              <Label theme={theme}>
-                <input
-                  type="checkbox"
-                  checked={newDownload.useMultiThread}
-                  onChange={(e) => setNewDownload(prev => ({ ...prev, useMultiThread: e.target.checked }))}
-                  style={{ marginRight: '8px' }}
-                />
-                启用多线程下载
-              </Label>
-            </FormGroup>
-            
-            {newDownload.useMultiThread && (
-              <FormGroup>
-                <Label theme={theme}>线程数量</Label>
-                <Input
-                  theme={theme}
-                  type="number"
-                  min="1"
-                  max="16"
-                  value={newDownload.threadCount}
-                  onChange={(e) => setNewDownload(prev => ({ ...prev, threadCount: parseInt(e.target.value) || 8 }))}
-                  placeholder="建议1-16个线程"
-                />
-              </FormGroup>
-            )}
             
             <ModalButtonGroup>
               <ModalButton 

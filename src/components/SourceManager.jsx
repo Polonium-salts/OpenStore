@@ -942,6 +942,7 @@ const SourceManager = ({ theme, onSourcesChange }) => {
 
   return (
     <Container theme={theme}>
+      <Title>{t('sourceManager.title')}</Title>
       
       <Tabs>
         <Tab 
