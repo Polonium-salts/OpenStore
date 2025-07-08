@@ -1213,7 +1213,6 @@ const Settings = React.memo(({
 
   return (
     <SettingsContainer>
-      <SettingsTitle theme={theme}>{t('settings.title') || '设置'}</SettingsTitle>
       
       <SettingsSection theme={theme}>
         <SectionTitle theme={theme}>{t('settings.appearance') || '外观设置'}</SectionTitle>

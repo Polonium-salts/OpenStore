@@ -45,6 +45,7 @@ enum DownloadStatus {
 enum DownloadControl {
     Pause(String),
     Cancel(String),
+    #[allow(dead_code)]
     Resume(String),
 }
 
@@ -637,8 +638,8 @@ async fn perform_download(
     let mut last_downloaded = downloaded;
     let mut speed_samples: Vec<u64> = Vec::new();
     const MAX_SPEED_SAMPLES: usize = 5; // 保持最近5个速度样本用于平滑
-    let mut last_activity = Instant::now(); // 记录最后活动时间
-    const ACTIVITY_TIMEOUT: Duration = Duration::from_secs(120); // 2分钟无活动超时
+    let mut _last_activity = Instant::now(); // 记录最后活动时间
+    const _ACTIVITY_TIMEOUT: Duration = Duration::from_secs(120); // 2分钟无活动超时
 
     // 发送初始进度事件
     task.status = DownloadStatus::Downloading;
@@ -692,7 +693,7 @@ async fn perform_download(
                                 println!("重新连接成功，继续下载");
                                 response = new_response;
                                 consecutive_errors = 0;
-                                last_activity = Instant::now();
+                                _last_activity = Instant::now();
                                 break;
                             }
                             Err(reconnect_err) => {
@@ -716,7 +717,7 @@ async fn perform_download(
         
         // 重置错误计数器和活动时间
         consecutive_errors = 0;
-        last_activity = Instant::now();
+        _last_activity = Instant::now();
         
         // 如果块为空，可能是连接问题，跳过这次循环
         if chunk.is_empty() {
