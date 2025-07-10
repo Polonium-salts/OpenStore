@@ -13,7 +13,7 @@ console.log(f);
 console.log(w);
 var orUrl = null;
 // 使用fetch函数发起GET请求
-fetch("https://api.github.com/repos/DaiYu-233/YMCL.Avalonia/releases?per_page=1")
+fetch("https://api.github.com/repos/Polonium-salts/OpenStore/releases?per_page=1")
     .then((response) => {
         // 首先检查响应是否成功
         if (!response.ok) {
@@ -28,17 +28,17 @@ fetch("https://api.github.com/repos/DaiYu-233/YMCL.Avalonia/releases?per_page=1"
         // 处理获取到的数据
         data[0].assets.forEach((element) => {
             console.log(element.name);
-            if ((element.name == "YMCL.Desktop.linux.arm.AppImage" && f == "linux-arm") ||
-                (element.name == "YMCL.Desktop.linux.arm64.AppImage" && f == "linux-arm64") ||
-                (element.name == "YMCL.Desktop.linux.x64.AppImage" && f == "linux-x64") ||
-                (element.name == "YMCL.Desktop.osx.mac.x64.app.zip" && f == "osx-x64") ||
-                (element.name == "YMCL.Desktop.osx.mac.arm64.app.zip" && f == "osx-arm64") ||
-                (element.name == "YMCL.Desktop.win.x64.installer.exe" && f == "win-x64") ||
-                (element.name == "YMCL.Desktop.win.arm64.installer.exe" && f == "win-arm64") ||
-                (element.name == "YMCL.Desktop.win.x86.installer.exe" && f == "win-x86") ||
-                (element.name == "YMCL.Desktop.win7.x64.zip" && f == "win7-x64") ||
-                (element.name == "YMCL.Desktop.win7.arm64.zip" && f == "win7-arm64") ||
-                (element.name == "YMCL.Desktop.win7.x86.zip" && f == "win7-x86")) {
+            if ((element.name == "OpenStore.Desktop.linux.arm.AppImage" && f == "linux-arm") ||
+                (element.name == "OpenStore.Desktop.linux.arm64.AppImage" && f == "linux-arm64") ||
+                (element.name == "OpenStore.Desktop.linux.x64.AppImage" && f == "linux-x64") ||
+                (element.name == "OpenStore.Desktop.osx.mac.x64.app.zip" && f == "osx-x64") ||
+                (element.name == "OpenStore.Desktop.osx.mac.arm64.app.zip" && f == "osx-arm64") ||
+                (element.name == "OpenStore.Desktop.win.x64.installer.exe" && f == "win-x64") ||
+                (element.name == "OpenStore.Desktop.win.arm64.installer.exe" && f == "win-arm64") ||
+                (element.name == "OpenStore.Desktop.win.x86.installer.exe" && f == "win-x86") ||
+                (element.name == "OpenStore.Desktop.win7.x64.zip" && f == "win7-x64") ||
+                (element.name == "OpenStore.Desktop.win7.arm64.zip" && f == "win7-arm64") ||
+                (element.name == "OpenStore.Desktop.win7.x86.zip" && f == "win7-x86")) {
                 orUrl = element.browser_download_url;
                 console.log(element.name);
                 console.log(orUrl);
