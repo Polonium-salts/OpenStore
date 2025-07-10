@@ -65,7 +65,11 @@
     "downloadPathDesc": "Set the location where downloaded files will be saved",
     "currentDownloadPath": "Current Download Directory",
     "selectDownloadDirectory": "Select Download Directory",
-    "refreshDownloadDirectory": "Refresh Download Directory"
+    "refreshDownloadDirectory": "Refresh Download Directory",
+    "versionInfo": "Version Information",
+    "appVersion": "Application Version",
+    "appVersionDesc": "Current application version information",
+    "currentVersion": "Current Version"
   },
   "sourceManager": {
     "title": "Source Manager",

@@ -1464,6 +1464,23 @@ const Settings = React.memo(({
           </RefreshButton>
         </OptionGroup>
       </SettingsSection>
+
+      {/* Version Information Section */}
+      <SettingsSection theme={theme}>
+        <SectionTitle theme={theme}>{t('settings.versionInfo') || '版本信息'}</SectionTitle>
+        
+        <OptionGroup>
+          <OptionLabel theme={theme}>{t('settings.appVersion') || '应用版本'}</OptionLabel>
+          <OptionDescription theme={theme}>
+            {t('settings.appVersionDesc') || '当前应用的版本信息'}
+          </OptionDescription>
+          
+          <SystemInfoCard theme={theme}>
+            <SystemInfoLabel theme={theme}>{t('settings.currentVersion') || '当前版本'}</SystemInfoLabel>
+            <SystemInfoValue theme={theme}>v0.1.0</SystemInfoValue>
+          </SystemInfoCard>
+        </OptionGroup>
+      </SettingsSection>
     </SettingsContainer>
   );
 });

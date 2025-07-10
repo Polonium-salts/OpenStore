@@ -65,7 +65,11 @@
     "downloadPathDesc": "设置应用下载文件的保存位置",
     "currentDownloadPath": "当前下载目录",
     "selectDownloadDirectory": "选择下载目录",
-    "refreshDownloadDirectory": "刷新下载目录"
+    "refreshDownloadDirectory": "刷新下载目录",
+    "versionInfo": "版本信息",
+    "appVersion": "应用版本",
+    "appVersionDesc": "当前应用的版本信息",
+    "currentVersion": "当前版本"
   },
   "sourceManager": {
     "title": "软件源管理",
