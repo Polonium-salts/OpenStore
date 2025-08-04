@@ -13,6 +13,7 @@ import DownloadManager from './components/DownloadManager';
 import AppDetails from './components/AppDetails';
 import { TauriDownloader, TauriDownloaderUtil } from './components/TauriDownloader';
 import { fetchAppsFromSources, fetchAppsByCategory } from './services/sourceService';
+import { createDownloadWithFallback } from './services/downloadService';
 import NotificationSystem from './components/NotificationSystem';
 import ConfirmDialogContainer from './components/ConfirmDialog';
 import PromptDialogContainer from './components/PromptDialog';
@@ -1199,26 +1200,35 @@ const App = () => {
         
         console.log('使用文件名:', fileName);
         
-        // 创建下载任务
-        const taskId = await invoke('create_download_task', {
-          url: app.downloadUrl,
-          fileName: fileName,
-          downloadPath: null // 使用默认下载路径
+        // 使用新的下载服务，支持直接下载路径和回退机制
+        const downloadResult = await createDownloadWithFallback({
+          app,
+          fileName,
+          onProgress: (progress) => {
+            updateDownloadState(app.id, { progress });
+          },
+          onStatusChange: (status) => {
+            updateDownloadState(app.id, { status });
+          }
         });
         
-        console.log('创建下载任务成功，任务ID:', taskId);
+        console.log('创建下载任务成功，任务ID:', downloadResult.taskId);
         
         // 更新状态包含taskId
-        updateDownloadState(app.id, { taskId, fileName });
+        updateDownloadState(app.id, { 
+          taskId: downloadResult.taskId, 
+          fileName,
+          downloadUrl: downloadResult.finalUrl // 记录实际使用的下载URL
+        });
         
         // 创建taskId到appId的映射，用于删除时清除状态
         if (!window.taskIdToAppIdMap) {
           window.taskIdToAppIdMap = new Map();
         }
-        window.taskIdToAppIdMap.set(taskId, app.id);
+        window.taskIdToAppIdMap.set(downloadResult.taskId, app.id);
         
         // 立即开始下载
-        const startResult = await invoke('start_download', { taskId });
+        const startResult = await invoke('start_download', { taskId: downloadResult.taskId });
         
         console.log('下载启动成功:', app.name, '结果:', startResult);
         

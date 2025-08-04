@@ -409,10 +409,21 @@ const PlatformDownloadSelector = ({ app, theme, onDownload, getDownloadState, ha
 
   const handleDownload = () => {
     if (selectedDownload) {
+      // 构建下载URL，优先使用直接下载路径
+      let downloadUrl = selectedDownload.url;
+      
+      // 如果应用有直接下载路径且有源信息，构建直接下载URL
+      if (app.directDownloadPath && app.source && app.source.url) {
+        const sourceBaseUrl = app.source.url.replace(/\/[^/]*$/, ''); // 移除文件名，保留基础URL
+        downloadUrl = sourceBaseUrl + app.directDownloadPath;
+        console.log('使用直接下载路径:', downloadUrl);
+      }
+      
       // 创建一个包含选中下载信息的应用对象
       const downloadApp = {
         ...app,
-        downloadUrl: selectedDownload.url,
+        downloadUrl: downloadUrl,
+        originalDownloadUrl: selectedDownload.url, // 保留原始URL作为回退
         filename: selectedDownload.filename,
         size: selectedDownload.size,
         platform: selectedPlatform,

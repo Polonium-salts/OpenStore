@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import styled from 'styled-components';
+import { invoke } from '@tauri-apps/api/core';
 
 // 提取共用的透明度计算函数
 const getBackgroundColor = (props, defaultDark, defaultLight) => {
@@ -353,10 +354,18 @@ const Header = ({
 
 
 
+  // 系统托盘相关函数
+  const handleQuitApp = async () => {
+    try {
+      await invoke('quit_app');
+    } catch (error) {
+      console.error('Failed to quit app:', error);
+    }
+  };
+
   // 使用useMemo缓存按钮部分
   const headerActions = useMemo(() => (
     <HeaderActions>
-
       {/* 下载管理按钮 */}
       <MemoizedHeaderButton 
         title="下载管理"
@@ -381,6 +390,8 @@ const Header = ({
           <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
         </svg>
       </MemoizedHeaderButton>
+
+
     </HeaderActions>
   ), [theme, isDownloadManagerVisible, isMessagesVisible, onToggleDownloadManager, onToggleMessages, backgroundOpacity]);
 

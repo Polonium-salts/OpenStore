@@ -69,7 +69,12 @@
     "versionInfo": "版本信息",
     "appVersion": "应用版本",
     "appVersionDesc": "当前应用的版本信息",
-    "currentVersion": "当前版本"
+    "currentVersion": "当前版本",
+    "systemTray": "系统托盘",
+    "systemTrayDesc": "应用可以最小化到系统托盘，点击托盘图标可以显示/隐藏窗口",
+    "minimizeToTray": "最小化到托盘",
+    "quitApp": "退出应用",
+    "trayTooltip": "OpenStore - 点击显示/隐藏窗口，右键查看菜单"
   },
   "sourceManager": {
     "title": "软件源管理",

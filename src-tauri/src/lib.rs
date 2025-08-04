@@ -7,6 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Emitter;
 use tauri::Manager;
+use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use tauri::menu::{Menu, MenuItem};
 use tauri_plugin_http::reqwest;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::AsyncWriteExt;
@@ -1142,6 +1144,30 @@ fn format_speed(bytes_per_sec: u64) -> String {
     format!("{:.1} {}", size, UNITS[unit_index])
 }
 
+// 系统托盘相关命令
+#[tauri::command]
+async fn show_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn hide_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
+    app.exit(0);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let download_manager: DownloadManager = Arc::new(Mutex::new(HashMap::new()));
@@ -1155,6 +1181,80 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(download_manager)
         .manage(control_senders)
+        .setup(|app| {
+            // 创建系统托盘菜单
+            let show = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
+            let hide = MenuItem::with_id(app, "hide", "隐藏窗口", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "退出应用", true, None::<&str>)?;
+            
+            let menu = Menu::with_items(app, &[
+                &show,
+                &hide,
+                &quit,
+            ])?;
+
+            let _tray = TrayIconBuilder::with_id("main")
+                .tooltip("OpenStore")
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .on_tray_icon_event(|tray, event| {
+                    match event {
+                        TrayIconEvent::Click { button, button_state, .. } => {
+                            if button == tauri::tray::MouseButton::Left && button_state == tauri::tray::MouseButtonState::Up {
+                                // 左键点击托盘图标显示/隐藏窗口
+                                let app = tray.app_handle();
+                                if let Some(window) = app.get_webview_window("main") {
+                                    if window.is_visible().unwrap_or(false) {
+                                        let _ = window.hide();
+                                    } else {
+                                        let _ = window.show();
+                                        let _ = window.set_focus();
+                                    }
+                                }
+                            }
+                        }
+                        TrayIconEvent::DoubleClick { .. } => {
+                            // 双击显示窗口
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .on_menu_event(|app, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "hide" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.hide();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .build(app)?;
+
+            Ok(())
+        })
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                // 阻止窗口关闭，改为隐藏到托盘
+                window.hide().unwrap();
+                api.prevent_close();
+            }
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             create_download_task,
@@ -1172,7 +1272,10 @@ pub fn run() {
             open_file,
             is_app_installed,
             file_exists,
-            get_file_action
+            get_file_action,
+            show_window,
+            hide_window,
+            quit_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
