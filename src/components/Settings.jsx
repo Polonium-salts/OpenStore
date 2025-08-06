@@ -6,6 +6,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 
 import { platform, arch, version, type as osType, locale } from '@tauri-apps/plugin-os';
 import { isWebKit, isMacOS, applyWebKitFixes, applyMacOSFixes, forceRepaint, initWebKitFixes } from '../utils/wkwebviewUtils';
+import { isAutoRunAfterDownloadEnabled, setAutoRunAfterDownloadEnabled } from '../utils/settingsUtil';
 
 const SettingsContainer = styled.div.withConfig({
   shouldForwardProp: (prop) => prop !== 'isWebKit'
@@ -448,6 +449,71 @@ const SliderContainer = styled.div`
   max-width: 300px;
 `;
 
+// Toggle开关样式组件
+const ToggleContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+`;
+
+const ToggleSwitch = styled.label`
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+  cursor: pointer;
+`;
+
+const ToggleInput = styled.input`
+  opacity: 0;
+  width: 0;
+  height: 0;
+  
+  &:checked + span {
+    background-color: var(--accent-color);
+  }
+  
+  &:checked + span:before {
+    transform: translateX(26px);
+  }
+`;
+
+const ToggleSlider = styled.span`
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: ${props => props.theme === 'dark' ? '#3a3a3d' : '#ccc'};
+  transition: 0.3s;
+  border-radius: 24px;
+  
+  &:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  
+  &:hover {
+    background-color: ${props => props.theme === 'dark' ? '#444' : '#bbb'};
+  }
+`;
+
+const ToggleLabel = styled.span`
+  font-size: 14px;
+  color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
+  user-select: none;
+`;
+
 const SliderLabel = styled.div`
   display: flex;
   justify-content: space-between;
@@ -654,7 +720,10 @@ const Settings = React.memo(({
 }) => {
   const { t } = useTranslation();
   const [customBgUrl, setCustomBgUrl] = useState('');
-  const [customBgPreviewUrl, setCustomBgPreviewUrl] = useState('');
+  const [customBgPreviewUrl, setCustomBgPreviewUrl] = useState(() => {
+    // 从localStorage恢复自定义背景图片URL
+    return localStorage.getItem('customBackgroundImage') || '';
+  });
   const [opacity, setOpacity] = useState(() => {
     // 从localStorage获取值，如果没有则使用默认值0.8
     return parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
@@ -663,6 +732,9 @@ const Settings = React.memo(({
     // 确保与opacity初始值一致
     return parseFloat(localStorage.getItem('backgroundOpacity') || '0.8');
   });
+  
+  // 自动运行设置状态
+  const [autoRunAfterDownload, setAutoRunAfterDownload] = useState(false);
   
   // WebKit兼容性状态（支持macOS、iOS、Linux）
   const [isWebKitReady, setIsWebKitReady] = useState(!isWebKit());
@@ -693,6 +765,19 @@ const Settings = React.memo(({
       document.documentElement.style.setProperty('--accent-bg-color', 'rgba(0, 102, 204, 0.1)');
     }
   }, [theme]);
+  
+  // 初始化自动运行设置
+  useEffect(() => {
+    const loadAutoRunSetting = async () => {
+      try {
+        const enabled = await isAutoRunAfterDownloadEnabled();
+        setAutoRunAfterDownload(enabled);
+      } catch (error) {
+        console.error('加载自动运行设置失败:', error);
+      }
+    };
+    loadAutoRunSetting();
+  }, []);
   
   // 优化初始化加载
   useEffect(() => {
@@ -1186,6 +1271,19 @@ const Settings = React.memo(({
       handleBackgroundChange('none', '');
     }
   };
+  
+  // 处理自动运行开关变化
+  const handleAutoRunToggle = async (event) => {
+    const enabled = event.target.checked;
+    try {
+      await setAutoRunAfterDownloadEnabled(enabled);
+      setAutoRunAfterDownload(enabled);
+    } catch (error) {
+      console.error('保存自动运行设置失败:', error);
+      // 如果保存失败，恢复原状态
+      setAutoRunAfterDownload(!enabled);
+    }
+  };
 
   // 处理URL输入
   const handleUrlChange = (e) => {
@@ -1437,6 +1535,27 @@ const Settings = React.memo(({
               </>
             )}
           </RefreshButton>
+        </OptionGroup>
+        
+        <OptionGroup>
+          <OptionLabel theme={theme}>{t('settings.autoRunAfterDownload') || '下载完成后自动运行'}</OptionLabel>
+          <OptionDescription theme={theme}>
+            {t('settings.autoRunAfterDownloadDesc') || '启用后，下载完成时会自动运行安装程序'}
+          </OptionDescription>
+          
+          <ToggleContainer>
+            <ToggleSwitch theme={theme}>
+              <ToggleInput
+                type="checkbox"
+                checked={autoRunAfterDownload}
+                onChange={handleAutoRunToggle}
+              />
+              <ToggleSlider theme={theme} />
+            </ToggleSwitch>
+            <ToggleLabel theme={theme}>
+              {autoRunAfterDownload ? (t('settings.enabled') || '已启用') : (t('settings.disabled') || '已禁用')}
+            </ToggleLabel>
+          </ToggleContainer>
         </OptionGroup>
       </SettingsSection>
 

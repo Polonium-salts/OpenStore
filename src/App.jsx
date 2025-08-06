@@ -528,7 +528,32 @@ const App = () => {
   const [downloadStates, setDownloadStates] = useState(() => {
     try {
       const saved = localStorage.getItem('downloadStates');
-      return saved ? JSON.parse(saved) : {};
+      const states = saved ? JSON.parse(saved) : {};
+      
+      // 清理失败状态，页面刷新后将failed状态重置为idle
+      const cleanedStates = {};
+      Object.keys(states).forEach(appId => {
+        const state = states[appId];
+        if (state.status === 'failed' || state.status === 'cancelled') {
+          // 将失败和取消状态重置为idle，允许重新下载
+          cleanedStates[appId] = {
+            ...state,
+            status: 'idle',
+            progress: 0,
+            speed: '',
+            taskId: null
+          };
+        } else {
+          cleanedStates[appId] = state;
+        }
+      });
+      
+      // 如果状态被清理，更新localStorage
+      if (Object.keys(cleanedStates).length > 0) {
+        localStorage.setItem('downloadStates', JSON.stringify(cleanedStates));
+      }
+      
+      return cleanedStates;
     } catch (error) {
       console.error('读取下载状态失败:', error);
       return {};
@@ -1201,16 +1226,23 @@ const App = () => {
         console.log('使用文件名:', fileName);
         
         // 使用新的下载服务，支持直接下载路径和回退机制
-        const downloadResult = await createDownloadWithFallback({
-          app,
-          fileName,
-          onProgress: (progress) => {
-            updateDownloadState(app.id, { progress });
-          },
-          onStatusChange: (status) => {
-            updateDownloadState(app.id, { status });
-          }
-        });
+        const createDownloadTask = async (downloadParams) => {
+          console.log('创建下载任务，参数:', downloadParams);
+          
+          // 创建Tauri下载任务
+          const taskId = await invoke('create_download_task', {
+            url: downloadParams.url,
+            file_name: downloadParams.fileName || fileName,
+            download_path: downloadParams.downloadPath
+          });
+          
+          return {
+            taskId,
+            finalUrl: downloadParams.url
+          };
+        };
+        
+        const downloadResult = await createDownloadWithFallback(app, createDownloadTask);
         
         console.log('创建下载任务成功，任务ID:', downloadResult.taskId);
         
@@ -1236,24 +1268,38 @@ const App = () => {
         showToast(`下载已开始: ${app.name}`, '#28a745');
         
       } catch (downloadError) {
-        console.error('使用下载管理器失败，回退到内置下载:', downloadError);
+        console.error('使用下载管理器失败:', downloadError);
+        console.error('错误详情:', {
+          message: downloadError.message,
+          stack: downloadError.stack,
+          appId: app.id,
+          appName: app.name,
+          downloadUrl: app.downloadUrl
+        });
         
         // 更新状态为失败
-        updateDownloadState(app.id, { status: 'failed' });
+        updateDownloadState(app.id, { status: 'failed', error: downloadError.message });
         
-        // 显示错误提示
-        showToast(`下载失败: ${app.name}`, '#dc3545');
+        // 显示详细错误提示
+        const errorMessage = downloadError.message || '未知错误';
+        showToast(`下载失败: ${app.name} - ${errorMessage}`, '#dc3545');
         
         // 回退到原有的下载方式
-        if (downloadManagerRef.current) {
-          console.log(t('downloadManager.starting'));
-          downloadManagerRef.current.startDownload({
-            name: app.name,
-            downloadUrl: app.downloadUrl
-          });
-        } else {
-          console.log(t('downloadManager.downloading'));
-          TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
+        console.log('尝试回退到内置下载方式');
+        try {
+          if (downloadManagerRef.current) {
+            console.log(t('downloadManager.starting'));
+            downloadManagerRef.current.startDownload({
+              name: app.name,
+              downloadUrl: app.downloadUrl
+            });
+          } else {
+            console.log(t('downloadManager.downloading'));
+            TauriDownloaderUtil.downloadFile(app.downloadUrl, app.name);
+          }
+        } catch (fallbackError) {
+          console.error('回退下载方式也失败:', fallbackError);
+          showToast(`所有下载方式都失败: ${app.name}`, '#dc3545');
         }
       }
       
@@ -1312,6 +1358,11 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('viewMode', viewMode);
   }, [viewMode]);
+
+  // 保存backgroundImage到localStorage
+  useEffect(() => {
+    localStorage.setItem('backgroundImage', backgroundImage);
+  }, [backgroundImage]);
 
   // Handle language change
   const handleLanguageChange = useCallback((language) => {
@@ -1479,6 +1530,12 @@ const App = () => {
     );
   }, [filteredApps, theme, handleAppClick, handleDownload, t]);
 
+  // 截取应用简介，限制为12个字符
+  const getAppSummary = useCallback((description) => {
+    if (!description) return '';
+    return description.length > 12 ? description.substring(0, 12) + '...' : description;
+  }, []);
+
   // 渲染列表视图
   const renderListView = useCallback(() => {
     return (
@@ -1496,7 +1553,7 @@ const App = () => {
               <ListAppContent>
                 <ListAppName>{app.name}</ListAppName>
                 <ListAppDeveloper theme={theme}>{app.developer || t('app.noDescription')}</ListAppDeveloper>
-                <ListAppDescription theme={theme}>{app.description}</ListAppDescription>
+                <ListAppDescription theme={theme}>{getAppSummary(app.description)}</ListAppDescription>
               </ListAppContent>
               <ListAppActions>
                 <AppPrice theme={theme} style={{ marginRight: '12px' }}>

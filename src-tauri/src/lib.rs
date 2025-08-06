@@ -14,6 +14,15 @@ use tokio::fs::{File, OpenOptions};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::broadcast;
 
+// 导入多线程下载器模块
+mod multi_thread_downloader;
+use multi_thread_downloader::{MultiThreadDownloader, MultiThreadConfig};
+use std::sync::OnceLock;
+
+// 全局多线程下载器实例
+static MULTI_THREAD_DOWNLOADER: OnceLock<MultiThreadDownloader> = OnceLock::new();
+type MultiThreadControlSender = Arc<Mutex<HashMap<String, broadcast::Sender<multi_thread_downloader::DownloadControl>>>>;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DownloadTask {
     id: String,
@@ -54,6 +63,13 @@ enum DownloadControl {
 // 下载管理器类型别名
 type DownloadManager = Arc<Mutex<HashMap<String, DownloadTask>>>;
 type DownloadControlSender = Arc<Mutex<HashMap<String, broadcast::Sender<DownloadControl>>>>;
+
+// 获取多线程下载器实例
+fn get_multi_thread_downloader() -> &'static MultiThreadDownloader {
+    MULTI_THREAD_DOWNLOADER.get_or_init(|| {
+        multi_thread_downloader::create_default_downloader()
+    })
+}
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -324,8 +340,32 @@ async fn get_download_tasks(app: tauri::AppHandle) -> Result<Vec<DownloadTask>, 
 async fn remove_download_task(app: tauri::AppHandle, task_id: String) -> Result<(), String> {
     let download_manager: tauri::State<DownloadManager> = app.state();
 
-    let mut manager = download_manager.lock().unwrap();
-    manager.remove(&task_id);
+    // 获取任务信息以获得文件路径
+    let file_path = {
+        let manager = download_manager.lock().unwrap();
+        manager.get(&task_id).map(|task| task.file_path.clone())
+    };
+
+    // 从管理器中删除任务
+    {
+        let mut manager = download_manager.lock().unwrap();
+        manager.remove(&task_id);
+    }
+
+    // 如果任务存在且有文件路径，尝试删除文件
+    if let Some(path) = file_path {
+        if std::path::Path::new(&path).exists() {
+            match std::fs::remove_file(&path) {
+                Ok(_) => {
+                    println!("已删除文件: {}", path);
+                }
+                Err(e) => {
+                    eprintln!("删除文件失败: {} - {}", path, e);
+                    // 不返回错误，因为任务已经从管理器中删除了
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -1168,10 +1208,152 @@ async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// ==================== 多线程下载相关命令 ====================
+
+/// 使用多线程下载器开始下载
+#[tauri::command]
+async fn start_multi_thread_download(
+    app: tauri::AppHandle,
+    task_id: String,
+    url: String,
+    file_path: String,
+) -> Result<(), String> {
+    let downloader = get_multi_thread_downloader();
+    let file_path = PathBuf::from(file_path);
+    
+    // 创建控制通道
+    let (control_tx, control_rx) = broadcast::channel(10);
+    
+    // 存储控制发送器
+    {
+        let control_senders: tauri::State<MultiThreadControlSender> = app.state();
+        let mut senders = control_senders.lock().unwrap();
+        senders.insert(task_id.clone(), control_tx);
+    }
+    
+    // 启动下载任务
+    let downloader_clone = downloader.clone();
+    let app_clone = app.clone();
+    let task_id_clone = task_id.clone();
+    
+    tokio::spawn(async move {
+        let app_for_cleanup = app_clone.clone();
+        match downloader_clone.download(app_clone, task_id_clone.clone(), url, file_path, control_rx).await {
+            Ok(_) => {
+                println!("多线程下载完成: {}", task_id_clone);
+            }
+            Err(e) => {
+                println!("多线程下载失败: {} - {}", task_id_clone, e);
+                let _ = app_for_cleanup.emit("multi_thread_download_error", &format!("{{\"task_id\": \"{}\", \"error\": \"{}\"}}", task_id_clone, e));
+            }
+        }
+        
+        // 清理控制发送器
+        let control_senders: tauri::State<MultiThreadControlSender> = app_for_cleanup.state();
+        let mut senders = control_senders.lock().unwrap();
+        senders.remove(&task_id_clone);
+    });
+    
+    Ok(())
+}
+
+/// 暂停多线程下载
+#[tauri::command]
+async fn pause_multi_thread_download(
+    app: tauri::AppHandle,
+    task_id: String,
+) -> Result<(), String> {
+    let control_senders: tauri::State<MultiThreadControlSender> = app.state();
+    let senders = control_senders.lock().unwrap();
+    
+    if let Some(sender) = senders.get(&task_id) {
+        let _ = sender.send(multi_thread_downloader::DownloadControl::Pause);
+        println!("发送暂停信号给多线程下载任务: {}", task_id);
+    } else {
+        return Err(format!("未找到多线程下载任务: {}", task_id));
+    }
+    
+    Ok(())
+}
+
+/// 取消多线程下载
+#[tauri::command]
+async fn cancel_multi_thread_download(
+    app: tauri::AppHandle,
+    task_id: String,
+) -> Result<(), String> {
+    let control_senders: tauri::State<MultiThreadControlSender> = app.state();
+    let mut senders = control_senders.lock().unwrap();
+    
+    if let Some(sender) = senders.get(&task_id) {
+        let _ = sender.send(multi_thread_downloader::DownloadControl::Cancel);
+        println!("发送取消信号给多线程下载任务: {}", task_id);
+        senders.remove(&task_id);
+    } else {
+        return Err(format!("未找到多线程下载任务: {}", task_id));
+    }
+    
+    Ok(())
+}
+
+/// 恢复多线程下载
+#[tauri::command]
+async fn resume_multi_thread_download(
+    app: tauri::AppHandle,
+    task_id: String,
+) -> Result<(), String> {
+    let control_senders: tauri::State<MultiThreadControlSender> = app.state();
+    let senders = control_senders.lock().unwrap();
+    
+    if let Some(sender) = senders.get(&task_id) {
+        let _ = sender.send(multi_thread_downloader::DownloadControl::Resume);
+        println!("发送恢复信号给多线程下载任务: {}", task_id);
+    } else {
+        return Err(format!("未找到多线程下载任务: {}", task_id));
+    }
+    
+    Ok(())
+}
+
+/// 创建自定义配置的多线程下载器
+#[tauri::command]
+async fn create_custom_multi_thread_downloader(
+    max_connections: usize,
+    min_chunk_size: u64,
+) -> Result<String, String> {
+    // 验证参数
+    if max_connections == 0 || max_connections > 32 {
+        return Err("并发连接数必须在1-32之间".to_string());
+    }
+    
+    if min_chunk_size < 1024 {
+        return Err("最小分块大小不能小于1KB".to_string());
+    }
+    
+    // 创建自定义下载器（注意：这里只是验证参数，实际的下载器配置在下载时应用）
+    let config = MultiThreadConfig {
+        max_connections,
+        min_chunk_size,
+        max_retries: 5,
+        timeout_seconds: 30,
+    };
+    
+    Ok(format!("自定义多线程下载器配置创建成功: 连接数={}, 分块大小={}KB", 
+              config.max_connections, 
+              config.min_chunk_size / 1024))
+}
+
+/// 获取多线程下载器信息
+#[tauri::command]
+async fn get_multi_thread_downloader_info() -> Result<String, String> {
+    Ok(format!("{{\"max_connections\": 8, \"min_chunk_size\": 1048576, \"max_retries\": 5, \"timeout_seconds\": 30}}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let download_manager: DownloadManager = Arc::new(Mutex::new(HashMap::new()));
     let control_senders: DownloadControlSender = Arc::new(Mutex::new(HashMap::new()));
+    let multi_thread_control_senders: MultiThreadControlSender = Arc::new(Mutex::new(HashMap::new()));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
@@ -1181,6 +1363,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(download_manager)
         .manage(control_senders)
+        .manage(multi_thread_control_senders)
         .setup(|app| {
             // 创建系统托盘菜单
             let show = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
@@ -1275,7 +1458,13 @@ pub fn run() {
             get_file_action,
             show_window,
             hide_window,
-            quit_app
+            quit_app,
+            start_multi_thread_download,
+            pause_multi_thread_download,
+            cancel_multi_thread_download,
+            resume_multi_thread_download,
+            create_custom_multi_thread_downloader,
+            get_multi_thread_downloader_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

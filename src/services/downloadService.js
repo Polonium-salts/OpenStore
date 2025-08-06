@@ -19,7 +19,7 @@ export const createDownloadWithFallback = async (app, createDownloadTask) => {
   
   try {
     // 首先尝试使用主要下载URL（可能是直接下载路径）
-    const taskId = await createDownloadTask({
+    const result = await createDownloadTask({
       url: downloadUrl,
       fileName: app.filename || app.name,
       downloadPath: null,
@@ -27,8 +27,8 @@ export const createDownloadWithFallback = async (app, createDownloadTask) => {
       fallbackUrl: fallbackUrl
     });
     
-    console.log('下载任务创建成功:', taskId);
-    return taskId;
+    console.log('下载任务创建成功:', result);
+    return result;
   } catch (error) {
     console.error('主要下载URL失败:', error);
     
@@ -36,7 +36,7 @@ export const createDownloadWithFallback = async (app, createDownloadTask) => {
     if (fallbackUrl && fallbackUrl !== downloadUrl) {
       console.log('尝试使用回退URL:', fallbackUrl);
       try {
-        const taskId = await createDownloadTask({
+        const result = await createDownloadTask({
           url: fallbackUrl,
           fileName: app.filename || app.name,
           downloadPath: null,
@@ -44,8 +44,8 @@ export const createDownloadWithFallback = async (app, createDownloadTask) => {
           isFailover: true
         });
         
-        console.log('回退下载任务创建成功:', taskId);
-        return taskId;
+        console.log('回退下载任务创建成功:', result);
+        return result;
       } catch (fallbackError) {
         console.error('回退下载URL也失败:', fallbackError);
         throw new Error(`下载失败: 主要URL和回退URL都无法访问`);

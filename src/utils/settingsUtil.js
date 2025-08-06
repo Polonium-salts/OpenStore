@@ -28,6 +28,7 @@ const setLocalStorageItem = (key, value) => {
 // 下载设置相关
 const ACCELERATED_DOWNLOAD_KEY = 'useAcceleratedDownload';
 const DOWNLOAD_SETTINGS_KEY = 'downloadSettings';
+const AUTO_RUN_AFTER_DOWNLOAD_KEY = 'autoRunAfterDownload';
 
 /**
  * 检查是否启用加速下载
@@ -87,6 +88,23 @@ export const resetDownloadSettings = async () => {
   });
 };
 
+/**
+ * 检查是否启用下载完成后自动运行
+ * @returns {Promise<boolean>} 是否启用自动运行
+ */
+export const isAutoRunAfterDownloadEnabled = async () => {
+  return getLocalStorageItem(AUTO_RUN_AFTER_DOWNLOAD_KEY, false);
+};
+
+/**
+ * 设置下载完成后自动运行状态
+ * @param {boolean} enabled - 是否启用自动运行
+ * @returns {Promise<boolean>} 设置是否成功
+ */
+export const setAutoRunAfterDownloadEnabled = async (enabled) => {
+  return setLocalStorageItem(AUTO_RUN_AFTER_DOWNLOAD_KEY, enabled);
+};
+
 // 主题设置相关
 const THEME_KEY = 'appTheme';
 
@@ -142,8 +160,10 @@ export default {
   getDownloadSettings,
   setDownloadSettings,
   resetDownloadSettings,
+  isAutoRunAfterDownloadEnabled,
+  setAutoRunAfterDownloadEnabled,
   getTheme,
   setTheme,
   getPerformanceSettings,
   setPerformanceSettings
-}; 
+};
