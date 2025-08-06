@@ -25,24 +25,24 @@ const getBorderColor = (props, defaultDark, defaultLight) => {
 };
 
 const SidebarContainer = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['collapsed', 'theme', 'hasBackgroundImage', 'backgroundOpacity'].includes(prop)
+  shouldForwardProp: (prop) => !['collapsed', 'theme', '$hasBackgroundImage', '$backgroundOpacity'].includes(prop)
 })`
   width: ${props => props.collapsed ? '60px' : '200px'};
   height: 100%;
-  --sidebar-opacity: ${props => props.backgroundOpacity || 0.8};
+  --sidebar-opacity: ${props => props.$backgroundOpacity || 0.8};
   --dark-bg-color: rgba(42, 42, 45, var(--sidebar-opacity));
   --light-bg-color: rgba(245, 245, 247, var(--sidebar-opacity));
-  --dark-border-color: rgba(51, 51, 51, ${props => Math.min((props.backgroundOpacity || 0.8) + 0.1, 1)});
-  --light-border-color: rgba(210, 210, 215, ${props => Math.min((props.backgroundOpacity || 0.8) + 0.1, 1)});
+  --dark-border-color: rgba(51, 51, 51, ${props => Math.min((props.$backgroundOpacity || 0.8) + 0.1, 1)});
+  --light-border-color: rgba(210, 210, 215, ${props => Math.min((props.$backgroundOpacity || 0.8) + 0.1, 1)});
   
   background-color: ${props => {
-    if (props.hasBackgroundImage) {
+    if (props.$hasBackgroundImage) {
       return props.theme === 'dark' ? 'var(--dark-bg-color)' : 'var(--light-bg-color)';
     }
     return props.theme === 'dark' ? '#2a2a2d' : '#f5f5f7';
   }};
   border-right: 1px solid ${props => {
-    if (props.hasBackgroundImage) {
+    if (props.$hasBackgroundImage) {
       return props.theme === 'dark' ? 'var(--dark-border-color)' : 'var(--light-border-color)';
     }
     return props.theme === 'dark' ? '#333' : '#d2d2d7';
@@ -52,8 +52,8 @@ const SidebarContainer = styled.div.withConfig({
   user-select: none;
   transition: width 0.3s ease, background-color 0.15s ease-out, border-color 0.15s ease-out;
   position: relative;
-  backdrop-filter: ${props => props.hasBackgroundImage ? 'blur(10px)' : 'none'};
-  -webkit-backdrop-filter: ${props => props.hasBackgroundImage ? 'blur(10px)' : 'none'};
+  backdrop-filter: ${props => props.$hasBackgroundImage ? 'blur(10px)' : 'none'};
+  -webkit-backdrop-filter: ${props => props.$hasBackgroundImage ? 'blur(10px)' : 'none'};
   z-index: 5;
   will-change: transform, opacity;
   
@@ -200,7 +200,7 @@ const CollapseButton = styled.button.withConfig({
 `;
 
 const Divider = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['collapsed', 'theme', 'hasBackgroundImage', 'backgroundOpacity'].includes(prop)
+  shouldForwardProp: (prop) => !['collapsed', 'theme', '$hasBackgroundImage', '$backgroundOpacity'].includes(prop)
 })`
   height: 1px;
   background-color: ${props => getBorderColor(props, '#444', '#e8e8ed')};
@@ -362,8 +362,8 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
         <Divider 
           theme={theme} 
           collapsed={collapsed} 
-          hasBackgroundImage={hasBackgroundImage}
-          backgroundOpacity={backgroundOpacity}
+          $hasBackgroundImage={hasBackgroundImage}
+          $backgroundOpacity={backgroundOpacity}
         />
         
         <SidebarSection>
@@ -418,8 +418,8 @@ const Sidebar = ({ onCategorySelect, currentCategory, onToggleCollapse, defaultC
     <SidebarContainer 
       collapsed={collapsed} 
       theme={theme} 
-      hasBackgroundImage={hasBackgroundImage}
-      backgroundOpacity={backgroundOpacity}
+      $hasBackgroundImage={hasBackgroundImage}
+      $backgroundOpacity={backgroundOpacity}
       data-sidebar="true"
       data-webkit={isWebKitEnv}
     >

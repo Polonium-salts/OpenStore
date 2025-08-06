@@ -21,13 +21,13 @@ import Messages from './components/Messages';
 import { initWebKitFixes } from './utils/wkwebviewUtils';
 
 const AppContainer = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['backgroundImage', 'backgroundOpacity'].includes(prop)
+  shouldForwardProp: (prop) => !['$backgroundImage', '$backgroundOpacity'].includes(prop)
 })`
   display: flex;
   height: 100vh;
   background-color: var(--app-bg-color);
   color: var(--app-text-color);
-  background-image: ${props => props.backgroundImage ? `url(${props.backgroundImage})` : 'none'};
+  background-image: ${props => props.$backgroundImage ? `url(${props.$backgroundImage})` : 'none'};
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
@@ -35,7 +35,7 @@ const AppContainer = styled.div.withConfig({
   overflow: hidden;
   
   /* Use CSS custom properties for dynamic values that can be updated directly */
-  --bg-opacity: var(--app-bg-opacity, ${props => props.backgroundOpacity || 0.8});
+  --bg-opacity: var(--app-bg-opacity, ${props => props.$backgroundOpacity || 0.8});
   --bg-color-dark: rgba(29, 29, 31, var(--bg-opacity));
   --bg-color-light: rgba(245, 245, 247, var(--bg-opacity));
   
@@ -1976,8 +1976,8 @@ const App = () => {
   return (
     <AppContainer 
       theme={theme} 
-      backgroundImage={backgroundImage} 
-      backgroundOpacity={uiBackgroundOpacity}
+      $backgroundImage={backgroundImage} 
+      $backgroundOpacity={uiBackgroundOpacity}
       style={{ '--app-bg-opacity': uiBackgroundOpacity }}
       data-app-container="true"
     >

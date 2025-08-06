@@ -34,25 +34,25 @@ const getInputBackgroundColor = (props, defaultDark, defaultLight) => {
 };
 
 const HeaderContainer = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['hasBackgroundImage', 'backgroundOpacity'].includes(prop)
+  shouldForwardProp: (prop) => !['$hasBackgroundImage', '$backgroundOpacity'].includes(prop)
 })`
   display: flex;
   align-items: center;
   padding: 12px 20px;
-  --header-opacity: ${props => props.backgroundOpacity || 0.8};
+  --header-opacity: ${props => props.$backgroundOpacity || 0.8};
   --dark-bg-color: rgba(42, 42, 45, var(--header-opacity));
   --light-bg-color: rgba(255, 255, 255, var(--header-opacity));
-  --dark-border-color: rgba(58, 58, 61, ${props => Math.min((props.backgroundOpacity || 0.8) + 0.1, 1)});
-  --light-border-color: rgba(232, 232, 237, ${props => Math.min((props.backgroundOpacity || 0.8) + 0.1, 1)});
+  --dark-border-color: rgba(58, 58, 61, ${props => Math.min((props.$backgroundOpacity || 0.8) + 0.1, 1)});
+  --light-border-color: rgba(232, 232, 237, ${props => Math.min((props.$backgroundOpacity || 0.8) + 0.1, 1)});
   
   background-color: ${props => {
-    if (props.hasBackgroundImage) {
+    if (props.$hasBackgroundImage) {
       return props.theme === 'dark' ? 'var(--dark-bg-color)' : 'var(--light-bg-color)';
     }
     return props.theme === 'dark' ? '#2a2a2d' : 'white';
   }};
   border-bottom: 1px solid ${props => {
-    if (props.hasBackgroundImage) {
+    if (props.$hasBackgroundImage) {
       return props.theme === 'dark' ? 'var(--dark-border-color)' : 'var(--light-border-color)';
     }
     return props.theme === 'dark' ? '#3a3a3d' : '#e8e8ed';
@@ -91,14 +91,14 @@ const SearchContainer = styled.div`
 `;
 
 const SearchInput = styled.input.withConfig({
-  shouldForwardProp: (prop) => !['hasBackgroundImage', 'backgroundOpacity'].includes(prop)
+  shouldForwardProp: (prop) => !['$hasBackgroundImage', '$backgroundOpacity'].includes(prop)
 })`
   width: 100%;
   height: 40px;
   padding: 0 40px;
   border-radius: 10px;
-  border: 1px solid ${props => getBorderColor(props, '#3a3a3d', '#e8e8ed')};
-  background-color: ${props => getInputBackgroundColor(props, '#1d1d1f', '#f5f5f7')};
+  border: 1px solid ${props => getBorderColor({...props, hasBackgroundImage: props.$hasBackgroundImage, backgroundOpacity: props.$backgroundOpacity}, '#3a3a3d', '#e8e8ed')};
+  background-color: ${props => getInputBackgroundColor({...props, hasBackgroundImage: props.$hasBackgroundImage, backgroundOpacity: props.$backgroundOpacity}, '#1d1d1f', '#f5f5f7')};
   color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#1d1d1f'};
   font-size: 14px;
   transition: all 0.2s ease;
@@ -109,8 +109,8 @@ const SearchInput = styled.input.withConfig({
     outline: none;
     border-color: #0066CC;
     background-color: ${props => {
-      if (props.hasBackgroundImage) {
-        const opacity = Math.min((props.backgroundOpacity || 0.8) + 0.1, 0.9);
+      if (props.$hasBackgroundImage) {
+        const opacity = Math.min((props.$backgroundOpacity || 0.8) + 0.1, 0.9);
         return props.theme === 'dark' ? `rgba(58, 58, 61, ${opacity})` : `rgba(255, 255, 255, ${opacity})`;
       }
       return props.theme === 'dark' ? '#3a3a3d' : '#ffffff';
@@ -144,16 +144,16 @@ const SearchIcon = styled.div`
 `;
 
 const SearchSuggestions = styled.div.withConfig({
-  shouldForwardProp: (prop) => !['show', 'hasBackgroundImage', 'backgroundOpacity'].includes(prop)
+  shouldForwardProp: (prop) => !['show', '$hasBackgroundImage', '$backgroundOpacity'].includes(prop)
 })`
   position: absolute;
   top: 100%;
   left: 0;
   right: 0;
   margin-top: 8px;
-  background-color: ${props => getBackgroundColor(props, '#2a2a2d', 'white')};
+  background-color: ${props => getBackgroundColor({...props, hasBackgroundImage: props.$hasBackgroundImage, backgroundOpacity: props.$backgroundOpacity}, '#2a2a2d', 'white')};
   border-radius: 10px;
-  border: 1px solid ${props => getBorderColor(props, '#3a3a3d', '#e8e8ed')};
+  border: 1px solid ${props => getBorderColor({...props, hasBackgroundImage: props.$hasBackgroundImage, backgroundOpacity: props.$backgroundOpacity}, '#3a3a3d', '#e8e8ed')};
   box-shadow: 0 4px 12px ${props => props.theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)'};
   max-height: 300px;
   overflow-y: auto;
@@ -222,7 +222,7 @@ const HeaderActions = styled.div`
 `;
 
 const HeaderButton = styled.button.withConfig({
-  shouldForwardProp: (prop) => !['active', 'backgroundOpacity'].includes(prop)
+  shouldForwardProp: (prop) => !['active', '$backgroundOpacity'].includes(prop)
 })`
   width: 36px;
   height: 36px;
@@ -230,7 +230,7 @@ const HeaderButton = styled.button.withConfig({
   border: none;
   background-color: ${props => {
     if (props.active) {
-      const opacity = Math.min((props.backgroundOpacity || 0.8) + 0.2, 1);
+      const opacity = Math.min((props.$backgroundOpacity || 0.8) + 0.2, 1);
       return props.theme === 'dark' ? `rgba(58, 58, 61, ${opacity})` : `rgba(232, 232, 237, ${opacity})`;
     }
     return 'transparent';
@@ -245,7 +245,7 @@ const HeaderButton = styled.button.withConfig({
   
   &:hover {
     background-color: ${props => {
-      const opacity = Math.min((props.backgroundOpacity || 0.8) + 0.1, 0.9);
+      const opacity = Math.min((props.$backgroundOpacity || 0.8) + 0.1, 0.9);
       return props.theme === 'dark' ? `rgba(58, 58, 61, ${opacity})` : `rgba(232, 232, 237, ${opacity})`;
     }};
   }
@@ -265,7 +265,7 @@ const HeaderButton = styled.button.withConfig({
     padding: 4px 8px;
     border-radius: 4px;
     background-color: ${props => {
-      const opacity = Math.min((props.backgroundOpacity || 0.8) + 0.2, 0.95);
+      const opacity = Math.min((props.$backgroundOpacity || 0.8) + 0.2, 0.95);
       return props.theme === 'dark' ? `rgba(58, 58, 61, ${opacity})` : `rgba(29, 29, 31, ${opacity})`;
     }};
     color: ${props => props.theme === 'dark' ? '#f5f5f7' : '#ffffff'};
@@ -290,7 +290,7 @@ const MemoizedHeaderButton = React.memo(({ title, theme, active, onClick, backgr
       theme={theme}
       active={active}
       onClick={onClick}
-      backgroundOpacity={backgroundOpacity}
+      $backgroundOpacity={backgroundOpacity}
     >
       {children}
     </HeaderButton>
@@ -405,7 +405,7 @@ const Header = ({
   ), [theme]);
 
   return (
-    <HeaderContainer theme={theme} hasBackgroundImage={hasBackgroundImage} backgroundOpacity={backgroundOpacity}>
+    <HeaderContainer theme={theme} $hasBackgroundImage={hasBackgroundImage} $backgroundOpacity={backgroundOpacity}>
       {logoSection}
       <SearchContainer>
         <SearchInput
@@ -416,15 +416,15 @@ const Header = ({
           onFocus={() => setShowSuggestions(true)}
           onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
           theme={theme}
-          hasBackgroundImage={hasBackgroundImage}
-          backgroundOpacity={backgroundOpacity}
+          $hasBackgroundImage={hasBackgroundImage}
+          $backgroundOpacity={backgroundOpacity}
         />
         {searchIcon}
         <SearchSuggestions 
           show={showSuggestions} 
           theme={theme}
-          hasBackgroundImage={hasBackgroundImage}
-          backgroundOpacity={backgroundOpacity}
+          $hasBackgroundImage={hasBackgroundImage}
+          $backgroundOpacity={backgroundOpacity}
         >
           {searchHistory.length > 0 && (
             <SearchHistory theme={theme}>
