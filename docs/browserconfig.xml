@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<browserconfig>
+  <msapplication>
+    <tile>
+      <square70x70logo src="./YMCL-Icon.png"/>
+      <square150x150logo src="./YMCL-Icon.png"/>
+      <square310x310logo src="./YMCL-Icon.png"/>
+      <wide310x150logo src="./YMCL-Icon.png"/>
+      <TileColor>#007ec6</TileColor>
+    </tile>
+    <notification>
+      <polling-uri src="https://openstore.cereals.fun/notifications/"/>
+      <frequency>30</frequency>
+      <cycle>1</cycle>
+    </notification>
+  </msapplication>
+</browserconfig>

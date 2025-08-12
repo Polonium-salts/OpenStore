@@ -1,0 +1,38 @@
+# OpenStore 官网 robots.txt
+# 允许所有搜索引擎爬虫访问
+
+User-agent: *
+Allow: /
+
+# 指定sitemap位置
+Sitemap: https://openstore.cereals.fun/sitemap.xml
+
+# 优先爬取重要页面
+Allow: /download/
+Allow: /license/
+Allow: /parse-download/
+
+# 禁止爬取不必要的文件
+Disallow: /*.css$
+Disallow: /*.js$
+Disallow: /*.woff$
+Disallow: /*.woff2$
+Disallow: /*.ttf$
+Disallow: /*.cur$
+Disallow: /.*files/
+
+# 爬取延迟（秒）
+Crawl-delay: 1
+
+# 针对特定搜索引擎的优化
+User-agent: Baiduspider
+Allow: /
+Crawl-delay: 2
+
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 1
