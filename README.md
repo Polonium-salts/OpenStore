@@ -1,6 +1,6 @@
 # OpenStore - 跨平台应用商店
 
-![OpenStore Logo](./docs/img/YMCL-Icon.png)
+
 
 
 一个基于 Tauri 和 React 构建的现代化跨平台应用商店，采用 macOS App Store 风格的用户界面设计。
