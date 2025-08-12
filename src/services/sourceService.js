@@ -1,3 +1,54 @@
+// 带重试机制的fetch函数
+const fetchWithRetry = async (url, retries = 3, timeout = 10000) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        mode: 'cors',
+        headers: {
+          'Accept': 'application/json, text/plain, */*',
+          'Cache-Control': 'no-cache'
+        }
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (error.name === 'AbortError') {
+        throw new Error('请求超时，请检查网络连接');
+      }
+      
+      // 网络连接错误
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        if (attempt < retries) {
+          console.log(`网络请求失败，正在重试 (${attempt}/${retries})...`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          continue;
+        }
+        throw new Error('网络连接失败，请检查网络连接');
+      }
+      
+      // CORS错误
+      if (error.message.includes('CORS')) {
+        throw new Error('跨域请求被阻止');
+      }
+      
+      // 其他错误
+      if (attempt < retries) {
+        console.log(`请求失败，正在重试 (${attempt}/${retries}):`, error.message);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+        continue;
+      }
+      
+      throw error;
+    }
+  }
+};
+
 // 从所有启用的软件源获取应用列表
 export const fetchAppsFromSources = async () => {
   try {
@@ -48,14 +99,25 @@ export const fetchAppsFromSources = async () => {
         } else {
           // 如果是远程源，从 URL 获取数据
           console.log(`正在从URL加载: ${sourceUrl}`);
-          const response = await fetch(sourceUrl);
-          const responseData = await response.json();
           
-          if (Array.isArray(responseData)) {
-            console.log(`成功从 ${source.name} 加载了 ${responseData.length} 个应用`);
-            apps = responseData;
-          } else {
-            console.error(`从 ${source.name} 获取的数据不是数组:`, responseData);
+          try {
+            const response = await fetchWithRetry(sourceUrl);
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const responseData = await response.json();
+            
+            if (Array.isArray(responseData)) {
+              console.log(`成功从 ${source.name} 加载了 ${responseData.length} 个应用`);
+              apps = responseData;
+            } else {
+              console.error(`从 ${source.name} 获取的数据不是数组:`, responseData);
+              apps = [];
+            }
+          } catch (fetchError) {
+            console.error(`从 ${source.name} 获取数据失败:`, fetchError.message);
             apps = [];
           }
         }
@@ -113,7 +175,12 @@ export const fetchAppsByCategory = async (category) => {
 // 从指定软件源获取单个应用信息
 export const fetchAppFromSource = async (appId, sourceUrl) => {
   try {
-    const response = await fetch(sourceUrl);
+    const response = await fetchWithRetry(sourceUrl);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
     const apps = await response.json();
     return apps.find(app => app.id === appId);
   } catch (error) {
@@ -144,4 +211,4 @@ export const validateSourceFormat = (data) => {
       typeof app.downloadUrl === 'string'
     );
   });
-}; 
+};

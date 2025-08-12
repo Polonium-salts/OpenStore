@@ -419,9 +419,11 @@ const PlatformDownloadSelector = ({ app, theme, onDownload, getDownloadState, ha
         console.log('使用直接下载路径:', downloadUrl);
       }
       
-      // 创建一个包含选中下载信息的应用对象
+      // 创建一个包含选中下载信息的应用对象，使用唯一的下载ID
       const downloadApp = {
         ...app,
+        id: getUniqueDownloadId(), // 使用唯一的下载ID
+        originalId: app.id, // 保留原始应用ID
         downloadUrl: downloadUrl,
         originalDownloadUrl: selectedDownload.url, // 保留原始URL作为回退
         filename: selectedDownload.filename,
@@ -439,8 +441,30 @@ const PlatformDownloadSelector = ({ app, theme, onDownload, getDownloadState, ha
     }
   };
 
-  // 获取下载状态
-  const downloadState = getDownloadState ? getDownloadState(app.id) : { status: 'idle', progress: 0 };
+  // 获取下载状态，根据选中的平台和架构生成唯一的下载ID
+  const getUniqueDownloadId = () => {
+    if (selectedPlatform && selectedArch) {
+      return `${app.id}_${selectedPlatform}_${selectedArch}`;
+    }
+    return app.id;
+  };
+  
+  const downloadState = getDownloadState ? getDownloadState(getUniqueDownloadId()) : { status: 'idle', progress: 0 };
+  
+  // 当平台或架构改变时，重置下载状态
+  useEffect(() => {
+    if (selectedPlatform && selectedArch && handleDownloadControl) {
+      // 如果当前有正在进行的下载，先取消它
+      const currentDownloadId = getUniqueDownloadId();
+      const currentState = getDownloadState ? getDownloadState(currentDownloadId) : { status: 'idle' };
+      
+      // 如果状态不是idle，说明有下载任务，需要重置状态
+      if (currentState.status !== 'idle') {
+        // 这里可以选择取消当前下载或者保持状态
+        // 为了更好的用户体验，我们保持当前下载状态，但确保按钮文本正确显示
+      }
+    }
+  }, [selectedPlatform, selectedArch]);
 
   // 处理下载按钮点击
   const handleDownloadButtonClick = (e) => {
@@ -449,12 +473,22 @@ const PlatformDownloadSelector = ({ app, theme, onDownload, getDownloadState, ha
     if (downloadState.status === 'pausing' || downloadState.status === 'resuming') {
       return;
     }
+    
+    // 创建包含唯一ID的应用对象用于下载控制
+    const downloadApp = {
+      ...app,
+      id: getUniqueDownloadId(),
+      originalId: app.id,
+      platform: selectedPlatform,
+      architecture: selectedArch
+    };
+    
     if (downloadState.status === 'completed') {
-      handleOpenFile(app);
+      handleOpenFile(downloadApp);
     } else if (downloadState.status === 'downloading') {
-      handleDownloadControl && handleDownloadControl(app, 'pause');
+      handleDownloadControl && handleDownloadControl(downloadApp, 'pause');
     } else if (downloadState.status === 'paused') {
-      handleDownloadControl && handleDownloadControl(app, 'resume');
+      handleDownloadControl && handleDownloadControl(downloadApp, 'resume');
     } else {
       handleDownload();
     }
@@ -577,8 +611,19 @@ const PlatformDownloadSelector = ({ app, theme, onDownload, getDownloadState, ha
               <ProgressText>{Math.round(downloadState.progress || 0)}%</ProgressText>
             </>
           ) : (
-            getDownloadButtonText ? getDownloadButtonText(app.id) : 
-            (selectedDownload ? `下载 (${selectedDownload.size})` : '暂无可用下载')
+            getDownloadButtonText ? getDownloadButtonText(getUniqueDownloadId()) : 
+            (() => {
+              switch(downloadState.status) {
+                case 'completed':
+                  return '打开文件';
+                case 'paused':
+                  return '继续下载';
+                case 'failed':
+                  return '重新下载';
+                default:
+                  return selectedDownload ? `安装 (${selectedDownload.size})` : '暂无可用下载';
+              }
+            })()
           )}
         </DownloadButton>
         
@@ -596,22 +641,34 @@ const PlatformDownloadSelector = ({ app, theme, onDownload, getDownloadState, ha
             </DropdownDownloadInfo>
             <DownloadActions>
               {downloadState.status === 'downloading' && (
-                <ActionButton action="pause" onClick={() => handleDownloadControl && handleDownloadControl(app, 'pause')}>
+                <ActionButton action="pause" onClick={() => {
+                  const downloadApp = { ...app, id: getUniqueDownloadId(), originalId: app.id, platform: selectedPlatform, architecture: selectedArch };
+                  handleDownloadControl && handleDownloadControl(downloadApp, 'pause');
+                }}>
                   {t('downloadManager.pause')}
                 </ActionButton>
               )}
               {downloadState.status === 'paused' && (
-                <ActionButton action="resume" onClick={() => handleDownloadControl && handleDownloadControl(app, 'resume')}>
+                <ActionButton action="resume" onClick={() => {
+                  const downloadApp = { ...app, id: getUniqueDownloadId(), originalId: app.id, platform: selectedPlatform, architecture: selectedArch };
+                  handleDownloadControl && handleDownloadControl(downloadApp, 'resume');
+                }}>
                   {t('downloadManager.resume')}
                 </ActionButton>
               )}
               {(downloadState.status === 'downloading' || downloadState.status === 'paused') && (
-                <ActionButton onClick={() => handleDownloadControl && handleDownloadControl(app, 'cancel')}>
+                <ActionButton onClick={() => {
+                  const downloadApp = { ...app, id: getUniqueDownloadId(), originalId: app.id, platform: selectedPlatform, architecture: selectedArch };
+                  handleDownloadControl && handleDownloadControl(downloadApp, 'cancel');
+                }}>
                   {t('downloadManager.cancel')}
                 </ActionButton>
               )}
               {downloadState.status === 'completed' && (
-                <ActionButton action="open" onClick={() => handleOpenFile(app)}>
+                <ActionButton action="open" onClick={() => {
+                  const downloadApp = { ...app, id: getUniqueDownloadId(), originalId: app.id, platform: selectedPlatform, architecture: selectedArch };
+                  handleOpenFile(downloadApp);
+                }}>
                   {t('downloadManager.open')}
                 </ActionButton>
               )}

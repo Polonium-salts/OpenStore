@@ -1,194 +1,231 @@
-# OpenStore - Cross-Platform App Store
+# OpenStore - 跨平台应用商店
 
-A cross-platform application store built with Tauri and React, featuring a macOS App Store inspired UI.
+![OpenStore Logo](./docs/img/YMCL-Icon.png)
 
-## Features
 
-- Clean, modern design based on macOS App Store
-- Responsive layout
-- Category navigation
-- Featured apps section
-- App grid display
-- Search functionality
+一个基于 Tauri 和 React 构建的现代化跨平台应用商店，采用 macOS App Store 风格的用户界面设计。
 
-## Screenshots
+## ✨ 核心特性
 
-*Screenshots will be added after the initial build*
+- 🎨 **现代化设计** - 基于 macOS App Store 的简洁美观界面
+- 📱 **响应式布局** - 完美适配不同屏幕尺寸
+- 🗂️ **分类导航** - 清晰的应用分类和导航系统
+- ⭐ **精选应用** - 突出展示推荐应用
+- 🔍 **智能搜索** - 快速查找所需应用
+- 📥 **多线程下载** - 高效的并发下载管理
+- 🌍 **多语言支持** - 支持中文、英文、日文
+- 🔧 **源管理** - 灵活的应用源配置
+- 📊 **下载进度** - 实时显示下载状态和进度
+- 🛡️ **错误处理** - 完善的错误边界和异常处理
 
-## Technology Stack
+## 🖼️ 界面截图
 
-- **Frontend**: React, Styled Components
-- **Backend**: Tauri (Rust)
-- **Build Tools**: Vite
+![Windows界面](./docs/img/1.png)
+*Windows 版本界面*
 
-## Getting Started
 
-### Prerequisites
+## 🛠️ 技术栈
 
-- Node.js (>= 16.0.0)
-- Rust (>= 1.64.0)
-- Tauri CLI
+### 前端技术
+- **React 18** - 现代化的用户界面框架
+- **Styled Components** - CSS-in-JS 样式解决方案
+- **React Router** - 单页应用路由管理
+- **React i18next** - 国际化支持
+- **React Toastify** - 消息通知系统
+- **Vite** - 快速的构建工具
 
-### Installation
+### 后端技术
+- **Tauri 2.x** - 基于 Rust 的跨平台应用框架
+- **Rust** - 高性能系统编程语言
+- **Express.js** - 代理服务器
+- **Axios** - HTTP 客户端
 
-1. Clone the repository
+### 开发工具
+- **Tauri CLI** - 应用构建和开发工具
+- **Vite** - 前端构建工具
+- **ESLint** - 代码质量检查
+
+## 🚀 快速开始
+
+### 系统要求
+
+- **Node.js** >= 16.0.0
+- **Rust** >= 1.64.0
+- **Tauri CLI** >= 2.0.0
+
+### 安装步骤
+
+1. **克隆仓库**
 ```bash
 git clone https://github.com/yourusername/OpenStore.git
 cd OpenStore
 ```
 
-2. Install dependencies
+2. **安装依赖**
 ```bash
 npm install
 ```
 
-3. Run in development mode
+3. **安装 Tauri CLI**
+```bash
+npm install -g @tauri-apps/cli
+```
+
+4. **开发模式运行**
 ```bash
 npm run tauri dev
 ```
 
-4. Build for production
+5. **构建生产版本**
 ```bash
 npm run tauri build
 ```
 
-## Project Structure
+## 📁 项目结构
 
 ```
 OpenStore/
-├── src/                   # React frontend
-│   ├── assets/            # Static assets
-│   ├── components/        # React components
-│   ├── data/              # Mock data
-│   ├── App.jsx            # Main App component
-│   └── main.jsx           # Entry point
-├── src-tauri/             # Tauri backend (Rust)
-├── public/                # Public assets
-└── package.json           # Project configuration
+├── src/                          # React 前端源码
+│   ├── components/               # React 组件
+│   │   ├── AppCard.jsx          # 应用卡片组件
+│   │   ├── AppDetails.jsx       # 应用详情组件
+│   │   ├── AppGrid.jsx          # 应用网格布局
+│   │   ├── AppStore.jsx         # 主应用商店组件
+│   │   ├── DownloadManager.jsx  # 下载管理器
+│   │   ├── DownloadProgress.jsx # 下载进度组件
+│   │   ├── Header.jsx           # 头部组件
+│   │   ├── Navigation.jsx       # 导航组件
+│   │   ├── Settings.jsx         # 设置组件
+│   │   ├── SourceManager.jsx    # 源管理组件
+│   │   └── ...
+│   ├── services/                # 业务服务
+│   │   ├── downloadService.js   # 下载服务
+│   │   ├── sourceService.js     # 源服务
+│   │   ├── iconService.js       # 图标服务
+│   │   └── messageService.js    # 消息服务
+│   ├── utils/                   # 工具函数
+│   ├── locales/                 # 国际化文件
+│   │   ├── en-US.json          # 英文
+│   │   ├── zh-CN.json          # 中文
+│   │   └── ja-JP.json          # 日文
+│   ├── data/                    # 模拟数据
+│   ├── assets/                  # 静态资源
+│   ├── App.jsx                  # 主应用组件
+│   └── main.jsx                 # 入口文件
+├── src-tauri/                   # Tauri 后端 (Rust)
+│   ├── src/
+│   │   ├── main.rs             # 主程序入口
+│   │   ├── lib.rs              # 库文件
+│   │   └── multi_thread_downloader.rs # 多线程下载器
+│   ├── icons/                   # 应用图标
+│   ├── Cargo.toml              # Rust 依赖配置
+│   └── tauri.conf.json         # Tauri 配置文件
+├── docs/                        # 文档和静态文件
+├── public/                      # 公共资源
+├── package.json                 # Node.js 依赖配置
+└── vite.config.js              # Vite 配置文件
 ```
 
-## License
+## 🔧 配置说明
 
-MIT
+### 应用源配置
 
-# OpenStore Proxy Server
+在 `app-source.json` 文件中配置应用源：
 
-A simple proxy server for handling CORS and API requests in the OpenStore application.
+```json
+{
+  "sources": [
+    {
+      "name": "官方源",
+      "url": "https://api.example.com/apps",
+      "enabled": true
+    }
+  ]
+}
+```
 
-## Setup
+### 代理服务器
 
-1. Install dependencies:
+项目包含一个代理服务器用于处理 CORS 和 API 请求：
+
 ```bash
+# 启动代理服务器
+cd src/server
 npm install
-```
-
-2. Start the server:
-```bash
-# Development mode with auto-reload
-npm run dev
-
-# Production mode
 npm start
 ```
 
-The server will start on port 3001 by default.
+服务器默认运行在端口 3001。
 
-## API Endpoints
+## 🐛 故障排除
 
-### Health Check
+### 常见问题
+
+1. **下载进度不显示**
+   - 检查下载服务是否正常运行
+   - 确认网络连接状态
+   - 查看控制台错误信息
+
+2. **React 属性警告**
+   ```
+   Warning: React does not recognize the `backgroundImage` prop
+   ```
+   - 这是 styled-components 的已知问题
+   - 不影响功能，可以忽略
+
+3. **文件大小信息不正确**
+   - 检查服务器返回的 Content-Length 头
+   - 确认下载源的响应格式
+
+4. **构建失败**
+   - 确保 Rust 和 Node.js 版本符合要求
+   - 清理缓存：`npm run clean && npm install`
+   - 重新安装 Tauri CLI
+
+### 调试模式
+
+启用调试模式查看详细日志：
+
+```bash
+# 设置环境变量
+export RUST_LOG=debug
+npm run tauri dev
 ```
-GET /health
-```
-Returns server status.
 
-### Proxy Request
-```
-POST /proxy
-```
-Body parameters:
-- `url` (required): The target URL to proxy the request to
-- `method` (optional): HTTP method (default: 'GET')
-- `headers` (optional): Custom headers to include
-- `data` (optional): Request body data
+## 🤝 贡献指南
 
-Example request:
-```javascript
-fetch('http://localhost:3001/proxy', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    url: 'https://api.example.com/data',
-    method: 'GET',
-    headers: {
-      'Authorization': 'Bearer token'
-    }
-  })
-})
-```
+我们欢迎所有形式的贡献！
 
-## Error Handling
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
 
-The server includes error handling middleware that will return appropriate error responses with status codes and messages.
+### 开发规范
 
-## License
+- 遵循现有的代码风格
+- 添加适当的注释
+- 确保所有测试通过
+- 更新相关文档
 
-MIT
-请修复无法显示下载进度和下载进度百分比的问题和文件大小信息不正确的问题
+## 📄 许可证
 
-	performConcurrentWorkOnRoot
-	workLoop (chunk-OY5C42Z6.js:197)
-	flushWork (chunk-OY5C42Z6.js:176)
-	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
+## 🙏 致谢
 
+- [Tauri](https://tauri.app/) - 优秀的跨平台应用框架
+- [React](https://reactjs.org/) - 强大的用户界面库
+- [Styled Components](https://styled-components.com/) - 灵活的样式解决方案
+- [Vite](https://vitejs.dev/) - 快速的构建工具
 
-[Error] Warning: React does not recognize the `backgroundImage` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `backgroundimage` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
-div
-@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
-App@http://localhost:1420/src/App.jsx?t=1751425169009:490:31
-TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
-ErrorBoundary@http://localhost:1420/src/components/ErrorBoundary.jsx:61:10
-	printWarning (chunk-OY5C42Z6.js:521)
-	error (chunk-OY5C42Z6.js:505)
-	validateProperty$1 (chunk-OY5C42Z6.js:3433)
-	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
-	validateProperties$2 (chunk-OY5C42Z6.js:3484)
-	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
-	setInitialProperties (chunk-OY5C42Z6.js:7567)
-	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
-	completeWork (chunk-OY5C42Z6.js:16341)
-	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
-	performUnitOfWork (chunk-OY5C42Z6.js:19259)
-	workLoopSync (chunk-OY5C42Z6.js:19190)
-	renderRootSync (chunk-OY5C42Z6.js:19169)
-	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
-	performConcurrentWorkOnRoot
-	workLoop (chunk-OY5C42Z6.js:197)
-	flushWork (chunk-OY5C42Z6.js:176)
-	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
-[Error] Warning: React does not recognize the `backgroundOpacity` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `backgroundopacity` instead. If you accidentally passed it from a parent component, remove it from the DOM element.
-div
-@http://localhost:1420/node_modules/.vite/deps/styled-components.js?v=feb7f4bf:1261:179
-App@http://localhost:1420/src/App.jsx?t=1751425169009:490:31
-TranslationProvider@http://localhost:1420/src/components/TranslationProvider.jsx:26:47
-ErrorBoundary@http://localhost:1420/src/components/ErrorBoundary.jsx:61:10
-	printWarning (chunk-OY5C42Z6.js:521)
-	error (chunk-OY5C42Z6.js:505)
-	validateProperty$1 (chunk-OY5C42Z6.js:3433)
-	warnUnknownProperties (chunk-OY5C42Z6.js:3465)
-	validateProperties$2 (chunk-OY5C42Z6.js:3484)
-	validatePropertiesInDevelopment (chunk-OY5C42Z6.js:7378)
-	setInitialProperties (chunk-OY5C42Z6.js:7567)
-	finalizeInitialChildren (chunk-OY5C42Z6.js:8392)
-	completeWork (chunk-OY5C42Z6.js:16341)
-	completeUnitOfWork (chunk-OY5C42Z6.js:19277)
-	performUnitOfWork (chunk-OY5C42Z6.js:19259)
-	workLoopSync (chunk-OY5C42Z6.js:19190)
-	renderRootSync (chunk-OY5C42Z6.js:19169)
-	performConcurrentWorkOnRoot (chunk-OY5C42Z6.js:18728:98)
-	performConcurrentWorkOnRoot
-	workLoop (chunk-OY5C42Z6.js:197)
-	flushWork (chunk-OY5C42Z6.js:176)
-	performWorkUntilDeadline (chunk-OY5C42Z6.js:384)
+## 📞 联系我们
+
+- 项目主页：[GitHub](https://github.com/yourusername/OpenStore)
+- 问题反馈：[Issues](https://github.com/yourusername/OpenStore/issues)
+- 讨论交流：[Discussions](https://github.com/yourusername/OpenStore/discussions)
+
+---
+
+**OpenStore** - 让应用分发更简单 🚀

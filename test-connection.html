@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>软件源连接测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f7;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-item {
+            margin-bottom: 20px;
+            padding: 16px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status.success { background: #d1f2eb; color: #00875a; }
+        .status.error { background: #ffebe6; color: #de350b; }
+        .status.loading { background: #fff4e6; color: #ff8b00; }
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 8px;
+        }
+        button:hover { opacity: 0.8; }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 12px;
+            margin-top: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>软件源连接测试</h1>
+        <p>此页面用于测试软件源连接功能的修复效果</p>
+        
+        <div class="test-item">
+            <h3>测试 1: 正常的GitHub软件源</h3>
+            <button onclick="testConnection('https://raw.githubusercontent.com/example/repo/main/apps.json', 'test1')">测试连接</button>
+            <span id="status1" class="status">未测试</span>
+            <div id="log1" class="log" style="display: none;"></div>
+        </div>
+        
+        <div class="test-item">
+            <h3>测试 2: 无效的URL</h3>
+            <button onclick="testConnection('https://invalid-url-that-does-not-exist.com/apps.json', 'test2')">测试连接</button>
+            <span id="status2" class="status">未测试</span>
+            <div id="log2" class="log" style="display: none;"></div>
+        </div>
+        
+        <div class="test-item">
+            <h3>测试 3: 超时测试</h3>
+            <button onclick="testConnection('https://httpstat.us/200?sleep=20000', 'test3')">测试连接</button>
+            <span id="status3" class="status">未测试</span>
+            <div id="log3" class="log" style="display: none;"></div>
+        </div>
+        
+        <div class="test-item">
+            <h3>测试 4: 404错误</h3>
+            <button onclick="testConnection('https://httpstat.us/404', 'test4')">测试连接</button>
+            <span id="status4" class="status">未测试</span>
+            <div id="log4" class="log" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // 模拟修复后的fetchWithTimeout函数
+        const fetchWithTimeout = async (url, timeout = 10000, retries = 3) => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+            
+            for (let attempt = 1; attempt <= retries; attempt++) {
+                try {
+                    const response = await fetch(url, {
+                        signal: controller.signal,
+                        mode: 'cors',
+                        headers: {
+                            'Accept': 'application/json, text/plain, */*',
+                            'Cache-Control': 'no-cache'
+                        }
+                    });
+                    clearTimeout(timeoutId);
+                    return response;
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    
+                    if (error.name === 'AbortError') {
+                        throw new Error('请求超时，请检查网络连接或稍后重试');
+                    }
+                    
+                    // 网络连接错误
+                    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                        if (attempt < retries) {
+                            console.log(`网络请求失败，正在重试 (${attempt}/${retries})...`);
+                            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                            continue;
+                        }
+                        throw new Error('网络连接失败，请检查网络连接或防火墙设置');
+                    }
+                    
+                    // CORS错误
+                    if (error.message.includes('CORS')) {
+                        throw new Error('跨域请求被阻止，请确保软件源支持CORS或使用代理');
+                    }
+                    
+                    // 其他错误
+                    if (attempt < retries) {
+                        console.log(`请求失败，正在重试 (${attempt}/${retries}):`, error.message);
+                        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                        continue;
+                    }
+                    
+                    throw new Error(`连接失败: ${error.message}`);
+                }
+            }
+        };
+        
+        async function testConnection(url, testId) {
+            const statusEl = document.getElementById(`status${testId.slice(-1)}`);
+            const logEl = document.getElementById(`log${testId.slice(-1)}`);
+            
+            statusEl.textContent = '测试中...';
+            statusEl.className = 'status loading';
+            logEl.style.display = 'block';
+            logEl.textContent = `开始测试: ${url}\n`;
+            
+            try {
+                const startTime = Date.now();
+                logEl.textContent += `正在连接...\n`;
+                
+                const response = await fetchWithTimeout(url, 5000);
+                const endTime = Date.now();
+                
+                logEl.textContent += `连接成功! 耗时: ${endTime - startTime}ms\n`;
+                logEl.textContent += `状态码: ${response.status}\n`;
+                logEl.textContent += `状态文本: ${response.statusText}\n`;
+                
+                if (response.ok) {
+                    statusEl.textContent = '连接成功';
+                    statusEl.className = 'status success';
+                } else {
+                    statusEl.textContent = `HTTP ${response.status}`;
+                    statusEl.className = 'status error';
+                }
+                
+            } catch (error) {
+                logEl.textContent += `连接失败: ${error.message}\n`;
+                statusEl.textContent = '连接失败';
+                statusEl.className = 'status error';
+            }
+        }
+    </script>
+</body>
+</html>

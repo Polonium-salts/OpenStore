@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { useTranslation } from 'react-i18next';
-import JsonEditor from './JsonEditor';
 import { getSmartIcon, validateIconUrl } from '../services/iconService';
 
 const Container = styled.div`
@@ -228,21 +227,53 @@ const ProgressFill = styled.div`
 
 const ProgressText = styled.div`
   font-size: 12px;
-  color: ${props => props.theme === 'dark' ? '#999' : '#666'};
+  color: ${props => props.theme === 'dark' ? '#8e8e93' : '#6d6d70'};
   margin-top: 4px;
   text-align: center;
 `;
 
+const ConnectionStatus = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: ${props => {
+    if (props.status === 'connected') return '#34C759';
+    if (props.status === 'error') return '#FF3B30';
+    if (props.status === 'connecting') return '#FF9500';
+    return props.theme === 'dark' ? '#8e8e93' : '#6d6d70';
+  }};
+`;
+
+const StatusDot = styled.div`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: ${props => {
+    if (props.status === 'connected') return '#34C759';
+    if (props.status === 'error') return '#FF3B30';
+    if (props.status === 'connecting') return '#FF9500';
+    return props.theme === 'dark' ? '#8e8e93' : '#6d6d70';
+  }};
+  animation: ${props => props.status === 'connecting' ? 'pulse 1.5s infinite' : 'none'};
+  
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+  }
+`;
+
 const SourceManager = ({ theme, onSourcesChange }) => {
   const [sources, setSources] = useState([]);
-  const [newSource, setNewSource] = useState({ name: '', url: '', type: 'direct' });
+  const [newSource, setNewSource] = useState({ url: '' });
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('sources');
-  const [editorData, setEditorData] = useState([]);
+  const [importProgress, setImportProgress] = useState({ progress: 0, status: '' });
+  const [connectionStatus, setConnectionStatus] = useState('idle'); // idle, connecting, connected, error
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
   const { t } = useTranslation();
-  const [importProgress, setImportProgress] = useState({ progress: 0, status: '' });
 
   useEffect(() => {
     // 从本地存储加载软件源
@@ -261,23 +292,54 @@ const SourceManager = ({ theme, onSourcesChange }) => {
     setSources(updatedSources);
   };
 
-  // 添加超时控制的fetch函数
-  const fetchWithTimeout = async (url, timeout = 10000) => {
+  // 添加超时控制和重试机制的fetch函数
+  const fetchWithTimeout = async (url, timeout = 10000, retries = 3) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     
-    try {
-      const response = await fetch(url, {
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
-        throw new Error('请求超时，请检查网络连接');
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          mode: 'cors',
+          headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'Cache-Control': 'no-cache'
+          }
+        });
+        clearTimeout(timeoutId);
+        return response;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        
+        if (error.name === 'AbortError') {
+          throw new Error('请求超时，请检查网络连接或稍后重试');
+        }
+        
+        // 网络连接错误
+        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+          if (attempt < retries) {
+            console.log(`网络请求失败，正在重试 (${attempt}/${retries})...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // 递增延迟
+            continue;
+          }
+          throw new Error('网络连接失败，请检查网络连接或防火墙设置');
+        }
+        
+        // CORS错误
+        if (error.message.includes('CORS')) {
+          throw new Error('跨域请求被阻止，请确保软件源支持CORS或使用代理');
+        }
+        
+        // 其他错误
+        if (attempt < retries) {
+          console.log(`请求失败，正在重试 (${attempt}/${retries}):`, error.message);
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+          continue;
+        }
+        
+        throw new Error(`连接失败: ${error.message}`);
       }
-      throw error;
     }
   };
 
@@ -287,98 +349,9 @@ const SourceManager = ({ theme, onSourcesChange }) => {
   };
 
   // 验证软件源URL
-  const validateSourceUrl = async (url, sourceType = 'direct') => {
+  const validateSourceUrl = async (url) => {
     try {
       updateProgress(10, '正在验证URL格式...');
-      
-      // 如果是API类型，直接验证API接口
-      if (sourceType === 'api') {
-        updateProgress(20, '正在验证API接口...');
-        console.log('正在验证API软件源:', url);
-        
-        const response = await fetchWithTimeout(url, 15000);
-        
-        if (!response.ok) {
-          throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
-        }
-        
-        updateProgress(50, '正在解析API响应...');
-        const apiResponse = await response.json();
-        
-        // 验证API响应格式
-        if (!apiResponse.success) {
-          throw new Error('API返回失败状态');
-        }
-        
-        if (!apiResponse.data || !Array.isArray(apiResponse.data)) {
-          throw new Error('API响应格式无效，data字段应为数组');
-        }
-        
-        const data = apiResponse.data;
-        
-        // 验证应用数据
-        if (data.length === 0) {
-          throw new Error('API返回的软件源为空');
-        }
-        
-        if (data.length > 1000) {
-          throw new Error('API返回的应用数量过多，请确保少于1000个');
-        }
-        
-        // 验证必要字段
-        const invalidApps = data.filter(app => 
-          !app.id || !app.name || !app.description || 
-          typeof app.price === 'undefined' || !app.downloadUrl
-        );
-        
-        if (invalidApps.length > 0) {
-          throw new Error(`发现 ${invalidApps.length} 个无效应用，请确保所有应用都包含必要字段`);
-        }
-        
-        updateProgress(80, '正在处理应用数据...');
-        // 处理API返回的数据
-        const processedData = await Promise.all(data.map(async (app, index) => {
-          const processProgress = 80 + (index / data.length) * 15;
-          updateProgress(processProgress, `正在处理应用 ${index + 1}/${data.length}...`);
-          
-          let enhancedApp = { ...app };
-          
-          // 添加默认类别
-          if (!enhancedApp.category) {
-            console.log(`应用 ${enhancedApp.name} 没有分类字段，默认设置为软件类别`);
-            enhancedApp.category = 'software';
-          }
-          
-          // 智能图标匹配处理
-          const hasValidIcon = enhancedApp.icon && 
-                              enhancedApp.icon.length > 0 && 
-                              !enhancedApp.icon.includes('placeholder');
-          
-          // 如果没有图标或图标URL无效，使用智能匹配
-          if (!hasValidIcon || !(await validateIconUrl(enhancedApp.icon))) {
-            enhancedApp.icon = getSmartIcon(enhancedApp);
-            console.log(`为应用 ${enhancedApp.name} 自动匹配图标: ${enhancedApp.icon}`);
-          }
-          
-          return enhancedApp;
-        }));
-        
-        updateProgress(95, '正在完成处理...');
-        
-        // 创建处理后的数据
-        const blob = new Blob([JSON.stringify(processedData, null, 2)], { type: 'application/json' });
-        const processedUrl = URL.createObjectURL(blob);
-        
-        updateProgress(100, '处理完成！');
-        return { 
-          isValid: true, 
-          needsProcessing: true, 
-          processedUrl,
-          processedData
-        };
-      }
-      
-      // 原有的直接链接处理逻辑
       // 检查并转换GitHub链接为raw链接
       if (url.includes('github.com') && !url.includes('raw.githubusercontent.com')) {
         updateProgress(20, '正在处理GitHub链接...');
@@ -417,10 +390,28 @@ const SourceManager = ({ theme, onSourcesChange }) => {
 
       updateProgress(30, '正在连接到软件源...');
       console.log('正在验证软件源:', url);
-      const response = await fetchWithTimeout(url, 15000); // 设置15秒超时
+      
+      let response;
+      try {
+        response = await fetchWithTimeout(url, 15000); // 设置15秒超时
+      } catch (networkError) {
+        // 提供更详细的网络错误信息
+        if (networkError.message.includes('网络连接失败')) {
+          throw new Error('无法连接到软件源，可能的原因：\n1. 网络连接问题\n2. 软件源服务器不可用\n3. 防火墙阻止了连接\n4. URL地址错误');
+        }
+        throw networkError;
+      }
       
       if (!response.ok) {
-        throw new Error(`请求失败: ${response.status} ${response.statusText}`);
+        let errorMessage = `请求失败: ${response.status} ${response.statusText}`;
+        if (response.status === 404) {
+          errorMessage += '\n软件源文件不存在，请检查URL是否正确';
+        } else if (response.status === 403) {
+          errorMessage += '\n访问被拒绝，可能需要身份验证';
+        } else if (response.status >= 500) {
+          errorMessage += '\n服务器错误，请稍后重试';
+        }
+        throw new Error(errorMessage);
       }
       
       updateProgress(40, '正在检查文件大小...');
@@ -524,7 +515,7 @@ const SourceManager = ({ theme, onSourcesChange }) => {
   const handleAddSource = async (e) => {
     e.preventDefault();
     
-    if (!newSource.name || !newSource.url) {
+    if (!newSource.url) {
       setError(t('sourceManager.enterUrl'));
       setTimeout(() => setError(''), 1500);
       return;
@@ -532,13 +523,14 @@ const SourceManager = ({ theme, onSourcesChange }) => {
 
     try {
       setImportProgress({ progress: 0, status: '准备导入...' });
+      setConnectionStatus('connecting');
       
       // 检查是否为GitHub链接
       const isGithubUrl = newSource.url.includes('github.com') && !newSource.url.includes('raw.githubusercontent.com');
       const originalUrl = isGithubUrl ? newSource.url : null;
       
-      // 根据类型验证软件源
-      const validation = await validateSourceUrl(newSource.url, newSource.type);
+      // 验证软件源
+      const validation = await validateSourceUrl(newSource.url);
       
       let sourceUrl = newSource.url;
       let isLocalProcessed = false;
@@ -556,40 +548,75 @@ const SourceManager = ({ theme, onSourcesChange }) => {
           url: sourceUrl,
           data: validation.processedData,
           createdAt: new Date().toISOString(),
-          originalUrl: originalUrl || newSource.url,
-          sourceType: newSource.type
+          originalUrl: originalUrl || newSource.url
         };
         
         blobSourceId = newBlobSource.id;
         localStorage.setItem('blobSources', JSON.stringify([...blobSources, newBlobSource]));
       }
       
+      // 自动生成软件源名称
+      const generateSourceName = () => {
+        if (isGithubUrl) {
+          // 从GitHub URL提取仓库名
+          const match = newSource.url.match(/github\.com\/([^/]+)\/([^/]+)/);
+          if (match) {
+            return `${match[1]}/${match[2]}`;
+          }
+        }
+        
+        // 从URL提取域名或文件名
+        try {
+          const urlObj = new URL(newSource.url);
+          const hostname = urlObj.hostname.replace('www.', '');
+          const pathname = urlObj.pathname;
+          
+          if (pathname && pathname !== '/') {
+            const fileName = pathname.split('/').pop();
+            if (fileName && fileName.includes('.')) {
+              return `${hostname}/${fileName.replace('.json', '')}`;
+            }
+          }
+          
+          return hostname;
+        } catch {
+          return `软件源 ${new Date().toLocaleString()}`;
+        }
+      };
+      
       // 创建新软件源对象
       const newSourceObj = {
         id: Date.now(),
-        name: newSource.name,
+        name: generateSourceName(),
         url: sourceUrl,
         originalUrl: isLocalProcessed ? (originalUrl || newSource.url) : originalUrl,
         enabled: true,
         isLocalBlob: isLocalProcessed,
         blobSourceId: blobSourceId,
-        isGithubConverted: isGithubUrl,
-        sourceType: newSource.type
+        isGithubConverted: isGithubUrl
       };
       
       // 立即更新状态和本地存储
       const updatedSources = [...sources, newSourceObj];
       saveSources(updatedSources);
-      setNewSource({ name: '', url: '', type: 'direct' });
+      setNewSource({ url: '' });
+      setConnectionStatus('connected');
       
       // 立即触发软件源变更回调
       if (onSourcesChange) {
         onSourcesChange();
       }
+      
+      // 重置连接状态
+      setTimeout(() => setConnectionStatus('idle'), 2000);
     } catch (err) {
       setError(err.message);
       setImportProgress({ progress: 0, status: '' });
-      setTimeout(() => setError(''), 1500);
+      setConnectionStatus('error');
+      setTimeout(() => {
+        setError('');
+        setConnectionStatus('idle');
+      }, 3000);
     }
   };
 
@@ -628,130 +655,7 @@ const SourceManager = ({ theme, onSourcesChange }) => {
     saveSources(updatedSources);
   };
 
-  // 处理JSON编辑器数据变更
-  const handleJsonChange = (data) => {
-    setEditorData(data);
-  };
 
-  // 创建新的软件源从JSON编辑器
-  const handleCreateSourceFromEditor = async () => {
-    try {
-      // 验证必填字段
-      const isValid = editorData.every(app => (
-        app.id && app.name && app.description && 
-        typeof app.price !== 'undefined' && app.downloadUrl
-      ));
-      
-      if (!isValid) {
-        setError(t('sourceManager.invalidJson'));
-        setTimeout(() => setError(''), 1500);
-        return;
-      }
-      
-      // 增强应用数据，添加分类和智能图标
-      const enhancedData = await Promise.all(editorData.map(async (app) => {
-        let enhancedApp = { ...app };
-        
-        // 添加默认类别
-        if (!enhancedApp.category) {
-          enhancedApp.category = 'software';
-        }
-        
-        // 智能图标匹配处理
-        const hasValidIcon = enhancedApp.icon && 
-                            enhancedApp.icon.length > 0 && 
-                            !enhancedApp.icon.includes('placeholder');
-        
-        // 如果没有图标或图标URL无效，使用智能匹配
-        if (!hasValidIcon || !(await validateIconUrl(enhancedApp.icon))) {
-          enhancedApp.icon = getSmartIcon(enhancedApp);
-          console.log(`为应用 ${enhancedApp.name} 自动匹配图标: ${enhancedApp.icon}`);
-        }
-        
-        return enhancedApp;
-      }));
-      
-      // 创建一个Blob对象
-      const blob = new Blob([JSON.stringify(enhancedData, null, 2)], { type: 'application/json' });
-      
-      // 创建一个临时URL
-      const url = URL.createObjectURL(blob);
-      
-      // 在本地存储我们需要追踪这个blob URL
-      const blobSources = JSON.parse(localStorage.getItem('blobSources') || '[]');
-      const newBlobSource = {
-        id: Date.now(),
-        url,
-        data: enhancedData,
-        createdAt: new Date().toISOString()
-      };
-      
-      localStorage.setItem('blobSources', JSON.stringify([...blobSources, newBlobSource]));
-      
-      // 添加新软件源
-      const updatedSources = [...sources, {
-        id: Date.now(),
-        name: `${t('sourceManager.local')} ${new Date().toLocaleString()}`,
-        url,
-        enabled: true,
-        isLocalBlob: true,
-        blobSourceId: newBlobSource.id
-      }];
-      
-      saveSources(updatedSources);
-      setActiveTab('sources');
-      
-      // 不显示成功提示
-      
-      if (onSourcesChange) {
-        onSourcesChange();
-      }
-    } catch (err) {
-      setError(`${t('sourceManager.processError')}: ${err.message}`);
-      setTimeout(() => setError(''), 1500);
-    }
-  };
-
-  // 加载特定软件源的数据到编辑器
-  const loadSourceToEditor = async (source) => {
-    try {
-      // 不设置错误状态
-      let data;
-      
-      if (source.isLocalBlob) {
-        // 从本地存储获取blob数据
-        const blobSources = JSON.parse(localStorage.getItem('blobSources') || '[]');
-        const blobSource = blobSources.find(bs => bs.id === source.blobSourceId);
-        
-        if (blobSource) {
-          data = blobSource.data;
-        } else {
-          console.error('无法找到本地源数据');
-          setError('无法找到本地源数据');
-          setTimeout(() => setError(''), 1500);
-          return;
-        }
-      } else {
-        try {
-          // 从URL获取数据
-          const response = await fetch(source.url);
-          data = await response.json();
-        } catch (error) {
-          console.error('加载软件源数据失败:', error);
-          setError('加载软件源数据失败');
-          setTimeout(() => setError(''), 1500);
-          return;
-        }
-      }
-      
-      setEditorData(data);
-      setActiveTab('editor');
-    } catch (err) {
-      console.error('加载软件源数据失败:', err);
-      setError('加载软件源数据失败');
-      setTimeout(() => setError(''), 1500);
-    }
-  };
 
   // 处理文件上传
   const handleFileUpload = async (file) => {
@@ -1030,27 +934,9 @@ const SourceManager = ({ theme, onSourcesChange }) => {
   return (
     <Container theme={theme}>
       
-      <Tabs>
-        <Tab 
-          active={activeTab === 'sources'} 
-          onClick={() => setActiveTab('sources')}
-          theme={theme}
-        >
-          {t('sourceManager.title')}
-        </Tab>
-        <Tab 
-          active={activeTab === 'editor'} 
-          onClick={() => setActiveTab('editor')}
-          theme={theme}
-        >
-          JSON {t('common.edit')}
-        </Tab>
-      </Tabs>
-      
       {error && <ErrorMessage>{error}</ErrorMessage>}
       
-      {activeTab === 'sources' && (
-        <>
+      <>
           <FileUploadContainer 
             theme={theme}
             className={isDragging ? 'dragover' : ''}
@@ -1079,52 +965,18 @@ const SourceManager = ({ theme, onSourcesChange }) => {
           
           <AddSourceForm onSubmit={handleAddSource} theme={theme}>
             <FormGroup>
-              <Label theme={theme}>{t('sourceManager.title')}</Label>
-              <Input
-                type="text"
-                value={newSource.name}
-                onChange={(e) => setNewSource({ ...newSource, name: e.target.value })}
-                placeholder={t('sourceManager.title')}
-                theme={theme}
-              />
-            </FormGroup>
-            
-            <FormGroup>
-              <Label theme={theme}>软件源类型</Label>
-              <select
-                value={newSource.type}
-                onChange={(e) => setNewSource({ ...newSource, type: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: `1px solid ${theme === 'dark' ? '#3a3a3d' : '#d2d2d7'}`,
-                  backgroundColor: theme === 'dark' ? '#1d1d1f' : 'white',
-                  color: theme === 'dark' ? '#f5f5f7' : '#1d1d1f',
-                  fontSize: '14px'
-                }}
-              >
-                <option value="direct">直接链接 (JSON文件)</option>
-                <option value="api">API接口</option>
-              </select>
-            </FormGroup>
-            
-            <FormGroup>
               <Label theme={theme}>
-                {newSource.type === 'api' ? 'API接口地址' : t('sourceManager.enterUrl')}
+                {t('sourceManager.enterUrl')}
               </Label>
               <Input
                 type="url"
                 value={newSource.url}
                 onChange={(e) => setNewSource({ ...newSource, url: e.target.value })}
-                placeholder={newSource.type === 'api' ? '输入API接口地址' : t('sourceManager.enterUrl')}
+                placeholder={t('sourceManager.enterUrl')}
                 theme={theme}
               />
               <HintText theme={theme}>
-                {newSource.type === 'api' 
-                  ? 'API接口应返回标准格式的软件源数据，详见API文档'
-                  : t('sourceManager.githubSupport')
-                }
+                {t('sourceManager.githubSupport')}
               </HintText>
             </FormGroup>
             
@@ -1139,19 +991,18 @@ const SourceManager = ({ theme, onSourcesChange }) => {
               </ProgressContainer>
             )}
             
+            {connectionStatus !== 'idle' && (
+              <ConnectionStatus status={connectionStatus} theme={theme}>
+                <StatusDot status={connectionStatus} theme={theme} />
+                {connectionStatus === 'connecting' && '正在连接软件源...'}
+                {connectionStatus === 'connected' && '连接成功！'}
+                {connectionStatus === 'error' && '连接失败'}
+              </ConnectionStatus>
+            )}
+            
             <ButtonGroup>
               <Button type="submit" variant="primary" disabled={importProgress.progress > 0}>
                 {t('sourceManager.addSource')}
-              </Button>
-              <Button 
-                type="button" 
-                onClick={() => {
-                  setActiveTab('editor');
-                  setEditorData([]);
-                }}
-                disabled={importProgress.progress > 0}
-              >
-                {t('sourceManager.createNew')}
               </Button>
             </ButtonGroup>
           </AddSourceForm>
@@ -1169,12 +1020,6 @@ const SourceManager = ({ theme, onSourcesChange }) => {
                       {source.sourceType === 'api' && ' (API)'}
                     </SourceName>
                     <ButtonGroup>
-                      <Button
-                        onClick={() => loadSourceToEditor(source)}
-                        theme={theme}
-                      >
-                        {t('common.edit')}
-                      </Button>
                       <Button
                         onClick={() => handleToggleSource(source.id)}
                         theme={theme}
@@ -1197,32 +1042,6 @@ const SourceManager = ({ theme, onSourcesChange }) => {
             )}
           </SourceList>
         </>
-      )}
-      
-      {activeTab === 'editor' && (
-        <>
-          <JsonEditor 
-            initialData={editorData} 
-            onChange={handleJsonChange} 
-            theme={theme}
-            title={t('sourceManager.jsonEditor')}
-          />
-          
-          <ButtonGroup>
-            <Button 
-              variant="primary" 
-              onClick={handleCreateSourceFromEditor}
-            >
-              {t('sourceManager.saveAsSource')}
-            </Button>
-            <Button 
-              onClick={() => setActiveTab('sources')}
-            >
-              {t('sourceManager.returnToList')}
-            </Button>
-          </ButtonGroup>
-        </>
-      )}
     </Container>
   );
 };

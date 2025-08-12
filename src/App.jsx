@@ -143,9 +143,79 @@ const SectionTitle = styled.h2`
 `;
 
 const EmptyState = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  padding: 40px 0;
+  padding: 80px 40px;
+  min-height: 400px;
   color: ${props => props.theme === 'dark' ? '#999' : '#666'};
+  background-color: ${props => props.theme === 'dark' ? 'rgba(42, 42, 45, 0.8)' : 'rgba(255, 255, 255, 0.8)'};
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  border: 1px solid ${props => props.theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'};
+  box-shadow: 0 8px 32px ${props => props.theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.1)'};
+  margin: 20px;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px ${props => props.theme === 'dark' ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.15)'};
+  }
+`;
+
+const EmptyStateIcon = styled.div`
+  width: 120px;
+  height: 120px;
+  margin-bottom: 32px;
+  opacity: 0.6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  svg {
+    width: 100%;
+    height: 100%;
+    fill: ${props => props.theme === 'dark' ? '#666' : '#999'};
+  }
+`;
+
+const EmptyStateTitle = styled.h2`
+  font-size: 28px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  color: ${props => props.theme === 'dark' ? '#fff' : '#1d1d1f'};
+`;
+
+const EmptyStateDescription = styled.p`
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0 0 32px 0;
+  max-width: 400px;
+  color: ${props => props.theme === 'dark' ? '#999' : '#666'};
+`;
+
+const EmptyStateButton = styled.button`
+  background: linear-gradient(135deg, #007AFF 0%, #0051D5 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 16px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.3);
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 122, 255, 0.4);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
 `;
 
 const AppFooter = styled.div`
@@ -1763,7 +1833,25 @@ const App = () => {
     }
 
     if (filteredApps.length === 0) {
-      return <FadeIn><div>{t('sourceManager.addSource')}</div></FadeIn>;
+      return (
+        <FadeIn>
+          <EmptyState theme={theme}>
+            <EmptyStateIcon theme={theme}>
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </EmptyStateIcon>
+            <EmptyStateDescription theme={theme}>
+              还没有添加任何软件源。添加软件源后，您就可以浏览和下载各种应用程序了。
+            </EmptyStateDescription>
+            <EmptyStateButton onClick={() => handleCategorySelect('sources')}>
+              添加软件源
+            </EmptyStateButton>
+          </EmptyState>
+        </FadeIn>
+      );
     }
 
     // 根据视图模式选择不同的渲染方式
@@ -1856,6 +1944,50 @@ const App = () => {
     initDownloadManager();
   }, [isDownloadManagerVisible, t]);
 
+  // 组件挂载时清理无效的下载任务
+  useEffect(() => {
+    const cleanupInvalidTasksOnMount = async () => {
+      const pausedDownloads = Object.entries(downloadStates).filter(
+        ([_, state]) => state.status === 'paused' && state.taskId
+      );
+      
+      for (const [appId, state] of pausedDownloads) {
+        try {
+          // 尝试获取任务状态
+          const task = await invoke('get_download_progress', { taskId: state.taskId });
+          if (!task || task.status === 'Failed' || task.status === 'Error' || task.status === 'Cancelled') {
+            // 如果任务不存在或已失败/取消，重置为idle状态
+            console.log(`启动时清理无效的暂停任务: ${appId}`);
+            updateDownloadState(appId, {
+              status: 'idle',
+              progress: 0,
+              taskId: null,
+              speed: null,
+              totalSize: 0,
+              downloadedSize: 0
+            });
+          }
+        } catch (error) {
+          // 如果无法获取任务状态，说明任务可能已经不存在
+          console.log(`启动时任务不存在，重置状态: ${appId}`);
+          updateDownloadState(appId, {
+            status: 'idle',
+            progress: 0,
+            taskId: null,
+            speed: null,
+            totalSize: 0,
+            downloadedSize: 0
+          });
+        }
+      }
+    };
+    
+    // 延迟执行，确保组件完全挂载
+    const timer = setTimeout(cleanupInvalidTasksOnMount, 1000);
+    
+    return () => clearTimeout(timer);
+  }, []); // 只在组件挂载时执行一次
+
   // 监听下载进度
   useEffect(() => {
     let progressInterval;
@@ -1905,13 +2037,58 @@ const App = () => {
       }
     };
     
+    // 检查并清理无效的下载任务
+    const checkAndCleanupInvalidTasks = async () => {
+      const pausedDownloads = Object.entries(downloadStates).filter(
+        ([_, state]) => state.status === 'paused' && state.taskId
+      );
+      
+      for (const [appId, state] of pausedDownloads) {
+        try {
+          // 尝试获取任务状态
+          const task = await invoke('get_download_progress', { taskId: state.taskId });
+          if (!task || task.status === 'Failed' || task.status === 'Error' || task.status === 'Cancelled') {
+            // 如果任务不存在或已失败/取消，重置为idle状态
+            console.log(`清理无效的暂停任务: ${appId}`);
+            updateDownloadState(appId, {
+              status: 'idle',
+              progress: 0,
+              taskId: null,
+              speed: null,
+              totalSize: 0,
+              downloadedSize: 0
+            });
+          }
+        } catch (error) {
+          // 如果无法获取任务状态，说明任务可能已经不存在
+          console.log(`任务不存在，重置状态: ${appId}`);
+          updateDownloadState(appId, {
+            status: 'idle',
+            progress: 0,
+            taskId: null,
+            speed: null,
+            totalSize: 0,
+            downloadedSize: 0
+          });
+        }
+      }
+    };
+    
     // 如果有活跃的下载，启动进度检查
     const hasActiveDownloads = Object.values(downloadStates).some(
       state => state.status === 'downloading'
     );
     
+    // 如果有暂停的下载，检查它们是否仍然有效
+    const hasPausedDownloads = Object.values(downloadStates).some(
+      state => state.status === 'paused'
+    );
+    
     if (hasActiveDownloads) {
       progressInterval = setInterval(checkDownloadProgress, 1000); // 每秒检查一次
+    } else if (hasPausedDownloads) {
+      // 如果没有活跃下载但有暂停的下载，检查并清理无效任务
+      checkAndCleanupInvalidTasks();
     }
     
     return () => {

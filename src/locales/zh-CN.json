@@ -106,6 +106,13 @@
     "readError": "读取文件失败",
     "processError": "处理文件失败",
     "processing": "正在处理文件，请稍候...",
+    "connectionFailed": "连接失败",
+    "networkError": "网络连接错误",
+    "retrying": "正在重试连接",
+    "corsError": "跨域请求被阻止",
+    "timeoutError": "连接超时",
+    "serverError": "服务器错误",
+    "connectionTips": "连接提示：请检查网络连接、防火墙设置或软件源URL是否正确",
     "multipleSuccess": "成功添加多个软件源",
     "partialSuccess": "部分软件源添加成功",
     "allFailed": "所有软件源处理失败"
