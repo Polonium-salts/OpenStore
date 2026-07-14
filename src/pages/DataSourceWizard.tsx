@@ -23,9 +23,24 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function GiteeIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      fill="currentColor"
+      {...props}
+    >
+      <path d="M11.985 2C6.47 2 2 6.47 2 12s4.47 10 9.985 10C17.52 22 22 17.52 22 12s-4.48-10-10.015-10zm4.5 13.929h-3.328c-.46 0-.832-.375-.832-.838V12.16c0-.463.372-.838.832-.838h3.328c.46 0 .832.375.832.838v2.93c0 .466-.372.839-.832.839zm-5.767 0H7.39c-.46 0-.832-.375-.832-.838V8.924c0-.463.372-.838.832-.838h8.228c.46 0 .832.375.832.838v1.396c0 .463-.372.838-.832.838H7.39c-.46 0-.832.375-.832.838v2.095c0 .463.372.838.832.838h3.328c.46 0 .832.375.832.838v.838c0 .463-.372.838-.832.838z" />
+    </svg>
+  );
+}
+
 interface DataSource {
   id: string;
   name: string;
+  platform?: "github" | "gitee";
   apiEndpointMode: "public" | "enterprise";
   customEndpoint: string;
   apiVersion: string;
@@ -34,7 +49,7 @@ interface DataSource {
 }
 
 export default function DataSourceWizard() {
-  const { githubToken, setGithubToken, dataSources, addDataSource, deleteDataSource } = useApp();
+  const { githubToken, setGithubToken, giteeToken, setGiteeToken, dataSources, addDataSource, deleteDataSource } = useApp();
 
   // Navigation state: 'list' | 'add'
   const [view, setView] = useState<"list" | "add">("list");
@@ -74,20 +89,30 @@ export default function DataSourceWizard() {
       // Add source to list
       const newSource: DataSource = {
         id: `source_${Date.now()}`,
-        name: apiEndpointMode === "public" ? "GitHub 公网数据源" : "GitHub 企业版数据源",
+        name: apiEndpointMode === "public"
+          ? (selectedType === "gitee" ? "Gitee 公网数据源" : "GitHub 公网数据源")
+          : (selectedType === "gitee" ? "Gitee 企业版数据源" : "GitHub 企业版数据源"),
+        platform: selectedType as "github" | "gitee",
         apiEndpointMode,
-        customEndpoint: apiEndpointMode === "public" ? "https://api.github.com" : customEndpoint.trim(),
-        apiVersion,
+        customEndpoint: apiEndpointMode === "public"
+          ? (selectedType === "gitee" ? "https://gitee.com/api/v5" : "https://api.github.com")
+          : customEndpoint.trim(),
+        apiVersion: selectedType === "gitee" ? "v5" : apiVersion,
         token: tokenInput.trim(),
         addedAt: new Date().toLocaleDateString()
       };
 
       addDataSource(newSource);
 
-      // Set as active GitHub Token in global context
+      // Set as active Token in global context
       if (tokenInput.trim()) {
-        setGithubToken(tokenInput.trim());
-        localStorage.setItem("git_store_token", tokenInput.trim());
+        if (selectedType === "gitee") {
+          setGiteeToken(tokenInput.trim());
+          localStorage.setItem("git_store_gitee_token", tokenInput.trim());
+        } else {
+          setGithubToken(tokenInput.trim());
+          localStorage.setItem("git_store_token", tokenInput.trim());
+        }
       }
       
       setStep(3);
@@ -110,14 +135,19 @@ export default function DataSourceWizard() {
     setGithubUser(null);
     setRateLimit(null);
 
-    const baseEndpoint = apiEndpointMode === "public" ? "https://api.github.com" : customEndpoint.trim();
+    const isGitee = selectedType === "gitee";
+    const baseEndpoint = isGitee
+      ? (apiEndpointMode === "public" ? "https://gitee.com/api/v5" : customEndpoint.trim())
+      : (apiEndpointMode === "public" ? "https://api.github.com" : customEndpoint.trim());
     const requestUrl = `${baseEndpoint}/user`;
 
     try {
       const headers: Record<string, string> = {
-        Accept: "application/vnd.github.v3+json",
-        "X-GitHub-Api-Version": apiVersion,
+        Accept: isGitee ? "application/json" : "application/vnd.github.v3+json",
       };
+      if (!isGitee) {
+        headers["X-GitHub-Api-Version"] = apiVersion;
+      }
 
       if (tokenInput.trim()) {
         headers.Authorization = `Bearer ${tokenInput.trim()}`;
@@ -125,25 +155,27 @@ export default function DataSourceWizard() {
 
       const res = await fetch(requestUrl, { headers });
       
-      const limitHeader = res.headers.get("x-ratelimit-limit");
-      const remainingHeader = res.headers.get("x-ratelimit-remaining");
-      if (limitHeader && remainingHeader) {
-        setRateLimit({
-          limit: parseInt(limitHeader, 10),
-          remaining: parseInt(remainingHeader, 10),
-        });
+      if (!isGitee) {
+        const limitHeader = res.headers.get("x-ratelimit-limit");
+        const remainingHeader = res.headers.get("x-ratelimit-remaining");
+        if (limitHeader && remainingHeader) {
+          setRateLimit({
+            limit: parseInt(limitHeader, 10),
+            remaining: parseInt(remainingHeader, 10),
+          });
+        }
       }
 
       if (res.ok) {
         const data = await res.json();
-        setGithubUser(data.login);
+        setGithubUser(data.login || data.name);
         setTestResult("success");
       } else {
         throw new Error(`API 诊断失败 (状态码: ${res.status})`);
       }
     } catch (err: any) {
       setTestResult("error");
-      setErrorMessage(err.message || "请求超时，无法连接至 GitHub。");
+      setErrorMessage(err.message || `请求超时，无法连接至 ${isGitee ? "Gitee" : "GitHub"}。`);
     } finally {
       setTestingConnection(false);
     }
@@ -153,14 +185,19 @@ export default function DataSourceWizard() {
     setListTestingId(source.id);
     setListTestResults((prev) => ({ ...prev, [source.id]: "idle" }));
 
-    const baseEndpoint = source.apiEndpointMode === "public" ? "https://api.github.com" : source.customEndpoint.trim();
+    const isGitee = source.platform === "gitee";
+    const baseEndpoint = isGitee
+      ? (source.apiEndpointMode === "public" ? "https://gitee.com/api/v5" : source.customEndpoint.trim())
+      : (source.apiEndpointMode === "public" ? "https://api.github.com" : source.customEndpoint.trim());
     const requestUrl = `${baseEndpoint}/user`;
 
     try {
       const headers: Record<string, string> = {
-        Accept: "application/vnd.github.v3+json",
-        "X-GitHub-Api-Version": source.apiVersion,
+        Accept: isGitee ? "application/json" : "application/vnd.github.v3+json",
       };
+      if (!isGitee) {
+        headers["X-GitHub-Api-Version"] = source.apiVersion;
+      }
 
       if (source.token.trim()) {
         headers.Authorization = `Bearer ${source.token.trim()}`;
@@ -180,17 +217,46 @@ export default function DataSourceWizard() {
   };
 
   const isCurrentlyActive = (source: DataSource) => {
-    const activeToken = localStorage.getItem("git_store_token") || githubToken || "";
-    const activeMode = localStorage.getItem("git_store_api_mode") || "public";
+    const isGitee = source.platform === "gitee";
+    const activeToken = isGitee
+      ? (localStorage.getItem("git_store_gitee_token") || giteeToken || "")
+      : (localStorage.getItem("git_store_token") || githubToken || "");
+    const activeMode = isGitee
+      ? (localStorage.getItem("git_store_gitee_api_mode") || "public")
+      : (localStorage.getItem("git_store_api_mode") || "public");
     return source.token === activeToken && source.apiEndpointMode === activeMode;
   };
 
   const handleActivateSource = (source: DataSource) => {
-    setGithubToken(source.token);
-    localStorage.setItem("git_store_token", source.token);
-    localStorage.setItem("git_store_api_mode", source.apiEndpointMode);
-    localStorage.setItem("git_store_custom_endpoint", source.customEndpoint);
-    localStorage.setItem("git_store_api_version", source.apiVersion);
+    const isGitee = source.platform === "gitee";
+    if (isGitee) {
+      setGiteeToken(source.token);
+      localStorage.setItem("git_store_gitee_token", source.token);
+      localStorage.setItem("git_store_gitee_api_mode", source.apiEndpointMode);
+      localStorage.setItem("git_store_gitee_custom_endpoint", source.customEndpoint);
+    } else {
+      setGithubToken(source.token);
+      localStorage.setItem("git_store_token", source.token);
+      localStorage.setItem("git_store_api_mode", source.apiEndpointMode);
+      localStorage.setItem("git_store_custom_endpoint", source.customEndpoint);
+      localStorage.setItem("git_store_api_version", source.apiVersion);
+    }
+  };
+
+  const handleDeactivateSource = (source: DataSource) => {
+    const isGitee = source.platform === "gitee";
+    if (isGitee) {
+      setGiteeToken("");
+      localStorage.removeItem("git_store_gitee_token");
+      localStorage.removeItem("git_store_gitee_api_mode");
+      localStorage.removeItem("git_store_gitee_custom_endpoint");
+    } else {
+      setGithubToken("");
+      localStorage.removeItem("git_store_token");
+      localStorage.removeItem("git_store_api_mode");
+      localStorage.removeItem("git_store_custom_endpoint");
+      localStorage.removeItem("git_store_api_version");
+    }
   };
 
   const handleDeleteSource = (id: string) => {
@@ -198,10 +264,19 @@ export default function DataSourceWizard() {
       const deleted = dataSources.find((s) => s.id === id);
       deleteDataSource(id);
 
-      // If active source is deleted, clear global token
-      if (deleted && deleted.token === githubToken) {
-        setGithubToken("");
-        localStorage.removeItem("git_store_token");
+      if (deleted) {
+        if (deleted.platform === "gitee" && deleted.token === giteeToken) {
+          setGiteeToken("");
+          localStorage.removeItem("git_store_gitee_token");
+          localStorage.removeItem("git_store_gitee_api_mode");
+          localStorage.removeItem("git_store_gitee_custom_endpoint");
+        } else if (deleted.platform !== "gitee" && deleted.token === githubToken) {
+          setGithubToken("");
+          localStorage.removeItem("git_store_token");
+          localStorage.removeItem("git_store_api_mode");
+          localStorage.removeItem("git_store_custom_endpoint");
+          localStorage.removeItem("git_store_api_version");
+        }
       }
     }
   };
@@ -273,7 +348,11 @@ export default function DataSourceWizard() {
                 >
                   <div className="flex gap-4">
                     <div className="p-2.5 rounded-lg bg-zinc-800/60 shrink-0 text-white flex items-center justify-center">
-                      <GithubIcon className="w-5 h-5" />
+                      {source.platform === "gitee" ? (
+                        <GiteeIcon className="w-5 h-5 text-red-500" />
+                      ) : (
+                        <GithubIcon className="w-5 h-5" />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -293,14 +372,16 @@ export default function DataSourceWizard() {
                         )}
                       </div>
                       <p className="text-[10px] text-[var(--fluent-secondary)] mt-1 truncate">
-                        端点: <span className="font-mono text-zinc-400">{source.apiEndpointMode === "public" ? "公网 API" : source.customEndpoint}</span>
+                        端点: <span className="font-mono text-zinc-400">{source.apiEndpointMode === "public" ? (source.platform === "gitee" ? "Gitee 公网 API" : "GitHub 公网 API") : source.customEndpoint}</span>
                       </p>
-                      <p className="text-[10px] text-[var(--fluent-secondary)] mt-0.5">
-                        版本: <span className="font-mono text-zinc-400">{source.apiVersion}</span>
-                      </p>
+                      {source.platform !== "gitee" && (
+                        <p className="text-[10px] text-[var(--fluent-secondary)] mt-0.5">
+                          版本: <span className="font-mono text-zinc-400">{source.apiVersion}</span>
+                        </p>
+                      )}
                       <p className="text-[10px] text-[var(--fluent-secondary)] mt-0.5">
                         密钥: <span className="font-mono text-zinc-500">
-                          {source.token ? `ghp_••••••••${source.token.slice(-4)}` : "未配置公开访问"}
+                          {source.token ? `${source.platform === "gitee" ? "access" : "ghp"}_••••••••${source.token.slice(-4)}` : "未配置公开访问"}
                         </span>
                       </p>
                     </div>
@@ -312,12 +393,19 @@ export default function DataSourceWizard() {
                     </span>
 
                     <div className="flex items-center gap-2 select-none">
-                      {!active && (
+                      {!active ? (
                         <button
                           onClick={() => handleActivateSource(source)}
                           className="px-2.5 py-1 bg-[var(--fluent-accent)] hover:bg-[var(--fluent-accent-hover)] text-white rounded-lg cursor-pointer transition"
                         >
                           启用
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleDeactivateSource(source)}
+                          className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg cursor-pointer transition"
+                        >
+                          禁用
                         </button>
                       )}
 
@@ -357,19 +445,21 @@ export default function DataSourceWizard() {
 
   // Rendering view: Add Wizard flow
   const renderStep1 = () => {
-    const isSelected = selectedType === "github";
+    const isGithubSelected = selectedType === "github";
+    const isGiteeSelected = selectedType === "gitee";
     return (
-      <div className="space-y-6 flex-1">
+      <div className="space-y-6 flex-1 text-left">
         <div className="text-left shrink-0">
           <h3 className="text-sm font-bold text-white">请选择您的数据源类型</h3>
         </div>
-
-        <div className="max-w-md">
+ 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
+          {/* GitHub Card */}
           <div
             onClick={() => handleSelectType("github")}
             className={cn(
-              "p-5 border rounded-xl bg-[var(--fluent-card)] hover:bg-[rgba(128,128,128,0.02)] transition-all cursor-pointer flex flex-col justify-between min-h-[140px] text-left shadow-sm relative",
-              isSelected
+              "p-5 border rounded-xl bg-[var(--fluent-card)] hover:bg-[rgba(128,128,128,0.02)] transition-all cursor-pointer flex flex-col justify-between min-h-[150px] text-left shadow-sm relative",
+              isGithubSelected
                 ? "border-[var(--fluent-accent)] ring-1 ring-[var(--fluent-accent)]"
                 : "border-[var(--fluent-border)]"
             )}
@@ -381,11 +471,11 @@ export default function DataSourceWizard() {
               <div className="min-w-0">
                 <h4 className="font-bold text-xs text-white">GitHub REST API 数据源</h4>
                 <p className="text-[10px] text-[var(--fluent-secondary)] mt-1.5 leading-snug">
-                  对接 GitHub API。支持设置自定义企业版 API 端点、指定 API 版本标头以及过滤特定组织/开发分支的仓库资源。
+                  对接 GitHub API。支持设置自定义企业版 API 端点、指定 API 版本标头以及过滤特定开发分支的仓库资源。
                 </p>
               </div>
             </div>
-
+ 
             <div className="mt-4 pt-2.5 border-t border-zinc-800/10 dark:border-zinc-800/30 flex justify-end">
               <button
                 type="button"
@@ -395,12 +485,53 @@ export default function DataSourceWizard() {
                 }}
                 className={cn(
                   "text-[10px] font-bold px-3 py-1 rounded transition select-none cursor-pointer",
-                  isSelected
+                  isGithubSelected
                     ? "bg-[var(--fluent-accent)] text-white"
                     : "bg-[rgba(128,128,128,0.08)] border border-[var(--fluent-border)] text-[var(--fluent-text)] hover:bg-[rgba(128,128,128,0.15)]"
                 )}
               >
-                {isSelected ? "已选择" : "选择"}
+                {isGithubSelected ? "已选择" : "选择"}
+              </button>
+            </div>
+          </div>
+
+          {/* Gitee Card */}
+          <div
+            onClick={() => handleSelectType("gitee")}
+            className={cn(
+              "p-5 border rounded-xl bg-[var(--fluent-card)] hover:bg-[rgba(128,128,128,0.02)] transition-all cursor-pointer flex flex-col justify-between min-h-[150px] text-left shadow-sm relative",
+              isGiteeSelected
+                ? "border-[var(--fluent-accent)] ring-1 ring-[var(--fluent-accent)]"
+                : "border-[var(--fluent-border)]"
+            )}
+          >
+            <div className="flex gap-4">
+              <div className="p-2.5 rounded-lg bg-zinc-800/50 shrink-0 text-white flex items-center justify-center">
+                <GiteeIcon className="w-6 h-6 text-red-500" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="font-bold text-xs text-white">Gitee (码云) API 数据源</h4>
+                <p className="text-[10px] text-[var(--fluent-secondary)] mt-1.5 leading-snug">
+                  对接 Gitee 开放平台 API。支持添加 Gitee 公网和企业版端点，在大陆地区具备低延迟和极速克隆/ZIP 下载的天然优势。
+                </p>
+              </div>
+            </div>
+ 
+            <div className="mt-4 pt-2.5 border-t border-zinc-800/10 dark:border-zinc-800/30 flex justify-end">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectType("gitee");
+                }}
+                className={cn(
+                  "text-[10px] font-bold px-3 py-1 rounded transition select-none cursor-pointer",
+                  isGiteeSelected
+                    ? "bg-[var(--fluent-accent)] text-white"
+                    : "bg-[rgba(128,128,128,0.08)] border border-[var(--fluent-border)] text-[var(--fluent-text)] hover:bg-[rgba(128,128,128,0.15)]"
+                )}
+              >
+                {isGiteeSelected ? "已选择" : "选择"}
               </button>
             </div>
           </div>
@@ -410,15 +541,16 @@ export default function DataSourceWizard() {
   };
 
   const renderStep2 = () => {
+    const isGitee = selectedType === "gitee";
     return (
       <div className="space-y-6 flex-1 max-w-2xl mx-auto text-left">
         <div>
-          <h3 className="text-sm font-bold text-white">配置 GitHub REST API 数据源</h3>
+          <h3 className="text-sm font-bold text-white">配置 {isGitee ? "Gitee" : "GitHub"} REST API 数据源</h3>
           <p className="text-[10px] text-[var(--fluent-secondary)] mt-0.5">
-            根据 GitHub 开发文档，请指定您的连接服务器类型、API 版本以及相应的安全令牌。
+            根据 {isGitee ? "Gitee" : "GitHub"} 开发文档，请指定您的连接服务器类型、API 版本以及相应的安全令牌。
           </p>
         </div>
-
+ 
         <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] p-6 rounded-xl space-y-4 shadow-sm">
           <div className="space-y-4">
             
@@ -439,7 +571,7 @@ export default function DataSourceWizard() {
                       : "border-[var(--fluent-border)] bg-zinc-800/30 text-[var(--fluent-text)] hover:border-zinc-500"
                   )}
                 >
-                  GitHub 公网版 (api.github.com)
+                  {isGitee ? "Gitee 公网版 (gitee.com/api/v5)" : "GitHub 公网版 (api.github.com)"}
                 </button>
                 <button
                   type="button"
@@ -451,11 +583,11 @@ export default function DataSourceWizard() {
                       : "border-[var(--fluent-border)] bg-zinc-800/30 text-[var(--fluent-text)] hover:border-zinc-500"
                   )}
                 >
-                  GitHub 企业版 (Enterprise Server)
+                  {isGitee ? "Gitee 企业版 (Gitee Enterprise)" : "GitHub 企业版 (Enterprise Server)"}
                 </button>
               </div>
             </div>
-
+ 
             {/* Custom Endpoint Input - Shown only when Enterprise is selected */}
             {apiEndpointMode === "enterprise" && (
               <div className="space-y-1 animate-fade-in">
@@ -470,38 +602,39 @@ export default function DataSourceWizard() {
                 />
               </div>
             )}
-
-            {/* API Version Matching REST Docs */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-[var(--fluent-secondary)] uppercase flex items-center gap-1.5">
-                <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-                <span>GitHub REST API 版本 (X-GitHub-Api-Version)</span>
-              </label>
-              <select
-                value={apiVersion}
-                onChange={(e) => setApiVersion(e.target.value)}
-                className="w-full bg-zinc-800 border border-[var(--fluent-border)] rounded-lg px-3 py-1.5 text-xs text-white outline-none cursor-pointer font-semibold"
-              >
-                <option value="2026-03-10">2026-03-10 (推荐 - 默认开发规范)</option>
-                <option value="2022-11-28">2022-11-28 (标准兼容)</option>
-              </select>
-            </div>
-
+ 
+            {/* API Version Matching REST Docs - GitHub only */}
+            {!isGitee && (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[var(--fluent-secondary)] uppercase flex items-center gap-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>GitHub REST API 版本 (X-GitHub-Api-Version)</span>
+                </label>
+                <select
+                  value={apiVersion}
+                  onChange={(e) => setApiVersion(e.target.value)}
+                  className="w-full bg-zinc-800 border border-[var(--fluent-border)] rounded-lg px-3 py-1.5 text-xs text-white outline-none cursor-pointer font-semibold"
+                >
+                  <option value="2026-03-10">2026-03-10 (推荐 - 默认开发规范)</option>
+                  <option value="2022-11-28">2022-11-28 (标准兼容)</option>
+                </select>
+              </div>
+            )}
+ 
             {/* Authentication Token */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-[var(--fluent-secondary)] uppercase flex items-center gap-1.5">
                 <Key className="w-3.5 h-3.5 text-yellow-500" />
-                <span>GitHub 个人访问令牌 (Token / PAT)</span>
+                <span>{isGitee ? "Gitee 个人访问令牌 (Access Token)" : "GitHub 个人访问令牌 (Token / PAT)"}</span>
               </label>
               <input
                 type="password"
                 value={tokenInput}
                 onChange={(e) => setTokenInput(e.target.value)}
-                placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxx 或 github_pat_xxxx"
+                placeholder={isGitee ? "请输入您的 Gitee 私人访问令牌" : "ghp_xxxxxxxxxxxxxxxxxxxxxx 或 github_pat_xxxx"}
                 className="w-full bg-[rgba(128,128,128,0.05)] border border-[var(--fluent-border)] rounded-lg py-1.5 px-3 text-xs font-mono focus:outline-none"
               />
             </div>
-
           </div>
 
           {/* Connection Test Diagnostics */}
@@ -513,7 +646,7 @@ export default function DataSourceWizard() {
               className="px-4 py-1.5 border border-[var(--fluent-border)] hover:bg-[rgba(128,128,128,0.08)] bg-[var(--fluent-card)] rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition select-none disabled:opacity-50 shrink-0"
             >
               <Terminal className={cn("w-3.5 h-3.5", testingConnection && "animate-spin")} />
-              <span>{testingConnection ? "正在验证 GitHub API..." : "测试连接"}</span>
+              <span>{testingConnection ? `正在验证 ${isGitee ? "Gitee" : "GitHub"} API...` : "测试连接"}</span>
             </button>
 
             {testResult === "success" && (
@@ -522,7 +655,7 @@ export default function DataSourceWizard() {
                   <CheckCircle2 className="w-4 h-4" />
                   验证成功: {githubUser}
                 </span>
-                {rateLimit && (
+                {rateLimit && !isGitee && (
                   <span className="text-[9px] text-zinc-400 block mt-0.5 select-none">
                     限额剩余: {rateLimit.remaining} / {rateLimit.limit} (每小时)
                   </span>
@@ -548,9 +681,11 @@ export default function DataSourceWizard() {
         <div className="w-14 h-14 bg-green-500/10 border-2 border-green-500 rounded-full flex items-center justify-center text-green-500 mb-4 animate-bounce">
           <CheckCircle2 className="w-8 h-8" />
         </div>
-        <h3 className="text-base font-extrabold text-white">GitHub 数据源配置成功</h3>
+        <h3 className="text-base font-extrabold text-white">{selectedType === "gitee" ? "Gitee" : "GitHub"} 数据源配置成功</h3>
         <p className="text-xs text-[var(--fluent-secondary)] mt-2 leading-relaxed">
-          GitHub REST API 数据源配置流程已经全部完成。我们已将该访问凭据同步录入您的数据源管理器列表。您现在可以调用 GitHub API 进行超额请求以及下载受信任的私有和公开仓库。
+          {selectedType === "gitee" 
+            ? "Gitee 开放平台 API 数据源配置流程已经全部完成。我们已将该访问凭据同步录入您的数据源管理器列表。您现在可以调用 Gitee API 并极速下载大陆区域的开源代码库和发行资产。"
+            : "GitHub REST API 数据源配置流程已经全部完成。我们已将该访问凭据同步录入您的数据源管理器列表。您现在可以调用 GitHub API 进行超额请求以及下载受信任的私有和公开仓库。"}
         </p>
 
         <button
@@ -668,7 +803,7 @@ export default function DataSourceWizard() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto h-full px-8 py-8 flex flex-col relative select-none">
+    <div className="flex-1 overflow-y-auto h-full px-4 md:px-8 py-6 md:py-8 flex flex-col relative select-none">
       {view === "list" ? renderListView() : renderAddSourceView()}
     </div>
   );

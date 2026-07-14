@@ -6,6 +6,7 @@ import Database from "@tauri-apps/plugin-sql";
 export interface DataSource {
   id: string;
   name: string;
+  platform?: "github" | "gitee";
   apiEndpointMode: "public" | "enterprise";
   customEndpoint: string;
   apiVersion: string;
@@ -50,7 +51,7 @@ interface AppContextType {
   gitInstalled: boolean;
   checkGit: () => Promise<boolean>;
   installedRepos: InstalledRepo[];
-  installRepository: (owner: string, repo: string, stars: number, description: string, language: string) => Promise<void>;
+  installRepository: (owner: string, repo: string, stars: number, description: string, language: string, customUrl?: string) => Promise<void>;
   updateRepository: (repo: InstalledRepo) => Promise<void>;
   uninstallRepository: (repo: InstalledRepo) => Promise<void>;
   openFolder: (path: string) => Promise<void>;
@@ -66,6 +67,37 @@ interface AppContextType {
 
   // Binary asset downloads
   assetDownloads: Record<string, AssetDownload>;
+
+  // Personalization settings
+  theme: "auto" | "light" | "dark";
+  setTheme: (theme: "auto" | "light" | "dark") => void;
+  bgType: "none" | "preset" | "url" | "upload";
+  setBgType: (type: "none" | "preset" | "url" | "upload") => void;
+  bgPreset: string;
+  setBgPreset: (preset: string) => void;
+  bgUrl: string;
+  setBgUrl: (url: string) => void;
+  bgUpload: string;
+  setBgUpload: (base64: string) => void;
+  bgOpacity: number;
+  setBgOpacity: (opacity: number) => void;
+  bgBlur: number;
+  setBgBlur: (blur: number) => void;
+
+  // Mobile sidebar layout
+  mobileSidebarOpen: boolean;
+  setMobileSidebarOpen: (open: boolean) => void;
+
+  // Gitee token settings
+  giteeToken: string;
+  setGiteeToken: (token: string) => void;
+
+  // Network sensing states
+  preferredPlatform: "github" | "gitee";
+  githubLatency: number | null;
+  giteeLatency: number | null;
+  detectPreferredPlatform: () => Promise<void>;
+  isDetectingNetwork: boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -82,10 +114,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [githubToken, setGithubTokenState] = useState<string>(
     localStorage.getItem("git_store_token") || ""
   );
+  const [giteeToken, setGiteeTokenState] = useState<string>(
+    localStorage.getItem("git_store_gitee_token") || ""
+  );
   const [downloadDir, setDownloadDirState] = useState<string>(
     localStorage.getItem("git_store_download_dir") || ""
   );
   const [gitInstalled, setGitInstalled] = useState<boolean>(false);
+
+  const setGiteeToken = (token: string) => {
+    setGiteeTokenState(token);
+    localStorage.setItem("git_store_gitee_token", token);
+  };
+
+
+
+  // Personalization settings State
+  const [theme, setThemeState] = useState<"auto" | "light" | "dark">(
+    (localStorage.getItem("git_store_theme") as "auto" | "light" | "dark") || "auto"
+  );
+  const [bgType, setBgTypeState] = useState<"none" | "preset" | "url" | "upload">(
+    (localStorage.getItem("git_store_bg_type") as "none" | "preset" | "url" | "upload") || "none"
+  );
+  const [bgPreset, setBgPresetState] = useState<string>(
+    localStorage.getItem("git_store_bg_preset") || "aurora"
+  );
+  const [bgUrl, setBgUrlState] = useState<string>(
+    localStorage.getItem("git_store_bg_url") || ""
+  );
+  const [bgUpload, setBgUploadState] = useState<string>(
+    localStorage.getItem("git_store_bg_upload") || ""
+  );
+  const [bgOpacity, setBgOpacityState] = useState<number>(() => {
+    const val = localStorage.getItem("git_store_bg_opacity");
+    return val !== null ? parseFloat(val) : 0.6;
+  });
+  const [bgBlur, setBgBlurState] = useState<number>(() => {
+    const val = localStorage.getItem("git_store_bg_blur");
+    return val !== null ? parseInt(val, 10) : 15;
+  });
+
+  const setTheme = (val: "auto" | "light" | "dark") => {
+    setThemeState(val);
+    localStorage.setItem("git_store_theme", val);
+  };
+  const setBgType = (val: "none" | "preset" | "url" | "upload") => {
+    setBgTypeState(val);
+    localStorage.setItem("git_store_bg_type", val);
+  };
+  const setBgPreset = (val: string) => {
+    setBgPresetState(val);
+    localStorage.setItem("git_store_bg_preset", val);
+  };
+  const setBgUrl = (val: string) => {
+    setBgUrlState(val);
+    localStorage.setItem("git_store_bg_url", val);
+  };
+  const setBgUpload = (val: string) => {
+    setBgUploadState(val);
+    localStorage.setItem("git_store_bg_upload", val);
+  };
+  const setBgOpacity = (val: number) => {
+    setBgOpacityState(val);
+    localStorage.setItem("git_store_bg_opacity", String(val));
+  };
+  const setBgBlur = (val: number) => {
+    setBgBlurState(val);
+    localStorage.setItem("git_store_bg_blur", String(val));
+  };
+
+  // Mobile layout state
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
+
   const [installedRepos, setInstalledRepos] = useState<InstalledRepo[]>([]);
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [assetDownloads, setAssetDownloads] = useState<Record<string, AssetDownload>>({});
@@ -95,6 +195,90 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const saved = localStorage.getItem("git_store_search_history");
     return saved ? JSON.parse(saved) : [];
   });
+
+  // Network sensing States
+  const [preferredPlatform, setPreferredPlatform] = useState<"github" | "gitee">(
+    (localStorage.getItem("git_store_platform") as "github" | "gitee") || "github"
+  );
+  const [githubLatency, setGithubLatency] = useState<number | null>(null);
+  const [giteeLatency, setGiteeLatency] = useState<number | null>(null);
+  const [isDetectingNetwork, setIsDetectingNetwork] = useState<boolean>(false);
+
+  const detectPreferredPlatform = async () => {
+    setIsDetectingNetwork(true);
+    
+    // Measure GitHub latency
+    let ghTime: number | null = null;
+    try {
+      const t0 = performance.now();
+      await fetch("https://api.github.com", {
+        method: "HEAD",
+        mode: "no-cors",
+        signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined
+      });
+      const t1 = performance.now();
+      ghTime = Math.round(t1 - t0);
+      setGithubLatency(ghTime);
+    } catch (e) {
+      setGithubLatency(null);
+    }
+
+    // Measure Gitee latency
+    let gtTime: number | null = null;
+    try {
+      const t0 = performance.now();
+      await fetch("https://gitee.com/api/v5/user", {
+        method: "HEAD",
+        mode: "no-cors",
+        signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined
+      });
+      const t1 = performance.now();
+      gtTime = Math.round(t1 - t0);
+      setGiteeLatency(gtTime);
+    } catch (e) {
+      setGiteeLatency(null);
+    }
+
+    setIsDetectingNetwork(false);
+
+    // Count configured active data source platforms
+    const platforms = new Set(dataSources.map(ds => ds.platform || "github"));
+    
+    if (platforms.size === 1) {
+      // Only one data source is configured
+      const singlePlatform = Array.from(platforms)[0];
+      setPreferredPlatform(singlePlatform);
+      localStorage.setItem("git_store_platform", singlePlatform);
+      return;
+    }
+
+    // Dynamic latency auto-routing (when both platforms are configured or default state)
+    if (ghTime !== null && gtTime !== null) {
+      if (gtTime < ghTime) {
+        setPreferredPlatform("gitee");
+        localStorage.setItem("git_store_platform", "gitee");
+      } else {
+        setPreferredPlatform("github");
+        localStorage.setItem("git_store_platform", "github");
+      }
+    } else if (gtTime !== null) {
+      setPreferredPlatform("gitee");
+      localStorage.setItem("git_store_platform", "gitee");
+    } else if (ghTime !== null) {
+      setPreferredPlatform("github");
+      localStorage.setItem("git_store_platform", "github");
+    } else {
+      setPreferredPlatform("gitee"); // Default Gitee for stability in China
+      localStorage.setItem("git_store_platform", "gitee");
+    }
+  };
+
+  // Run auto sensing diagnostics when data sources are loaded or modified
+  useEffect(() => {
+    if (dataSources.length > 0) {
+      detectPreferredPlatform();
+    }
+  }, [dataSources]);
 
   const setGithubToken = (token: string) => {
     setGithubTokenState(token);
@@ -162,9 +346,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             customEndpoint TEXT,
             apiVersion TEXT,
             token TEXT,
-            addedAt TEXT
+            addedAt TEXT,
+            platform TEXT
           )
         `);
+
+        // Migration: add platform column if not exists
+        try {
+          await db.execute("ALTER TABLE data_sources ADD COLUMN platform TEXT");
+        } catch (e) {
+          // column already exists, safe to ignore
+        }
 
         // 3. Load installed repos
         const repos = await db.select<InstalledRepo[]>("SELECT * FROM installed_repos");
@@ -197,9 +389,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             const list = JSON.parse(savedSources) as DataSource[];
             for (const ds of list) {
               await db.execute(
-                `INSERT OR REPLACE INTO data_sources (id, name, apiEndpointMode, customEndpoint, apiVersion, token, addedAt) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                [ds.id, ds.name, ds.apiEndpointMode, ds.customEndpoint, ds.apiVersion, ds.token, ds.addedAt]
+                `INSERT OR REPLACE INTO data_sources (id, name, apiEndpointMode, customEndpoint, apiVersion, token, addedAt, platform) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [ds.id, ds.name, ds.apiEndpointMode, ds.customEndpoint, ds.apiVersion, ds.token, ds.addedAt, ds.platform || "github"]
               );
             }
             setDataSources(list);
@@ -288,9 +480,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     repo: string,
     stars: number,
     description: string,
-    language: string
+    language: string,
+    customUrl?: string
   ) => {
-    const repoUrl = `https://github.com/${owner}/${repo}`;
+    const repoUrl = customUrl || `https://github.com/${owner}/${repo}`;
     
     const newRepo: InstalledRepo = {
       owner,
@@ -315,13 +508,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const folderName = `${owner}_${repo}`.replace(/[^a-zA-Z0-9_.-]/g, "_");
       
-      const path = await invoke<string>("clone_repository", {
-        repoUrl,
-        targetDir: downloadDir,
-        folderName,
-        githubToken: githubToken || null,
-        useZip: !gitInstalled,
-      });
+      let path = "";
+      try {
+        path = await invoke<string>("clone_repository", {
+          repoUrl,
+          targetDir: downloadDir,
+          folderName,
+          githubToken: githubToken || null,
+          giteeToken: giteeToken || null,
+          useZip: !gitInstalled,
+        });
+      } catch (firstErr) {
+        console.warn("First clone attempt failed, trying fallback url...", firstErr);
+        
+        let backupUrl = "";
+        if (repoUrl.includes("github.com")) {
+          backupUrl = repoUrl.replace("github.com", "gitee.com");
+        } else if (repoUrl.includes("gitee.com")) {
+          backupUrl = repoUrl.replace("gitee.com", "github.com");
+        }
+        
+        if (backupUrl && backupUrl !== repoUrl) {
+          setInstalledRepos((prev) =>
+            prev.map((item) => {
+              if (item.url === repoUrl) {
+                return {
+                  ...item,
+                  message: "原站拉取超时，正在尝试自动换源拉取..."
+                };
+              }
+              return item;
+            })
+          );
+          
+          path = await invoke<string>("clone_repository", {
+            repoUrl: backupUrl,
+            targetDir: downloadDir,
+            folderName,
+            githubToken: githubToken || null,
+            giteeToken: giteeToken || null,
+            useZip: !gitInstalled,
+          });
+        } else {
+          throw firstErr;
+        }
+      }
 
       setInstalledRepos((prev) =>
         prev.map((item) => {
@@ -378,6 +609,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         repoPath: repoItem.path,
         repoUrl: repoItem.url,
         githubToken: githubToken || null,
+        giteeToken: giteeToken || null,
       });
 
       setInstalledRepos((prev) =>
@@ -471,9 +703,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (dbRef.current) {
       try {
         await dbRef.current.execute(
-          `INSERT OR REPLACE INTO data_sources (id, name, apiEndpointMode, customEndpoint, apiVersion, token, addedAt) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [source.id, source.name, source.apiEndpointMode, source.customEndpoint, source.apiVersion, source.token, source.addedAt]
+          `INSERT OR REPLACE INTO data_sources (id, name, apiEndpointMode, customEndpoint, apiVersion, token, addedAt, platform) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [source.id, source.name, source.apiEndpointMode, source.customEndpoint, source.apiVersion, source.token, source.addedAt, source.platform || "github"]
         );
       } catch (err) {
         console.error("Failed to add data source to SQLite database:", err);
@@ -525,6 +757,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addDataSource,
         deleteDataSource,
         assetDownloads,
+        theme,
+        setTheme,
+        bgType,
+        setBgType,
+        bgPreset,
+        setBgPreset,
+        bgUrl,
+        setBgUrl,
+        bgUpload,
+        setBgUpload,
+        bgOpacity,
+        setBgOpacity,
+        bgBlur,
+        setBgBlur,
+        mobileSidebarOpen,
+        setMobileSidebarOpen,
+        giteeToken,
+        setGiteeToken,
+        preferredPlatform,
+        githubLatency,
+        giteeLatency,
+        detectPreferredPlatform,
+        isDetectingNetwork,
       }}
     >
       {children}

@@ -4,7 +4,14 @@ import { Compass, Grid, Gamepad2, Terminal, Download, Settings, ChevronRight, Me
 import { cn } from "@/lib/utils";
 
 export default function Sidebar() {
-  const { activeTab, setActiveTab, gitInstalled, checkGit } = useApp();
+  const {
+    activeTab,
+    setActiveTab,
+    gitInstalled,
+    checkGit,
+    mobileSidebarOpen,
+    setMobileSidebarOpen
+  } = useApp();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const resourceItems = [
@@ -26,7 +33,10 @@ export default function Sidebar() {
     return (
       <button
         key={item.id}
-        onClick={() => setActiveTab(item.id)}
+        onClick={() => {
+          setActiveTab(item.id);
+          setMobileSidebarOpen(false);
+        }}
         className={cn(
           "w-full flex items-center rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer relative",
           isCollapsed ? "justify-center py-3 px-0" : "px-3.5 py-2.5 justify-between",
@@ -58,33 +68,47 @@ export default function Sidebar() {
   };
 
   return (
-    <aside 
-      className={cn(
-        "border-r border-[var(--fluent-border)] bg-[var(--fluent-bg)] flex flex-col justify-between h-screen sticky top-0 shrink-0 select-none transition-all duration-200",
-        isCollapsed ? "w-16" : "w-64"
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {mobileSidebarOpen && (
+        <div 
+          onClick={() => setMobileSidebarOpen(false)}
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300"
+        />
       )}
-    >
-      {/* Upper Area */}
-      <div className="flex flex-col pt-4">
-        {/* Toggle Hamburger & Header Brand */}
-        <div className={cn("mb-5 flex items-center gap-2.5", isCollapsed ? "justify-center flex-col px-0" : "px-4.5")}>
-          <button 
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 rounded hover:bg-[rgba(128,128,128,0.12)] cursor-pointer text-[var(--fluent-text)] transition duration-150 focus:outline-none shrink-0"
-            title={isCollapsed ? "展开菜单" : "收起菜单"}
-          >
-            <Menu className="w-4.5 h-4.5" />
-          </button>
-          
-          {!isCollapsed && (
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded bg-blue-600 flex items-center justify-center text-white shadow-md font-bold text-base select-none shrink-0">
-                A
+
+      <aside 
+        className={cn(
+          "border-r border-[var(--fluent-border)] bg-[var(--fluent-bg)] flex flex-col justify-between h-screen select-none transition-all duration-200 z-50",
+          // Desktop sizing & sticky layout
+          "md:sticky md:top-0 md:shrink-0 md:translate-x-0",
+          isCollapsed ? "md:w-16" : "md:w-64",
+          // Mobile overlay layout
+          "fixed top-0 bottom-0 left-0 w-64 transform md:relative md:transform-none",
+          mobileSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        )}
+      >
+        {/* Upper Area */}
+        <div className="flex flex-col pt-4">
+          {/* Toggle Hamburger & Header Brand */}
+          <div className={cn("mb-5 flex items-center gap-2.5", isCollapsed ? "md:justify-center md:flex-col md:px-0" : "px-4.5")}>
+            <button 
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="hidden md:block p-1.5 rounded hover:bg-[rgba(128,128,128,0.12)] cursor-pointer text-[var(--fluent-text)] transition duration-150 focus:outline-none shrink-0"
+              title={isCollapsed ? "展开菜单" : "收起菜单"}
+            >
+              <Menu className="w-4.5 h-4.5" />
+            </button>
+            
+            {!isCollapsed && (
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-7 h-7 rounded bg-blue-600 flex items-center justify-center text-white shadow-md font-bold text-base select-none shrink-0">
+                  A
+                </div>
+                <h1 className="font-extrabold text-sm tracking-tight truncate">桌面应用商店</h1>
               </div>
-              <h1 className="font-extrabold text-sm tracking-tight truncate">桌面应用商店</h1>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
         {/* Navigation Menu with Categorized sections */}
         <nav className="px-2 space-y-4">
@@ -173,5 +197,6 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
-  );
+  </>
+);
 }

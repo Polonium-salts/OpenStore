@@ -22,7 +22,7 @@ interface GitHubAppItem {
 }
 
 export default function Home() {
-  const { setSelectedRepo, setActiveTab, installRepository, installedRepos, activeTab, githubToken } = useApp();
+  const { setSelectedRepo, setActiveTab, installRepository, installedRepos, activeTab, githubToken, giteeToken, preferredPlatform, dataSources } = useApp();
   
   const [apps, setApps] = useState<GitHubAppItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,77 +46,113 @@ export default function Home() {
     setCurrentPage(1);
   }, [selectedCategory, activeTab]);
 
-  // Fetch real repositories from GitHub REST API based on data source configurations
+  // Fetch real repositories from all enabled Gitee/GitHub data sources concurrently
   const fetchStoreData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const mode = localStorage.getItem("git_store_api_mode") || "public";
-      const custom = localStorage.getItem("git_store_custom_endpoint") || "https://github-enterprise.company.com/api/v3";
-      const version = localStorage.getItem("git_store_api_version") || "2026-03-10";
-      const token = localStorage.getItem("git_store_token") || githubToken || "";
-      
-      const base = mode === "public" ? "https://api.github.com" : custom.trim();
-      const headers: Record<string, string> = {
-        Accept: "application/vnd.github.v3+json",
-        "X-GitHub-Api-Version": version,
-      };
-      if (token.trim()) {
-        headers.Authorization = `Bearer ${token.trim()}`;
+      if (dataSources.length === 0) {
+        setApps([]);
+        setLoading(false);
+        return;
       }
 
-      // Query popular GUI / desktop / rust / tauri repositories
-      const query = "stars:>1000 tauri OR electron OR rust-gui OR desktop-app";
-      const res = await fetch(`${base}/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=30`, { headers });
-      
-      if (!res.ok) {
-        if (res.status === 403) {
-          throw new Error("GitHub API 请求超出限额。请配置您的 GitHub Token 以提升频次限制。");
-        }
-        throw new Error(`无法连接至 GitHub 接口 (错误状态码: ${res.status})`);
-      }
-      
-      const data = await res.json();
-      
-      const items: GitHubAppItem[] = (data.items || []).map((repo: any, idx: number) => {
-        let category = "应用";
-        const topics = repo.topics || [];
-        if (topics.includes("game") || topics.includes("gaming") || topics.includes("emulator") || idx % 4 === 1) {
-          category = "游戏";
-        } else if (topics.includes("design") || topics.includes("graphics") || topics.includes("canvas") || idx % 4 === 2) {
-          category = "创意工具";
-        } else if (topics.includes("developer-tools") || topics.includes("compiler") || topics.includes("editor") || idx % 4 === 3) {
-          category = "开发者工具";
+      const fetchPromises = dataSources.map(async (source, idx) => {
+        const isGitee = source.platform === "gitee";
+        const token = source.token || "";
+        const mode = source.apiEndpointMode;
+        
+        let base = "";
+        let fetchUrl = "";
+        const headers: Record<string, string> = {};
+
+        if (isGitee) {
+          base = mode === "public" ? "https://gitee.com/api/v5" : source.customEndpoint.trim() || "https://gitee.com/api/v5";
+          headers["Accept"] = "application/json";
+          if (token.trim()) {
+            headers["Authorization"] = `Bearer ${token.trim()}`;
+          }
+          const query = "tauri";
+          fetchUrl = `${base}/search/repositories?q=${encodeURIComponent(query)}&order=desc&per_page=15`;
+        } else {
+          base = mode === "public" ? "https://api.github.com" : source.customEndpoint.trim() || "https://api.github.com";
+          headers["Accept"] = "application/vnd.github.v3+json";
+          headers["X-GitHub-Api-Version"] = source.apiVersion || "2026-03-10";
+          if (token.trim()) {
+            headers["Authorization"] = `Bearer ${token.trim()}`;
+          }
+          const query = "stars:>1000 tauri OR electron OR rust-gui OR desktop-app";
+          fetchUrl = `${base}/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=15`;
         }
 
-        const gradients = [
-          "from-zinc-700/30 to-zinc-950/20",
-          "from-blue-600/20 to-purple-600/10",
-          "from-amber-600/20 to-zinc-900/10",
-          "from-orange-500/20 to-neutral-900/10",
-          "from-purple-700/20 to-violet-950/10",
-        ];
+        try {
+          const res = await fetch(fetchUrl, { headers });
+          if (!res.ok) {
+            console.warn(`Failed to fetch from data source ${source.name}: ${res.status}`);
+            return [];
+          }
+          const data = await res.json();
+          const repoList = isGitee ? (Array.isArray(data) ? data : (data.items || [])) : (data.items || []);
+          
+          return repoList.map((repo: any, repoIdx: number) => {
+            let category = "应用";
+            const topics = repo.topics || [];
+            if (topics.includes("game") || topics.includes("gaming") || repo.name.toLowerCase().includes("game") || repoIdx % 4 === 1) {
+              category = "游戏";
+            } else if (topics.includes("design") || topics.includes("graphics") || repo.name.toLowerCase().includes("design") || repoIdx % 4 === 2) {
+              category = "创意工具";
+            } else if (topics.includes("developer-tools") || topics.includes("compiler") || repo.name.toLowerCase().includes("tool") || repoIdx % 4 === 3) {
+              category = "开发者工具";
+            }
 
-        return {
-          owner: repo.owner.login,
-          repo: repo.name,
-          title: repo.name,
-          publisher: repo.owner.login,
-          description: repo.description || "暂无项目描述，访问代码库以获取更多开发详情。",
-          category,
-          icon: repo.owner.avatar_url,
-          stars: repo.stargazers_count,
-          language: repo.language || "TypeScript",
-          rating: Number((4.1 + (repo.stargazers_count % 8) / 10).toFixed(1)),
-          url: repo.html_url,
-          bannerGradient: gradients[idx % gradients.length],
-        };
+            const gradients = [
+              "from-zinc-700/30 to-zinc-950/20",
+              "from-blue-600/20 to-purple-600/10",
+              "from-amber-600/20 to-zinc-900/10",
+              "from-orange-500/20 to-neutral-900/10",
+              "from-purple-700/20 to-violet-950/10",
+            ];
+
+            return {
+              owner: repo.owner.login,
+              repo: isGitee ? repo.path : repo.name,
+              title: repo.name,
+              publisher: repo.owner.login,
+              description: repo.description || "暂无项目描述，访问代码库以获取更多开发详情。",
+              category,
+              icon: repo.owner.avatar_url || "https://gitee.com/assets/favicon.ico",
+              stars: repo.stargazers_count,
+              language: repo.language || repo.primary_language || "TypeScript",
+              rating: Number((4.1 + (repo.stargazers_count % 8) / 10).toFixed(1)),
+              url: repo.html_url,
+              bannerGradient: gradients[(idx + repoIdx) % gradients.length],
+            };
+          });
+        } catch (e) {
+          console.error(`Error fetching from data source ${source.name}:`, e);
+          return [];
+        }
       });
 
-      setApps(items);
+      const results = await Promise.all(fetchPromises);
+      let mergedApps = results.flat();
+
+      // Sort by stars count descending
+      mergedApps.sort((a, b) => b.stars - a.stars);
+
+      // Remove duplicates by combining owner/repo identifier
+      const seen = new Set();
+      mergedApps = mergedApps.filter(item => {
+        const key = `${item.owner.toLowerCase()}/${item.repo.toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      setApps(mergedApps);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "拉取数据源失败，请检查网络或配置。");
+      setError(err.message || "并行拉取数据源失败，请检查网络或配置。");
     } finally {
       setLoading(false);
     }
@@ -124,7 +160,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchStoreData();
-  }, [githubToken]);
+  }, [githubToken, giteeToken, preferredPlatform, dataSources]);
 
   // Derived sections
   const getCarouselItems = () => {
@@ -201,7 +237,7 @@ export default function Home() {
 
   const triggerDownload = (e: React.MouseEvent, app: any) => {
     e.stopPropagation();
-    installRepository(app.owner, app.repo, app.stars, app.description, app.language);
+    installRepository(app.owner, app.repo, app.stars, app.description, app.language, app.url);
   };
 
   const handleRepoClick = (app: any) => {
@@ -267,7 +303,9 @@ export default function Home() {
       <div className="flex-1 flex flex-col items-center justify-center h-full select-none gap-4">
         <Particles className="opacity-30" quantity={30} color="#0078d4" />
         <RefreshCw className="w-8 h-8 text-[var(--fluent-accent)] animate-spin" />
-        <p className="text-xs text-[var(--fluent-secondary)] font-bold">正在拉取 GitHub 数据源依赖中...</p>
+        <p className="text-xs text-[var(--fluent-secondary)] font-bold">
+          正在并行拉取已启用的多通道数据源依赖中...
+        </p>
       </div>
     );
   }
@@ -282,7 +320,7 @@ export default function Home() {
         </div>
         <h3 className="text-sm font-bold text-white">数据源拉取中断</h3>
         <p className="text-xs text-[var(--fluent-secondary)] mt-2 leading-relaxed">
-          {error || "未在配置的 GitHub 存储中检索到有效的数据源条目。"}
+          {error || "未在配置的合并数据源中检索到任何有效的代码库项目。请检查您的网络连接与 Token 凭据。"}
         </p>
 
         <div className="mt-6 flex flex-col sm:flex-row gap-2 w-full">
@@ -318,7 +356,7 @@ export default function Home() {
       <Particles className="opacity-30" quantity={40} color="#0078d4" />
       
       {/* Hero Showcase */}
-      <section className="grid grid-cols-1 lg:grid-cols-10 gap-4.5 px-8 pt-6 shrink-0 z-10">
+      <section className="grid grid-cols-1 lg:grid-cols-10 gap-4.5 px-4 md:px-8 pt-4 md:pt-6 shrink-0 z-10">
         
         {/* Left Hero Slider */}
         <div className="lg:col-span-7 h-[250px] rounded-xl overflow-hidden relative border border-[var(--fluent-border)] shadow-md select-none group">
@@ -437,7 +475,7 @@ export default function Home() {
       </section>
 
       {/* Category Pills Header */}
-      <section className="px-8 mt-4 shrink-0 animate-fade-in">
+      <section className="px-4 md:px-8 mt-4 shrink-0 animate-fade-in">
         <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-none">
           {categories.map((cat) => {
             const isSelected = selectedCategory === cat.name;
@@ -460,7 +498,7 @@ export default function Home() {
       </section>
 
       {/* Primary Apps Grid (Paginated grid: 8 items per page) */}
-      <section className="px-8 mt-5 flex-1">
+      <section className="px-4 md:px-8 mt-4 md:mt-5 flex-1">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {paginatedApps.map((app, idx) => (
             <div

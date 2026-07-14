@@ -65,6 +65,7 @@ async fn clone_repository(
     target_dir: String,
     folder_name: String,
     github_token: Option<String>,
+    gitee_token: Option<String>,
     use_zip: bool,
 ) -> Result<String, String> {
     let mut path = std::path::PathBuf::from(&target_dir);
@@ -75,6 +76,7 @@ async fn clone_repository(
     let parent_path_str = parent_path.to_string_lossy().to_string();
 
     let git_installed = check_git_installed();
+    let is_gitee = repo_url.contains("gitee.com/");
 
     if !use_zip && git_installed {
         let _ = app.emit(
@@ -86,18 +88,33 @@ async fn clone_repository(
             },
         );
 
-        // Inject GitHub Personal Access Token if provided
-        let clone_url = if let Some(ref token) = github_token {
-            if !token.trim().is_empty() && repo_url.starts_with("https://github.com/") {
-                repo_url.replace(
-                    "https://github.com/",
-                    &format!("https://oauth2:{}@github.com/", token),
-                )
+        // Inject Personal Access Token if provided
+        let clone_url = if is_gitee {
+            if let Some(ref token) = gitee_token {
+                if !token.trim().is_empty() {
+                    repo_url.replace(
+                        "https://gitee.com/",
+                        &format!("https://oauth2:{}@gitee.com/", token),
+                    )
+                } else {
+                    repo_url.clone()
+                }
             } else {
                 repo_url.clone()
             }
         } else {
-            repo_url.clone()
+            if let Some(ref token) = github_token {
+                if !token.trim().is_empty() {
+                    repo_url.replace(
+                        "https://github.com/",
+                        &format!("https://oauth2:{}@github.com/", token),
+                    )
+                } else {
+                    repo_url.clone()
+                }
+            } else {
+                repo_url.clone()
+            }
         };
 
         // Create target directory parent if not exists
@@ -165,18 +182,23 @@ async fn clone_repository(
             },
         );
 
-        let parts: Vec<&str> = repo_url.split("github.com/").collect();
+        let split_marker = if is_gitee { "gitee.com/" } else { "github.com/" };
+        let parts: Vec<&str> = repo_url.split(split_marker).collect();
         if parts.len() < 2 {
-            return Err("无效的 GitHub 仓库 URL".to_string());
+            return Err("无效的仓库 URL".to_string());
         }
         let repo_path_parts: Vec<&str> = parts[1].split('/').collect();
         if repo_path_parts.len() < 2 {
-            return Err("无效的 GitHub 仓库 URL".to_string());
+            return Err("无效的仓库 URL".to_string());
         }
         let owner = repo_path_parts[0];
         let repo = repo_path_parts[1].trim_end_matches(".git");
 
-        let zip_url = format!("https://api.github.com/repos/{}/{}/zipball", owner, repo);
+        let zip_url = if is_gitee {
+            format!("https://gitee.com/api/v5/repos/{}/{}/zipball", owner, repo)
+        } else {
+            format!("https://api.github.com/repos/{}/{}/zipball", owner, repo)
+        };
 
         let mut temp_zip = parent_path.clone();
         temp_zip.push(format!("{}_{}.zip", owner, repo));
@@ -184,7 +206,8 @@ async fn clone_repository(
 
         let _ = std::fs::create_dir_all(&parent_path);
 
-        let auth_header = if let Some(ref token) = github_token {
+        let active_token = if is_gitee { gitee_token.clone() } else { github_token.clone() };
+        let auth_header = if let Some(ref token) = active_token {
             if !token.trim().is_empty() {
                 format!("'Authorization'='Bearer {}'; ", token)
             } else {
@@ -265,6 +288,7 @@ async fn pull_repository(
     repo_path: String,
     repo_url: String,
     github_token: Option<String>,
+    gitee_token: Option<String>,
 ) -> Result<String, String> {
     let path = std::path::PathBuf::from(&repo_path);
     let git_dir = path.join(".git");
@@ -343,6 +367,7 @@ async fn pull_repository(
                     parent_dir,
                     folder_name_str,
                     github_token,
+                    gitee_token,
                     true,
                 )
                 .await;

@@ -71,8 +71,33 @@
   --fluent-accent-hover: #106ebe;
 }
 
+/* Forced Light Theme */
+.theme-light {
+  --fluent-bg: #f3f3f3;
+  --fluent-card: #ffffff;
+  --fluent-sidebar: #eeeeee;
+  --fluent-text: #201f1e;
+  --fluent-secondary: #605e5c;
+  --fluent-border: #e0e0e0;
+  --fluent-accent: #0078d4;
+  --fluent-accent-hover: #106ebe;
+}
+
+/* Forced Dark Theme */
+.theme-dark {
+  --fluent-bg: #1c1c1e;
+  --fluent-card: #2c2c2e;
+  --fluent-sidebar: #101012;
+  --fluent-text: #ffffff;
+  --fluent-secondary: #8e8e93;
+  --fluent-border: #38383a;
+  --fluent-accent: #0078d4;
+  --fluent-accent-hover: #106ebe;
+}
+
+/* Auto Theme: prefers light by default (if not forced to dark) */
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not(.theme-dark) {
     --fluent-bg: #f3f3f3;
     --fluent-card: #ffffff;
     --fluent-sidebar: #eeeeee;
@@ -82,6 +107,31 @@
     --fluent-accent: #0078d4;
     --fluent-accent-hover: #106ebe;
   }
+}
+
+/* Custom Background Active - Dark Mode variables override */
+.bg-active {
+  --fluent-bg: transparent !important;
+  --fluent-sidebar: transparent !important;
+  --fluent-card: rgba(44, 44, 46, 0.6) !important;
+  --fluent-border: rgba(128, 128, 128, 0.15) !important;
+}
+
+/* Custom Background Active - Light Mode variables override */
+@media (prefers-color-scheme: light) {
+  :root:not(.theme-dark).bg-active {
+    --fluent-bg: transparent !important;
+    --fluent-sidebar: transparent !important;
+    --fluent-card: rgba(255, 255, 255, 0.65) !important;
+    --fluent-border: rgba(0, 0, 0, 0.08) !important;
+  }
+}
+/* Specifically target .theme-light.bg-active directly regardless of media query */
+.theme-light.bg-active {
+  --fluent-bg: transparent !important;
+  --fluent-sidebar: transparent !important;
+  --fluent-card: rgba(255, 255, 255, 0.65) !important;
+  --fluent-border: rgba(0, 0, 0, 0.08) !important;
 }
 
 /* Custom Scrollbar for Fluent Design */

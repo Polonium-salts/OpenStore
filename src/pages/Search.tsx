@@ -3,7 +3,19 @@ import { useApp } from "@/context/AppContext";
 import { Search as SearchIcon, Star, AlertCircle, History, ArrowRight } from "lucide-react";
 
 export default function Search() {
-  const { setSelectedRepo, setActiveTab, githubToken, searchHistory, addToHistory, clearHistory, searchQuery, setSearchQuery } = useApp();
+  const { 
+    setSelectedRepo, 
+    setActiveTab, 
+    githubToken, 
+    giteeToken, 
+    searchHistory, 
+    addToHistory, 
+    clearHistory, 
+    searchQuery, 
+    setSearchQuery,
+    dataSources,
+    preferredPlatform
+  } = useApp();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,52 +44,103 @@ export default function Search() {
       setSearchQuery(finalQuery);
     }
 
+    const platform = preferredPlatform;
+    let queryIsGitee = platform === "gitee";
+    
     try {
       // Check if it's a direct owner/repo format or full URL
       let directRepoPath = "";
-      if (finalQuery.includes("github.com/")) {
+      if (finalQuery.includes("gitee.com/")) {
+        const parts = finalQuery.split("gitee.com/");
+        if (parts.length > 1) {
+          directRepoPath = parts[1].replace(/\.git$/, "");
+          queryIsGitee = true;
+        }
+      } else if (finalQuery.includes("github.com/")) {
         const parts = finalQuery.split("github.com/");
         if (parts.length > 1) {
           directRepoPath = parts[1].replace(/\.git$/, "");
+          queryIsGitee = false;
         }
       } else if (finalQuery.split("/").length === 2) {
         directRepoPath = finalQuery;
       }
 
+      // Check configured active data source platforms
+      const configuredPlatforms = new Set(dataSources.map(ds => ds.platform || "github"));
+      const hasGitHub = configuredPlatforms.has("github") || githubToken.trim() !== "";
+      const hasGitee = configuredPlatforms.has("gitee") || giteeToken.trim() !== "";
+
+      const activeToken = queryIsGitee 
+        ? (localStorage.getItem("git_store_gitee_token") || giteeToken || "")
+        : (localStorage.getItem("git_store_token") || githubToken || "");
+
       const headers: Record<string, string> = {
-        Accept: "application/vnd.github.v3+json",
+        Accept: queryIsGitee ? "application/json" : "application/vnd.github.v3+json",
       };
-      if (githubToken) {
-        headers.Authorization = `Bearer ${githubToken}`;
+      if (!queryIsGitee) {
+        const version = localStorage.getItem("git_store_api_version") || "2026-03-10";
+        headers["X-GitHub-Api-Version"] = version;
+      }
+      if (activeToken.trim()) {
+        headers.Authorization = `Bearer ${activeToken.trim()}`;
       }
 
       if (directRepoPath) {
-        // Fetch direct repo info
-        const res = await fetch(`https://api.github.com/repos/${directRepoPath}`, { headers });
+        // Direct search: try preferred platform first
+        const giteeMode = localStorage.getItem("git_store_gitee_api_mode") || "public";
+        const giteeCustom = localStorage.getItem("git_store_gitee_custom_endpoint") || "";
+        const giteeBase = giteeMode === "public" ? "https://gitee.com/api/v5" : giteeCustom.trim() || "https://gitee.com/api/v5";
+        
+        const githubMode = localStorage.getItem("git_store_api_mode") || "public";
+        const githubCustom = localStorage.getItem("git_store_custom_endpoint") || "";
+        const githubBase = githubMode === "public" ? "https://api.github.com" : githubCustom.trim() || "https://api.github.com";
+
+        const base = queryIsGitee ? giteeBase : githubBase;
+        let res = await fetch(`${base}/repos/${directRepoPath}`, { headers });
+        
+        // Fallback to secondary platform if direct fails and both platforms are active
+        if (!res.ok && hasGitHub && hasGitee) {
+          queryIsGitee = !queryIsGitee;
+          const backupToken = queryIsGitee 
+            ? (localStorage.getItem("git_store_gitee_token") || giteeToken || "")
+            : (localStorage.getItem("git_store_token") || githubToken || "");
+          const backupHeaders: Record<string, string> = {
+            Accept: queryIsGitee ? "application/json" : "application/vnd.github.v3+json",
+          };
+          if (!queryIsGitee) {
+            const version = localStorage.getItem("git_store_api_version") || "2026-03-10";
+            backupHeaders["X-GitHub-Api-Version"] = version;
+          }
+          if (backupToken.trim()) {
+            backupHeaders.Authorization = `Bearer ${backupToken.trim()}`;
+          }
+          const backupBase = queryIsGitee ? giteeBase : githubBase;
+          res = await fetch(`${backupBase}/repos/${directRepoPath}`, { headers: backupHeaders });
+        }
+
         if (!res.ok) {
           if (res.status === 404) {
             throw new Error("仓库未找到，请确认拼写或检查网络连接。");
-          } else if (res.status === 403) {
-            throw new Error("API 请求超出限制，请在设置中配置 GitHub Token 以提高限制。");
           } else {
             throw new Error(`API 错误: ${res.statusText}`);
           }
         }
         const data = await res.json();
         
-        // Transform single repo data to look like search results list
         const transformedRepo = {
           owner: data.owner.login,
-          repo: data.name,
+          repo: queryIsGitee ? data.path : data.name,
           title: data.name,
           publisher: data.owner.login,
           description: data.description || "暂无描述",
           category: "开发工具",
-          icon: data.owner.avatar_url,
+          icon: data.owner.avatar_url || "https://gitee.com/assets/favicon.ico",
           stars: data.stargazers_count,
           language: data.language || "Markdown",
-          tags: [data.language, "Git"].filter(Boolean),
-          bannerGradient: "from-blue-600/20 to-zinc-900/10",
+          tags: [data.language, "Git", queryIsGitee ? "Gitee" : "GitHub"].filter(Boolean),
+          bannerGradient: queryIsGitee ? "from-red-600/10 to-zinc-900/10" : "from-blue-600/20 to-zinc-900/10",
+          url: data.html_url,
         };
         
         setResults([transformedRepo]);
@@ -85,31 +148,92 @@ export default function Search() {
         setActiveTab("detail");
       } else {
         // Run general keyword search
-        const res = await fetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(finalQuery)}`, { headers });
-        if (!res.ok) {
-          if (res.status === 403) {
-            throw new Error("API 请求超出限制，请在设置中配置 GitHub Token 以提高限制。");
-          } else {
-            throw new Error(`API 错误: ${res.statusText}`);
-          }
+        const searchPromises = [];
+        
+        if (hasGitHub) {
+          const ghHeaders: Record<string, string> = {
+            Accept: "application/vnd.github.v3+json",
+            "X-GitHub-Api-Version": localStorage.getItem("git_store_api_version") || "2026-03-10"
+          };
+          const ghToken = localStorage.getItem("git_store_token") || githubToken || "";
+          if (ghToken.trim()) ghHeaders.Authorization = `Bearer ${ghToken.trim()}`;
+          
+          searchPromises.push(
+            fetch(`https://api.github.com/search/repositories?q=${encodeURIComponent(finalQuery)}`, { headers: ghHeaders })
+              .then(async r => {
+                if (!r.ok) return [];
+                const data = await r.json();
+                return (data.items || []).map((item: any) => ({
+                  owner: item.owner.login,
+                  repo: item.name,
+                  title: item.name,
+                  publisher: item.owner.login,
+                  description: item.description || "暂无描述",
+                  category: "开发工具",
+                  icon: item.owner.avatar_url,
+                  stars: item.stargazers_count,
+                  language: item.language || "Markdown",
+                  tags: [item.language, "Git", "GitHub"].filter(Boolean),
+                  bannerGradient: "from-blue-600/20 to-zinc-900/10",
+                  url: item.html_url,
+                }));
+              })
+              .catch(() => [])
+          );
         }
-        const data = await res.json();
+
+        if (hasGitee) {
+          const gtHeaders: Record<string, string> = {
+            Accept: "application/json"
+          };
+          const gtToken = localStorage.getItem("git_store_gitee_token") || giteeToken || "";
+          if (gtToken.trim()) gtHeaders.Authorization = `Bearer ${gtToken.trim()}`;
+          
+          const giteeMode = localStorage.getItem("git_store_gitee_api_mode") || "public";
+          const giteeCustom = localStorage.getItem("git_store_gitee_custom_endpoint") || "";
+          const giteeBase = giteeMode === "public" ? "https://gitee.com/api/v5" : giteeCustom.trim() || "https://gitee.com/api/v5";
+
+          searchPromises.push(
+            fetch(`${giteeBase}/search/repositories?q=${encodeURIComponent(finalQuery)}&order=desc&per_page=30`, { headers: gtHeaders })
+              .then(async r => {
+                if (!r.ok) return [];
+                const data = await r.json();
+                const list = Array.isArray(data) ? data : (data.items || []);
+                return list.map((item: any) => ({
+                  owner: item.owner.login,
+                  repo: item.path,
+                  title: item.name,
+                  publisher: item.owner.login,
+                  description: item.description || "暂无描述",
+                  category: "开发工具",
+                  icon: item.owner.avatar_url || "https://gitee.com/assets/favicon.ico",
+                  stars: item.stargazers_count,
+                  language: item.language || "Markdown",
+                  tags: [item.language, "Git", "Gitee"].filter(Boolean),
+                  bannerGradient: "from-red-600/10 to-zinc-900/10",
+                  url: item.html_url,
+                }));
+              })
+              .catch(() => [])
+          );
+        }
+
+        const resultsArrays = await Promise.all(searchPromises);
+        let mergedList = resultsArrays.flat();
         
-        const list = (data.items || []).map((item: any) => ({
-          owner: item.owner.login,
-          repo: item.name,
-          title: item.name,
-          publisher: item.owner.login,
-          description: item.description || "暂无描述",
-          category: "开发工具",
-          icon: item.owner.avatar_url,
-          stars: item.stargazers_count,
-          language: item.language || "Markdown",
-          tags: [item.language, "Git"].filter(Boolean),
-          bannerGradient: "from-blue-600/20 to-zinc-900/10",
-        }));
+        // Sort by stars count descending
+        mergedList.sort((a, b) => b.stars - a.stars);
         
-        setResults(list);
+        // Remove duplicates by combining owner/repo identifier
+        const seen = new Set();
+        mergedList = mergedList.filter(item => {
+          const key = `${item.owner.toLowerCase()}/${item.repo.toLowerCase()}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        setResults(mergedList);
       }
     } catch (err: any) {
       console.error(err);
@@ -130,12 +254,12 @@ export default function Search() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto h-full px-8 py-10 flex flex-col">
+    <div className="flex-1 overflow-y-auto h-full px-4 md:px-8 py-6 md:py-10 flex flex-col">
       {/* Header */}
       <div className="mb-6 shrink-0">
-        <h2 className="text-2xl font-bold tracking-tight mb-2">搜索 GitHub 仓库</h2>
+        <h2 className="text-2xl font-bold tracking-tight mb-2">搜索开源仓库</h2>
         <p className="text-xs text-[var(--fluent-secondary)] leading-relaxed">
-          输入任何 GitHub 仓库关键词，或者输入具体格式（例如 `owner/repo` 或仓库完整 HTTPS 链接）直接获取。
+          输入任何 GitHub 或 Gitee 仓库关键词，或者输入具体格式（例如 `owner/repo` 或仓库完整 HTTPS 链接）直接获取。
         </p>
       </div>
 

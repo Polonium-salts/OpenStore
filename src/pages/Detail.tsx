@@ -17,11 +17,12 @@ export default function Detail() {
     openFolder,
     openVSCode,
     githubToken,
+    giteeToken,
     gitInstalled,
     assetDownloads
   } = useApp();
 
-  const [readme, setReadme] = useState<string>("正在从 GitHub 加载仓库自述文件 (README.md)...");
+  const [readme, setReadme] = useState<string>("正在从云端加载自述文件 (README.md)...");
   const [loadingReadme, setLoadingReadme] = useState(true);
   const [extraInfo, setExtraInfo] = useState<any>(null);
   
@@ -81,19 +82,26 @@ export default function Detail() {
   const fetchReadmeAndDetails = async () => {
     setLoadingReadme(true);
     setReadme("正在加载自述文件...");
+
+    const isGitee = repoInfo.url?.includes("gitee.com/") || false;
     const headers: Record<string, string> = {
-      Accept: "application/vnd.github.v3+json",
+      Accept: isGitee ? "application/json" : "application/vnd.github.v3+json",
     };
-    if (githubToken) {
-      headers.Authorization = `Bearer ${githubToken}`;
+    const token = isGitee 
+      ? (localStorage.getItem("git_store_gitee_token") || giteeToken || "")
+      : (localStorage.getItem("git_store_token") || githubToken || "");
+
+    if (token.trim()) {
+      headers.Authorization = `Bearer ${token.trim()}`;
     }
 
     try {
       // 1. Fetch README
-      const readmeRes = await fetch(
-        `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/readme`,
-        { headers }
-      );
+      const readmeApi = isGitee
+        ? `https://gitee.com/api/v5/repos/${repoInfo.owner}/${repoInfo.repo}/readme`
+        : `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/readme`;
+
+      const readmeRes = await fetch(readmeApi, { headers });
       if (readmeRes.ok) {
         const data = await readmeRes.json();
         // Decode base64 safely supporting utf-8 characters
@@ -110,10 +118,11 @@ export default function Detail() {
       }
 
       // 2. Fetch Detailed Repo Info
-      const detailsRes = await fetch(
-        `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}`,
-        { headers }
-      );
+      const detailsApi = isGitee
+        ? `https://gitee.com/api/v5/repos/${repoInfo.owner}/${repoInfo.repo}`
+        : `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}`;
+
+      const detailsRes = await fetch(detailsApi, { headers });
       if (detailsRes.ok) {
         const data = await detailsRes.json();
         setExtraInfo(data);
@@ -121,16 +130,35 @@ export default function Detail() {
 
       // 3. Fetch Latest Release & Assets Auto Match
       try {
-        const releaseRes = await fetch(
-          `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/releases/latest`,
-          { headers }
-        );
-        if (releaseRes.ok) {
-          const data = await releaseRes.json();
-          setLatestRelease(data);
+        let releaseData = null;
+        if (isGitee) {
+          // Gitee releases API endpoint list, pick first one as latest
+          const releaseRes = await fetch(
+            `https://gitee.com/api/v5/repos/${repoInfo.owner}/${repoInfo.repo}/releases?per_page=1`,
+            { headers }
+          );
+          if (releaseRes.ok) {
+            const list = await releaseRes.json();
+            if (Array.isArray(list) && list.length > 0) {
+              releaseData = list[0];
+            }
+          }
+        } else {
+          // GitHub latest release endpoint
+          const releaseRes = await fetch(
+            `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/releases/latest`,
+            { headers }
+          );
+          if (releaseRes.ok) {
+            releaseData = await releaseRes.json();
+          }
+        }
+
+        if (releaseData) {
+          setLatestRelease(releaseData);
           
           const platform = getPlatform();
-          const assets = data.assets || [];
+          const assets = releaseData.assets || [];
           setReleasesCount(assets.length);
 
           let matched = null;
@@ -281,7 +309,7 @@ export default function Detail() {
     <div className="flex-1 overflow-y-auto h-full flex flex-col relative select-text">
       
       {/* 1. Sticky Navigation Header */}
-      <div className="sticky top-0 bg-[var(--fluent-bg)]/85 backdrop-blur-md z-20 px-8 py-3.5 border-b border-[var(--fluent-border)] flex items-center justify-between shrink-0 select-none">
+      <div className="sticky top-0 bg-[var(--fluent-bg)]/85 backdrop-blur-md z-20 px-4 md:px-8 py-3.5 border-b border-[var(--fluent-border)] flex items-center justify-between shrink-0 select-none">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setActiveTab("home")}
@@ -307,7 +335,7 @@ export default function Detail() {
       </div>
 
       {/* 2. Top Hero Identity & Action Panel (Microsoft Store layout) */}
-      <section className="px-8 pt-6 pb-2 shrink-0 border-b border-[var(--fluent-border)]/50 select-none">
+      <section className="px-4 md:px-8 pt-4 md:pt-6 pb-2 shrink-0 border-b border-[var(--fluent-border)]/50 select-none">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
           {/* Identity details */}
           <div className="flex items-center gap-4.5 text-left min-w-0">
@@ -393,7 +421,8 @@ export default function Detail() {
                     repoInfo.repo,
                     repoInfo.stars,
                     repoInfo.description,
-                    repoInfo.language
+                    repoInfo.language,
+                    repoInfo.url
                   )
                 }
                 className="w-full md:w-44 bg-[var(--fluent-accent)] hover:bg-[var(--fluent-accent-hover)] text-white text-xs font-black py-2.5 rounded-xl transition cursor-pointer shadow-md shadow-blue-500/15 active:scale-98"
@@ -438,7 +467,8 @@ export default function Detail() {
                           repoInfo.repo,
                           repoInfo.stars,
                           repoInfo.description,
-                          repoInfo.language
+                          repoInfo.language,
+                          repoInfo.url
                         )
                       }
                       className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold px-4 py-2 rounded-lg border border-[var(--fluent-border)] active:scale-95"
@@ -497,7 +527,7 @@ export default function Detail() {
       </section>
 
       {/* 3. Main Split View Layout (Left column: description/code details; Right column: specifications/requirements) */}
-      <div className="flex flex-col lg:flex-row px-8 py-6 gap-8 items-start flex-1 min-h-0">
+      <div className="flex flex-col lg:flex-row px-4 md:px-8 py-4 md:py-6 gap-6 md:gap-8 items-start flex-1 min-h-0">
         
         {/* Left Section (70% - Overview & README.md) */}
         <main className="flex-1 w-full space-y-7 min-w-0">
@@ -517,7 +547,7 @@ export default function Detail() {
             
             {/* Diagnostics code mockup */}
             <div className="p-5 font-mono text-[10px] text-blue-300 leading-relaxed overflow-hidden text-left flex-1 flex flex-col justify-center">
-              <p className="text-zinc-500">// GitHub REST API Diagnostics Check</p>
+              <p className="text-zinc-500">// {repoInfo.url?.includes("gitee.com") ? "Gitee" : "GitHub"} REST API Diagnostics Check</p>
               <p className="text-green-400"><span className="text-pink-400">git clone</span> {repoInfo.url}</p>
               <p className="text-purple-400 mt-2.5">const <span className="text-white">repository</span> = &#123;</p>
               <p className="pl-4">name: <span className="text-green-300">"{repoInfo.repo}"</span>,</p>
@@ -699,7 +729,7 @@ export default function Detail() {
               <div className="flex justify-between">
                 <span className="text-[var(--fluent-secondary)]">开源授权许可</span>
                 <span className="font-extrabold text-white truncate max-w-[150px]">
-                  {extraInfo?.license?.spdx_id || extraInfo?.license?.name || "Unlicensed"}
+                  {extraInfo?.license?.spdx_id || extraInfo?.license?.name || (typeof extraInfo?.license === 'string' ? extraInfo?.license : "Unlicensed")}
                 </span>
               </div>
               <div className="flex justify-between">

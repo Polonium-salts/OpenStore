@@ -137,7 +137,7 @@ export default function Library() {
 
   // ── Render ───────────────────────────────────────────────
   return (
-    <div className="flex-1 overflow-y-auto h-full px-8 py-10 flex flex-col select-none">
+    <div className="flex-1 overflow-y-auto h-full px-4 md:px-8 py-6 md:py-10 flex flex-col select-none">
 
       {/* ── Page Header ───────────────────────────────── */}
       <div className="mb-6 shrink-0 flex items-center justify-between text-left gap-4">
