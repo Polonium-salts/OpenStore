@@ -8,11 +8,8 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "http:default",
     "fs:default",
-    "http:default",
-    "os:default",
-    "dialog:default",
-    "opener:default"
+    "notification:default",
+    "sql:default"
   ]
 }

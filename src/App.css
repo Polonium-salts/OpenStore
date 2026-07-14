@@ -1,29 +1,398 @@
-/* We're using styled-components for most styles,
-   so we'll keep this file minimal and only include styles
-   that need to be globally applied */
+@import "tailwindcss";
 
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #1d1d1f;
-    color: #f5f5f7;
+@theme {
+  --font-sans: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Inter, Roboto, sans-serif;
+  
+  --color-fluent-bg: #f3f3f3;
+  --color-fluent-card: #ffffff;
+  --color-fluent-sidebar: #eeeeee;
+  --color-fluent-primary: #0078d4;
+  --color-fluent-primary-hover: #106ebe;
+  --color-fluent-text: #201f1e;
+  --color-fluent-secondary: #605e5c;
+  --color-fluent-border: #e0e0e0;
+  
+  --color-fluent-bg-dark: #202020;
+  --color-fluent-card-dark: #2d2d2d;
+  --color-fluent-sidebar-dark: #272727;
+  --color-fluent-text-dark: #f3f3f3;
+  --color-fluent-secondary-dark: #adadad;
+  --color-fluent-border-dark: #3a3a3a;
+
+  /* Custom Magic UI variables / keyframes */
+  --animate-border-beam: border-beam 15s linear infinite;
+  --animate-shine: shine 16s linear infinite;
+  --animate-marquee: marquee 30s linear infinite;
+  --animate-marquee-reverse: marquee-reverse 30s linear infinite;
+
+  @keyframes border-beam {
+    100% {
+      offset-distance: 100%;
+    }
+  }
+  @keyframes shine {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(calc(-100% - var(--gap, 1rem)));
+    }
+  }
+  @keyframes marquee-reverse {
+    from {
+      transform: translateX(calc(-100% - var(--gap, 1rem)));
+    }
+    to {
+      transform: translateX(0);
+    }
   }
 }
 
-/* Animations for transitions */
-.fade-enter {
-  opacity: 0;
+/* Custom CSS variables mappings */
+:root {
+  --fluent-bg: #1c1c1e;
+  --fluent-card: #2c2c2e;
+  --fluent-sidebar: #101012;
+  --fluent-text: #ffffff;
+  --fluent-secondary: #8e8e93;
+  --fluent-border: #38383a;
+  --fluent-accent: #0078d4;
+  --fluent-accent-hover: #106ebe;
 }
 
-.fade-enter-active {
-  opacity: 1;
-  transition: opacity 300ms;
+@media (prefers-color-scheme: light) {
+  :root {
+    --fluent-bg: #f3f3f3;
+    --fluent-card: #ffffff;
+    --fluent-sidebar: #eeeeee;
+    --fluent-text: #201f1e;
+    --fluent-secondary: #605e5c;
+    --fluent-border: #e0e0e0;
+    --fluent-accent: #0078d4;
+    --fluent-accent-hover: #106ebe;
+  }
 }
 
-.fade-exit {
-  opacity: 1;
+/* Custom Scrollbar for Fluent Design */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-.fade-exit-active {
-  opacity: 0;
-  transition: opacity 300ms;
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
+}
+
+/* Sleek Horizontal Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(128, 128, 128, 0.05);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--fluent-accent);
+}
+.custom-scrollbar::-webkit-scrollbar-button {
+  display: none;
+}
+
+@keyframes progress-bar {
+  0% { left: -33%; }
+  100% { left: 100%; }
+}
+.animate-progress-bar {
+  animation: progress-bar 1.5s infinite linear;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background-color: var(--fluent-bg);
+  color: var(--fluent-text);
+  overflow-x: hidden;
+  user-select: none;
+}
+
+/* Glassmorphism utility classes */
+.fluent-acrylic {
+  background: rgba(44, 44, 46, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+@media (prefers-color-scheme: light) {
+  .fluent-acrylic {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+}
+
+/* Markdown README Styling Rules */
+.readme-style {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.readme-style h1,
+.readme-style h2,
+.readme-style h3,
+.readme-style h4 {
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: var(--fluent-text);
+}
+
+.readme-style h1 {
+  font-size: 1.5rem;
+  border-bottom: 1px solid var(--fluent-border);
+  padding-bottom: 0.3rem;
+}
+
+.readme-style h2 {
+  font-size: 1.3rem;
+  border-bottom: 1px solid var(--fluent-border);
+  padding-bottom: 0.2rem;
+}
+
+.readme-style h3 {
+  font-size: 1.1rem;
+}
+
+.readme-style p {
+  margin-bottom: 1rem;
+  opacity: 0.95;
+}
+
+.readme-style a {
+  color: var(--fluent-accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.readme-style a:hover {
+  text-decoration: underline;
+}
+
+.readme-style ul,
+.readme-style ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+
+.readme-style ul {
+  list-style-type: disc;
+}
+
+.readme-style ol {
+  list-style-type: decimal;
+}
+
+.readme-style li {
+  margin-bottom: 0.25rem;
+}
+
+.readme-style code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  background: rgba(128, 128, 128, 0.15);
+  padding: 0.15rem 0.3rem;
+  border-radius: 4px;
+  color: #f47067;
+}
+
+@media (prefers-color-scheme: light) {
+  .readme-style code {
+    color: #cf222e;
+  }
+}
+
+.readme-style pre {
+  margin: 1.2rem 0;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--fluent-border);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.readme-style pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: 12px;
+}
+
+.readme-style blockquote {
+  margin: 1rem 0;
+  padding: 0 1rem;
+  color: var(--fluent-secondary);
+  border-left: 4px solid var(--fluent-border);
+}
+
+.readme-style img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 1rem 0;
+  display: block;
+}
+
+.readme-style hr {
+  height: 1px;
+  border: 0;
+  background-color: var(--fluent-border);
+  margin: 1.5rem 0;
+}
+
+.readme-style table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.readme-style th,
+.readme-style td {
+  padding: 8px 12px;
+  border: 1px solid var(--fluent-border);
+}
+
+.readme-style th {
+  background-color: rgba(128, 128, 128, 0.05);
+  font-weight: 750;
+}
+
+/* === HTML elements embedded in Markdown === */
+
+/* details/summary collapsible blocks */
+.readme-style details {
+  margin: 0.75rem 0;
+  border: 1px solid var(--fluent-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  background: rgba(128, 128, 128, 0.04);
+}
+
+.readme-style summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.readme-style summary::before {
+  content: "▶";
+  font-size: 0.65rem;
+  transition: transform 0.2s;
+  color: var(--fluent-secondary);
+}
+
+.readme-style details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.readme-style details[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+/* kbd shortcut badges */
+.readme-style kbd {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--fluent-text);
+  background-color: rgba(128, 128, 128, 0.12);
+  border: 1px solid var(--fluent-border);
+  border-bottom: 3px solid var(--fluent-border);
+  border-radius: 4px;
+}
+
+/* mark / highlight */
+.readme-style mark {
+  background: rgba(255, 220, 0, 0.3);
+  color: inherit;
+  padding: 0 0.15rem;
+  border-radius: 3px;
+}
+
+/* center-aligned content */
+.readme-style center {
+  display: block;
+  text-align: center;
+  margin: 1rem 0;
+}
+
+/* small text */
+.readme-style small {
+  font-size: 0.8em;
+  opacity: 0.75;
+}
+
+/* sup / sub */
+.readme-style sup { vertical-align: super; font-size: 0.75em; }
+.readme-style sub { vertical-align: sub; font-size: 0.75em; }
+
+/* del / ins */
+.readme-style del { text-decoration: line-through; opacity: 0.65; }
+.readme-style ins { text-decoration: underline; }
+
+/* div wrappers used for badges / shield.io etc */
+.readme-style div {
+  max-width: 100%;
+}
+
+/* Badge images (inline) */
+.readme-style p img, 
+.readme-style a img {
+  display: inline;
+  margin: 0 2px;
+  vertical-align: middle;
+  border-radius: 4px;
+}
+
+/* Video embeds */
+.readme-style video {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 1rem 0;
+  display: block;
+}
+
+/* picture / source */
+.readme-style picture {
+  display: block;
+  margin: 1rem 0;
 }

@@ -1,5 +1,5 @@
 [package]
-name = "open"
+name = "openstore"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
@@ -11,23 +11,21 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "open_lib"
+name = "openstore_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-http = "2"
 tauri-plugin-fs = "2"
-chrono = { version = "0.4", features = ["serde"] }
-tokio = { version = "1", features = ["full"] }
-dirs = "5.0"
-reqwest = { version = "0.11", features = ["stream"] }
-tauri-plugin-os = "2"
-tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tauri-plugin-sql = "2"
+futures-util = "0.3"
+tokio = { version = "1", features = ["sync"] }
 

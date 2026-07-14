@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "open",
+  "productName": "openstore",
   "version": "0.1.0",
-  "identifier": "com.open.app",
+  "identifier": "com.aaajn.openstore",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,49 +12,24 @@
   "app": {
     "windows": [
       {
-        "title": "open",
-        "width": 1000,
-        "height": 600,
-        "hiddenTitle": true,
-        "closable": true,
-        "minimizable": true
+        "title": "openstore",
+        "width": 1280,
+        "height": 720
       }
     ],
     "security": {
       "csp": null
-    },
-    "trayIcon": {
-      "iconPath": "icons/32x32.png",
-      "iconAsTemplate": true,
-      "menuOnLeftClick": false,
-      "tooltip": "OpenStore"
     }
-  },
-  "plugins": {
-    "os": {
-      "all": true,
-      "platform": true,
-      "version": true,
-      "arch": true,
-      "type": true,
-      "locale": true
-    },
-    "dialog": null
   },
   "bundle": {
     "active": true,
-    "targets": ["msi"],
+    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "windows": {
-      "certificateThumbprint": null,
-      "digestAlgorithm": "sha256",
-      "timestampUrl": ""
-    }
+    ]
   }
 }
