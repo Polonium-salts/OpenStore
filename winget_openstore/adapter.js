@@ -92,7 +92,11 @@ export async function searchApps(query) {
         stars: 0,
         language: "C++",
         icon: pkg.IconUrl || pkg.Logo || "",
-        assets: assets
+        assets: assets,
+        license: latest.License || "商业/闭源专有",
+        createdAt: pkg.CreatedAt || pkg.createdAt || "",
+        updatedAt: pkg.UpdatedAt || pkg.updatedAt || "",
+        versionsCount: pkg.Versions ? pkg.Versions.length : 0
       };
     });
 

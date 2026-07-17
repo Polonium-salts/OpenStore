@@ -511,6 +511,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setCustomDataSources(customOnly);
       } catch (err) {
         console.error("Failed to initialize SQLite local database:", err);
+        // Fallback to localStorage so that the app still works if SQL initialization fails
+        try {
+          const savedSources = localStorage.getItem("git_store_data_sources");
+          if (savedSources) {
+            const list = JSON.parse(savedSources) as DataSource[];
+            setCustomDataSources(list.filter(s => s.id !== "builtin_github" && s.id !== "builtin_gitee"));
+          }
+          const savedRepos = localStorage.getItem("git_store_installed_repos");
+          if (savedRepos) {
+            const list = JSON.parse(savedRepos) as InstalledRepo[];
+            setInstalledRepos(list);
+          }
+        } catch (e) {
+          console.error("Failed to load from localStorage fallback:", e);
+        }
       }
     }
     loadSqlDb();

@@ -76,6 +76,13 @@ export default function Detail() {
   };
 
   const repoInfo = selectedRepo;
+  const isClosedSource = repoInfo
+    ? ((repoInfo as any).isClosedSource === true || 
+       repoInfo.platform === "zip" || 
+       repoInfo.platform === "url_source" || 
+       repoInfo.platform === "openstore_api" || 
+       (!repoInfo.url || (!repoInfo.url.includes("github.com") && !repoInfo.url.includes("gitee.com"))))
+    : false;
   const repoSources = repoInfo?.sources || [];
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
 
@@ -123,7 +130,7 @@ export default function Detail() {
     setLoadingReadme(true);
     setReadme("正在加载自述文件...");
 
-    if (repoInfo.platform === "url_source" || repoInfo.platform === "openstore_api" || repoInfo.platform === "zip") {
+    if (isClosedSource) {
       setReadme(repoInfo.readme || repoInfo.description || "暂无描述");
       setLatestRelease({
         tag_name: repoInfo.version || "1.0.0",
@@ -533,7 +540,7 @@ export default function Detail() {
                 </button>
               )
             )}
-            {!installedItem ? (
+            {!isClosedSource && !installedItem ? (
               <button
                 onClick={() => {
                   installRepository(
@@ -553,7 +560,7 @@ export default function Detail() {
                 <Package className="w-3.5 h-3.5" />
                 <span>下载项目源码</span>
               </button>
-            ) : (
+            ) : installedItem ? (
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 {/* Downloading diagnostics */}
                 {(isDownloading || isUpdating) && (
@@ -645,7 +652,7 @@ export default function Detail() {
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </section>
@@ -844,36 +851,75 @@ export default function Detail() {
           )}
 
           {/* Metadata Specifications card */}
-          <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] rounded-xl p-5 shadow-sm space-y-4">
-            <h4 className="text-xs font-black uppercase tracking-wider text-[var(--fluent-secondary)] select-none opacity-60">
-              数据规范与指标
-            </h4>
+          {isClosedSource ? (
+            <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] rounded-xl p-5 shadow-sm space-y-4">
+              <h4 className="text-xs font-black uppercase tracking-wider text-[var(--fluent-secondary)] select-none opacity-60">
+                软件规范与指标
+              </h4>
 
-            <div className="space-y-3.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-[var(--fluent-secondary)]">开源授权许可</span>
-                <span className="font-extrabold text-white truncate max-w-[150px]">
-                  {extraInfo?.license?.spdx_id || extraInfo?.license?.name || (typeof extraInfo?.license === 'string' ? extraInfo?.license : "Unlicensed")}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--fluent-secondary)]">开发主分支</span>
-                <span className="font-extrabold text-white">{extraInfo?.default_branch || "main"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--fluent-secondary)]">仓库存储大小</span>
-                <span className="font-extrabold text-white">{formatSize(extraInfo?.size)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--fluent-secondary)]">Forks 衍生数</span>
-                <span className="font-extrabold text-white">{extraInfo?.forks_count || 0}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--fluent-secondary)]">未解决 Issues</span>
-                <span className="font-extrabold text-white">{extraInfo?.open_issues_count || 0}</span>
+              <div className="space-y-3.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">软件出版商</span>
+                  <span className="font-extrabold text-white truncate max-w-[150px]">
+                    {repoInfo.publisher || repoInfo.owner || "未知"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">软件开发商</span>
+                  <span className="font-extrabold text-white truncate max-w-[150px]">{repoInfo.owner}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">软件版本</span>
+                  <span className="font-extrabold text-white">{repoInfo.version || "Latest"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">软件类别</span>
+                  <span className="font-extrabold text-white">{repoInfo.category || "常用工具"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">主要语言</span>
+                  <span className="font-extrabold text-white">{repoInfo.language || "编译语言"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">授权许可</span>
+                  <span className="font-extrabold text-zinc-300">
+                    {(repoInfo as any).license || "商业/闭源专有"}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] rounded-xl p-5 shadow-sm space-y-4">
+              <h4 className="text-xs font-black uppercase tracking-wider text-[var(--fluent-secondary)] select-none opacity-60">
+                数据规范与指标
+              </h4>
+
+              <div className="space-y-3.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">开源授权许可</span>
+                  <span className="font-extrabold text-white truncate max-w-[150px]">
+                    {extraInfo?.license?.spdx_id || extraInfo?.license?.name || (typeof extraInfo?.license === 'string' ? extraInfo?.license : "Unlicensed")}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">开发主分支</span>
+                  <span className="font-extrabold text-white">{extraInfo?.default_branch || "main"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">仓库存储大小</span>
+                  <span className="font-extrabold text-white">{formatSize(extraInfo?.size)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">Forks 衍生数</span>
+                  <span className="font-extrabold text-white">{extraInfo?.forks_count || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">未解决 Issues</span>
+                  <span className="font-extrabold text-white">{extraInfo?.open_issues_count || 0}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* System & Build Requirements */}
           <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] rounded-xl p-5 shadow-sm space-y-4">
@@ -893,33 +939,63 @@ export default function Detail() {
           </div>
 
           {/* Repository Timestamps info */}
-          <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] rounded-xl p-5 shadow-sm space-y-4">
-            <h4 className="text-xs font-black uppercase tracking-wider text-[var(--fluent-secondary)] select-none opacity-60 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-              <span>版本更迭时间</span>
-            </h4>
+          {isClosedSource ? (
+            <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] rounded-xl p-5 shadow-sm space-y-4">
+              <h4 className="text-xs font-black uppercase tracking-wider text-[var(--fluent-secondary)] select-none opacity-60 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                <span>版本迭代时间</span>
+              </h4>
 
-            <div className="space-y-3 text-xs">
-              <div className="flex justify-between">
-                <span className="text-[var(--fluent-secondary)]">首次提交创建</span>
-                <span className="font-extrabold text-zinc-400">
-                  {extraInfo ? new Date(extraInfo.created_at).toLocaleDateString() : "未知"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--fluent-secondary)]">最近一次更新</span>
-                <span className="font-extrabold text-zinc-400">
-                  {extraInfo ? new Date(extraInfo.updated_at).toLocaleDateString() : "未知"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--fluent-secondary)]">最后推送代码</span>
-                <span className="font-extrabold text-zinc-400">
-                  {extraInfo ? new Date(extraInfo.pushed_at).toLocaleDateString() : "未知"}
-                </span>
+              <div className="space-y-3 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">首次收录时间</span>
+                  <span className="font-extrabold text-zinc-400">
+                    {(repoInfo as any).createdAt ? new Date((repoInfo as any).createdAt).toLocaleDateString() : "未知"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">软件最近更新</span>
+                  <span className="font-extrabold text-zinc-400">
+                    {(repoInfo as any).updatedAt ? new Date((repoInfo as any).updatedAt).toLocaleDateString() : "未知"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">累计发布版本</span>
+                  <span className="font-extrabold text-zinc-400">
+                    {(repoInfo as any).versionsCount ? `${(repoInfo as any).versionsCount} 个版本` : "未知"}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] rounded-xl p-5 shadow-sm space-y-4">
+              <h4 className="text-xs font-black uppercase tracking-wider text-[var(--fluent-secondary)] select-none opacity-60 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                <span>版本更迭时间</span>
+              </h4>
+
+              <div className="space-y-3 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">首次提交创建</span>
+                  <span className="font-extrabold text-zinc-400">
+                    {extraInfo ? new Date(extraInfo.created_at).toLocaleDateString() : "未知"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">最近一次更新</span>
+                  <span className="font-extrabold text-zinc-400">
+                    {extraInfo ? new Date(extraInfo.updated_at).toLocaleDateString() : "未知"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--fluent-secondary)]">最后推送代码</span>
+                  <span className="font-extrabold text-zinc-400">
+                    {extraInfo ? new Date(extraInfo.pushed_at).toLocaleDateString() : "未知"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
         </aside>
 
