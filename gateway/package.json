@@ -1,0 +1,23 @@
+{
+  "name": "openstore-gateway",
+  "version": "1.0.0",
+  "description": "Unified Gateway API for OpenStore matching standard schema",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.8",
+    "hono": "^4.7.2",
+    "js-yaml": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.11.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.3.3"
+  }
+}

@@ -3,6 +3,8 @@ use tauri::Emitter;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+
+
 /// Managed state: maps download URL -> tokio watch Sender<bool> (true = cancel requested)
 struct DownloadRegistry(Mutex<HashMap<String, tokio::sync::watch::Sender<bool>>>);
 
@@ -73,7 +75,7 @@ async fn clone_repository(
     path.push(&folder_name);
 
     let path_str = path.to_string_lossy().to_string();
-    let parent_path_str = parent_path.to_string_lossy().to_string();
+    let _parent_path_str = parent_path.to_string_lossy().to_string();
 
     let git_installed = check_git_installed();
     let is_gitee = repo_url.contains("gitee.com/");
@@ -92,10 +94,14 @@ async fn clone_repository(
         let clone_url = if is_gitee {
             if let Some(ref token) = gitee_token {
                 if !token.trim().is_empty() {
-                    repo_url.replace(
-                        "https://gitee.com/",
-                        &format!("https://oauth2:{}@gitee.com/", token),
-                    )
+                    if repo_url.contains("gitee.com/") {
+                        repo_url.replace(
+                            "https://gitee.com/",
+                            &format!("https://oauth2:{}@gitee.com/", token),
+                        )
+                    } else {
+                        repo_url.replace("https://", &format!("https://oauth2:{}@", token))
+                    }
                 } else {
                     repo_url.clone()
                 }
@@ -105,10 +111,14 @@ async fn clone_repository(
         } else {
             if let Some(ref token) = github_token {
                 if !token.trim().is_empty() {
-                    repo_url.replace(
-                        "https://github.com/",
-                        &format!("https://oauth2:{}@github.com/", token),
-                    )
+                    if repo_url.contains("github.com/") {
+                        repo_url.replace(
+                            "https://github.com/",
+                            &format!("https://oauth2:{}@github.com/", token),
+                        )
+                    } else {
+                        repo_url.replace("https://", &format!("https://oauth2:{}@", token))
+                    }
                 } else {
                     repo_url.clone()
                 }
@@ -650,6 +660,10 @@ async fn cancel_download(
     }
 }
 
+
+
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -658,6 +672,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             check_git_installed,

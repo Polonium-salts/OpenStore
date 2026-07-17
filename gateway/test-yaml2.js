@@ -1,0 +1,1 @@
+const yaml = require('js-yaml'); fetch('https://raw.githubusercontent.com/microsoft/winget-pkgs/master/manifests/m/Microsoft/VisualStudioCode/1.80.0/Microsoft.VisualStudioCode.installer.yaml').then(r = 

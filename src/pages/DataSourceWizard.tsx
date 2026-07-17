@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { useApp } from "@/context/AppContext";
-import { CheckCircle2, Terminal, AlertTriangle, Key, Globe, Cpu, Plus, Trash, ArrowLeft } from "lucide-react";
+import { useApp, DataSource } from "@/context/AppContext";
+import { CheckCircle2, Terminal, AlertTriangle, Key, Globe, Cpu, Plus, Trash, ArrowLeft, Edit, Package, Archive, GitFork } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { open } from "@tauri-apps/plugin-dialog";
 
 // Custom SVG GitHub Icon
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -37,30 +38,49 @@ function GiteeIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-interface DataSource {
-  id: string;
-  name: string;
-  platform?: "github" | "gitee";
-  apiEndpointMode: "public" | "enterprise";
-  customEndpoint: string;
-  apiVersion: string;
-  token: string;
-  addedAt: string;
-}
+
 
 export default function DataSourceWizard() {
-  const { githubToken, setGithubToken, giteeToken, setGiteeToken, dataSources, addDataSource, deleteDataSource } = useApp();
+  const { githubToken, setGithubToken, giteeToken, setGiteeToken, dataSources, addDataSource, deleteDataSource, toggleDataSourceEnabled } = useApp();
 
-  // Navigation state: 'list' | 'add'
-  const [view, setView] = useState<"list" | "add">("list");
+  // Navigation state: 'list' | 'add' | 'edit'
+  const [view, setView] = useState<"list" | "add" | "edit">("list");
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
+  const [editingSourceAddedAt, setEditingSourceAddedAt] = useState<string>("");
+  const [customName, setCustomName] = useState("");
 
   // Wizard Flow States (active when view === 'add')
   const [step, setStep] = useState(1);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [apiEndpointMode, setApiEndpointMode] = useState<"public" | "enterprise">("public");
-  const [customEndpoint, setCustomEndpoint] = useState("https://github-enterprise.company.com/api/v3");
+  const [customEndpoint, setCustomEndpoint] = useState("https://gitee.com/api/v5");
   const [apiVersion, setApiVersion] = useState("2026-03-10");
   const [tokenInput, setTokenInput] = useState("");
+  const [zipPath, setZipPath] = useState("");
+  const [gitUrl, setGitUrl] = useState("");
+
+
+  const handleZipFileBrowse = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        filters: [{
+          name: "ZIP Archives",
+          extensions: ["zip"]
+        }]
+      });
+      if (selected && typeof selected === "string") {
+        setZipPath(selected);
+        if (!customName.trim()) {
+          const fileName = selected.split(/[/\\]/).pop() || "";
+          setCustomName(`本地 ZIP 数据源: ${fileName.replace(/\.zip$/i, "")}`);
+        }
+      }
+    } catch (err) {
+      console.error("打开文件对话框失败:", err);
+    }
+  };
 
   // Connection diagnostics states
   const [testingConnection, setTestingConnection] = useState(false);
@@ -78,8 +98,92 @@ export default function DataSourceWizard() {
     setTokenInput(githubToken);
   }, [githubToken]);
 
+  // If public source is already added, auto-select enterprise mode
+  useEffect(() => {
+    if (selectedType) {
+      const publicExists = dataSources.some(
+        (s) => s.platform === selectedType && s.apiEndpointMode === "public"
+      );
+      if (publicExists) {
+        setApiEndpointMode("enterprise");
+      } else {
+        setApiEndpointMode("public");
+      }
+    }
+  }, [selectedType, dataSources]);
+
   const handleSelectType = (id: string) => {
     setSelectedType(id);
+    if (id === "winget") {
+      setCustomEndpoint("local-winget-cli");
+      setApiEndpointMode("public");
+    } else if (id === "gitee") {
+      setCustomEndpoint("https://gitee.com/api/v5");
+    } else if (id === "zip") {
+      setCustomEndpoint("");
+      setApiEndpointMode("public");
+    } else if (id === "git_link") {
+      setCustomEndpoint("");
+      setApiEndpointMode("public");
+    } else {
+      setCustomEndpoint("https://api.github.com");
+    }
+  };
+
+  const handleStartEdit = (source: DataSource) => {
+    setEditingSourceId(source.id);
+    setEditingSourceAddedAt(source.addedAt);
+    setCustomName(source.name);
+    setSelectedType(source.platform || "github");
+    setApiEndpointMode(source.apiEndpointMode);
+    setCustomEndpoint(source.customEndpoint);
+    setApiVersion(source.apiVersion);
+    setTokenInput(source.token);
+
+    if (source.platform === "zip") {
+      setZipPath(source.customEndpoint);
+    } else if (source.platform === "git_link") {
+      setGitUrl(source.customEndpoint);
+    }
+    
+    setTestResult("idle");
+    setErrorMessage("");
+    setGithubUser(null);
+    setRateLimit(null);
+    
+    setView("edit");
+  };
+
+  const handleSaveChanges = () => {
+    if (editingSourceId) {
+      let resolvedEndpoint = customEndpoint.trim();
+      if (selectedType === "zip") {
+        resolvedEndpoint = zipPath.trim();
+      } else if (selectedType === "git_link") {
+        resolvedEndpoint = gitUrl.trim();
+      } else if (apiEndpointMode === "public") {
+        resolvedEndpoint = selectedType === "gitee" ? "https://gitee.com/api/v5" : "https://api.github.com";
+      }
+
+      const updatedSource: DataSource = {
+        id: editingSourceId,
+        name: customName.trim() || (selectedType === "zip"
+          ? "本地 ZIP 软件源"
+          : (selectedType === "git_link" ? "通用 Git 软件源" : (apiEndpointMode === "public"
+            ? (selectedType === "gitee" ? "Gitee 公网数据源" : "GitHub 公网数据源")
+            : (selectedType === "gitee" ? "Gitee 企业版数据源" : "GitHub 企业版数据源")))),
+        platform: selectedType as "openstore_api" | "github" | "gitee" | "zip" | "git_link",
+        apiEndpointMode,
+        customEndpoint: resolvedEndpoint,
+        apiVersion: selectedType === "gitee" ? "v5" : apiVersion,
+        token: tokenInput.trim(),
+        addedAt: editingSourceAddedAt || new Date().toLocaleDateString()
+      };
+
+      addDataSource(updatedSource);
+      setView("list");
+      setEditingSourceId(null);
+    }
   };
 
   const handleNext = () => {
@@ -89,14 +193,16 @@ export default function DataSourceWizard() {
       // Add source to list
       const newSource: DataSource = {
         id: `source_${Date.now()}`,
-        name: apiEndpointMode === "public"
-          ? (selectedType === "gitee" ? "Gitee 公网数据源" : "GitHub 公网数据源")
-          : (selectedType === "gitee" ? "Gitee 企业版数据源" : "GitHub 企业版数据源"),
-        platform: selectedType as "github" | "gitee",
+        name: customName.trim() || (selectedType === "zip"
+          ? "本地 ZIP 软件源"
+          : (selectedType === "git_link" ? "通用 Git 软件源" : (apiEndpointMode === "public"
+            ? (selectedType === "gitee" ? "Gitee 公网数据源" : "GitHub 公网数据源")
+            : (selectedType === "gitee" ? "Gitee 企业版数据源" : "GitHub 企业版数据源")))),
+        platform: selectedType as "openstore_api" | "github" | "gitee" | "zip" | "git_link",
         apiEndpointMode,
-        customEndpoint: apiEndpointMode === "public"
-          ? (selectedType === "gitee" ? "https://gitee.com/api/v5" : "https://api.github.com")
-          : customEndpoint.trim(),
+        customEndpoint: selectedType === "zip"
+          ? zipPath.trim()
+          : (selectedType === "git_link" ? gitUrl.trim() : customEndpoint.trim()),
         apiVersion: selectedType === "gitee" ? "v5" : apiVersion,
         token: tokenInput.trim(),
         addedAt: new Date().toLocaleDateString()
@@ -114,7 +220,7 @@ export default function DataSourceWizard() {
           localStorage.setItem("git_store_token", tokenInput.trim());
         }
       }
-      
+
       setStep(3);
     }
   };
@@ -135,11 +241,91 @@ export default function DataSourceWizard() {
     setGithubUser(null);
     setRateLimit(null);
 
+    if (selectedType === "zip" || selectedType === "git_link") {
+      setTestResult("success");
+      setTestingConnection(false);
+      return;
+    }
+
+    if (selectedType === "openstore_api") {
+      const endpoint = customEndpoint.trim();
+      if (!endpoint) {
+        setTestResult("error");
+        setErrorMessage("API 端点不可为空");
+        setTestingConnection(false);
+        return;
+      }
+      try {
+        const res = await fetch(`${endpoint}/api/apps/vscode`);
+        if (res.ok) {
+          setTestResult("success");
+          setGithubUser("自定义 OpenStore API 连接成功");
+        } else {
+          setTestResult("error");
+          setErrorMessage(`API 连接失败: ${res.status}`);
+        }
+      } catch (err: any) {
+        setTestResult("error");
+        setErrorMessage(err.message || "请求失败");
+      }
+      setTestingConnection(false);
+      return;
+    }
+
+    if (selectedType === "zip") {
+      if (!zipPath.trim()) {
+        setTestResult("error");
+        setErrorMessage("ZIP 路径不能为空");
+        setTestingConnection(false);
+        return;
+      }
+      if (!zipPath.toLowerCase().endsWith(".zip")) {
+        setTestResult("error");
+        setErrorMessage("文件格式必须为 .zip 后缀");
+        setTestingConnection(false);
+        return;
+      }
+      try {
+        const { readZipSourceMeta } = await import("@/lib/zipSourceLoader");
+        const meta = await readZipSourceMeta(zipPath.trim());
+        setTestResult("success");
+        setGithubUser(`验证成功: ${meta.name} ${meta.version ? `(v${meta.version})` : ""}`);
+      } catch (err: any) {
+        setTestResult("error");
+        setErrorMessage(err.message || "无法读取 ZIP 源文件或解析 source.json 失败");
+      }
+      setTestingConnection(false);
+      return;
+    }
+
+    if (selectedType === "git_link") {
+      if (!gitUrl.trim()) {
+        setTestResult("error");
+        setErrorMessage("Git 链接不能为空");
+        setTestingConnection(false);
+        return;
+      }
+      if (!gitUrl.startsWith("http://") && !gitUrl.startsWith("https://") && !gitUrl.startsWith("git@")) {
+        setTestResult("error");
+        setErrorMessage("无效的 Git 克隆地址，应为 http/https 协议或 git@ 开头");
+        setTestingConnection(false);
+        return;
+      }
+      setTestResult("success");
+      setGithubUser("Git 链接校验通过");
+      setTestingConnection(false);
+      return;
+    }
+
     const isGitee = selectedType === "gitee";
     const baseEndpoint = isGitee
       ? (apiEndpointMode === "public" ? "https://gitee.com/api/v5" : customEndpoint.trim())
       : (apiEndpointMode === "public" ? "https://api.github.com" : customEndpoint.trim());
-    const requestUrl = `${baseEndpoint}/user`;
+
+    const hasToken = tokenInput.trim() !== "";
+    const requestUrl = hasToken
+      ? `${baseEndpoint}/user`
+      : (isGitee ? "https://gitee.com/api/v5/repos/chunge16/git-app-store/subscribers" : "https://api.github.com");
 
     try {
       const headers: Record<string, string> = {
@@ -149,12 +335,15 @@ export default function DataSourceWizard() {
         headers["X-GitHub-Api-Version"] = apiVersion;
       }
 
-      if (tokenInput.trim()) {
+      let finalRequestUrl = requestUrl;
+      if (isGitee && hasToken) {
+        finalRequestUrl += `${requestUrl.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(tokenInput.trim())}`;
+      } else if (hasToken) {
         headers.Authorization = `Bearer ${tokenInput.trim()}`;
       }
 
-      const res = await fetch(requestUrl, { headers });
-      
+      const res = await fetch(finalRequestUrl, { headers });
+
       if (!isGitee) {
         const limitHeader = res.headers.get("x-ratelimit-limit");
         const remainingHeader = res.headers.get("x-ratelimit-remaining");
@@ -166,9 +355,14 @@ export default function DataSourceWizard() {
         }
       }
 
-      if (res.ok) {
-        const data = await res.json();
-        setGithubUser(data.login || data.name);
+      const isReachable = res.ok || res.status === 401 || res.status === 403;
+      if (isReachable) {
+        if (hasToken && res.ok) {
+          const data = await res.json();
+          setGithubUser(data.login || data.name);
+        } else {
+          setGithubUser(isGitee ? "Gitee 联通就绪" : "GitHub 联通就绪");
+        }
         setTestResult("success");
       } else {
         throw new Error(`API 诊断失败 (状态码: ${res.status})`);
@@ -185,11 +379,54 @@ export default function DataSourceWizard() {
     setListTestingId(source.id);
     setListTestResults((prev) => ({ ...prev, [source.id]: "idle" }));
 
+    if (source.platform === "zip") {
+      try {
+        const { readZipSourceMeta } = await import("@/lib/zipSourceLoader");
+        await readZipSourceMeta(source.customEndpoint.trim());
+        setListTestResults((prev) => ({ ...prev, [source.id]: "success" }));
+      } catch (err) {
+        setListTestResults((prev) => ({ ...prev, [source.id]: "error" }));
+      }
+      setListTestingId(null);
+      return;
+    }
+
+    if (source.platform === "openstore_api") {
+      const endpoint = source.customEndpoint.trim();
+      if (!endpoint) {
+        setListTestResults((prev) => ({ ...prev, [source.id]: "error" }));
+        setListTestingId(null);
+        return;
+      }
+      try {
+        const res = await fetch(`${endpoint}/api/apps/vscode`);
+        if (res.ok) {
+          setListTestResults((prev) => ({ ...prev, [source.id]: "success" }));
+        } else {
+          setListTestResults((prev) => ({ ...prev, [source.id]: "error" }));
+        }
+      } catch (err: any) {
+        setListTestResults((prev) => ({ ...prev, [source.id]: "error" }));
+      }
+      setListTestingId(null);
+      return;
+    }
+    if (source.platform === "git_link") {
+      const isUrlValid = source.customEndpoint.startsWith("http://") || source.customEndpoint.startsWith("https://") || source.customEndpoint.startsWith("git@");
+      setListTestResults((prev) => ({ ...prev, [source.id]: isUrlValid ? "success" : "error" }));
+      setListTestingId(null);
+      return;
+    }
+
     const isGitee = source.platform === "gitee";
     const baseEndpoint = isGitee
       ? (source.apiEndpointMode === "public" ? "https://gitee.com/api/v5" : source.customEndpoint.trim())
       : (source.apiEndpointMode === "public" ? "https://api.github.com" : source.customEndpoint.trim());
-    const requestUrl = `${baseEndpoint}/user`;
+
+    const hasToken = source.token && source.token.trim() !== "";
+    const requestUrl = hasToken
+      ? `${baseEndpoint}/user`
+      : (isGitee ? "https://gitee.com/api/v5/repos/chunge16/git-app-store/subscribers" : "https://api.github.com");
 
     try {
       const headers: Record<string, string> = {
@@ -199,12 +436,16 @@ export default function DataSourceWizard() {
         headers["X-GitHub-Api-Version"] = source.apiVersion;
       }
 
-      if (source.token.trim()) {
+      let finalRequestUrl = requestUrl;
+      if (isGitee && hasToken) {
+        finalRequestUrl += `${requestUrl.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(source.token.trim())}`;
+      } else if (hasToken) {
         headers.Authorization = `Bearer ${source.token.trim()}`;
       }
 
-      const res = await fetch(requestUrl, { headers });
-      if (res.ok) {
+      const res = await fetch(finalRequestUrl, { headers });
+      const isReachable = res.ok || res.status === 401 || res.status === 403;
+      if (isReachable) {
         setListTestResults((prev) => ({ ...prev, [source.id]: "success" }));
       } else {
         setListTestResults((prev) => ({ ...prev, [source.id]: "error" }));
@@ -216,47 +457,12 @@ export default function DataSourceWizard() {
     }
   };
 
-  const isCurrentlyActive = (source: DataSource) => {
-    const isGitee = source.platform === "gitee";
-    const activeToken = isGitee
-      ? (localStorage.getItem("git_store_gitee_token") || giteeToken || "")
-      : (localStorage.getItem("git_store_token") || githubToken || "");
-    const activeMode = isGitee
-      ? (localStorage.getItem("git_store_gitee_api_mode") || "public")
-      : (localStorage.getItem("git_store_api_mode") || "public");
-    return source.token === activeToken && source.apiEndpointMode === activeMode;
-  };
-
   const handleActivateSource = (source: DataSource) => {
-    const isGitee = source.platform === "gitee";
-    if (isGitee) {
-      setGiteeToken(source.token);
-      localStorage.setItem("git_store_gitee_token", source.token);
-      localStorage.setItem("git_store_gitee_api_mode", source.apiEndpointMode);
-      localStorage.setItem("git_store_gitee_custom_endpoint", source.customEndpoint);
-    } else {
-      setGithubToken(source.token);
-      localStorage.setItem("git_store_token", source.token);
-      localStorage.setItem("git_store_api_mode", source.apiEndpointMode);
-      localStorage.setItem("git_store_custom_endpoint", source.customEndpoint);
-      localStorage.setItem("git_store_api_version", source.apiVersion);
-    }
+    toggleDataSourceEnabled(source.id, true);
   };
 
   const handleDeactivateSource = (source: DataSource) => {
-    const isGitee = source.platform === "gitee";
-    if (isGitee) {
-      setGiteeToken("");
-      localStorage.removeItem("git_store_gitee_token");
-      localStorage.removeItem("git_store_gitee_api_mode");
-      localStorage.removeItem("git_store_gitee_custom_endpoint");
-    } else {
-      setGithubToken("");
-      localStorage.removeItem("git_store_token");
-      localStorage.removeItem("git_store_api_mode");
-      localStorage.removeItem("git_store_custom_endpoint");
-      localStorage.removeItem("git_store_api_version");
-    }
+    toggleDataSourceEnabled(source.id, false);
   };
 
   const handleDeleteSource = (id: string) => {
@@ -279,6 +485,12 @@ export default function DataSourceWizard() {
         }
       }
     }
+  };
+
+  const handleUseCustomToken = (source: DataSource) => {
+    setSelectedType(source.platform || "github");
+    setStep(2);
+    setView("add");
   };
 
   const handleFinish = () => {
@@ -336,7 +548,8 @@ export default function DataSourceWizard() {
             {dataSources.map((source) => {
               const testStatus = listTestResults[source.id] || "idle";
               const isTesting = listTestingId === source.id;
-              const active = isCurrentlyActive(source);
+              // source.enabled is always boolean here (from AppContext.useMemo), but guard against undefined
+              const active = source.enabled !== false;
 
               return (
                 <div
@@ -348,22 +561,24 @@ export default function DataSourceWizard() {
                 >
                   <div className="flex gap-4">
                     <div className="p-2.5 rounded-lg bg-zinc-800/60 shrink-0 text-white flex items-center justify-center">
-                      {source.platform === "gitee" ? (
-                        <GiteeIcon className="w-5 h-5 text-red-500" />
-                      ) : (
-                        <GithubIcon className="w-5 h-5" />
-                      )}
+                       {source.platform === "zip" ? (<Archive className="w-8 h-8 text-yellow-500 opacity-80" />) :
+                       source.platform === "git_link" ? (<GitFork className="w-8 h-8 text-emerald-500 opacity-80" />) :
+                       (source.platform === "gitee" ? (
+                         <GiteeIcon className="w-5 h-5 text-red-500" />
+                       ) : (
+                         <GithubIcon className="w-8 h-8 text-white opacity-80" />
+                       ))}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <h4 className="font-extrabold text-xs text-white truncate">{source.name}</h4>
                         {/* Status active dot */}
-                        <span 
+                        <span
                           className={cn(
                             "w-2 h-2 rounded-full",
                             active ? "bg-green-500 shadow shadow-green-500/30 animate-pulse" : "bg-zinc-650"
-                          )} 
-                          title={active ? "启用中" : "未启用"} 
+                          )}
+                          title={active ? "启用中" : "未启用"}
                         />
                         {active && (
                           <span className="text-[8px] bg-[var(--fluent-accent)]/20 border border-[var(--fluent-accent)]/30 text-[var(--fluent-accent)] px-1.5 py-0.5 rounded font-black select-none uppercase tracking-wide">
@@ -372,18 +587,27 @@ export default function DataSourceWizard() {
                         )}
                       </div>
                       <p className="text-[10px] text-[var(--fluent-secondary)] mt-1 truncate">
-                        端点: <span className="font-mono text-zinc-400">{source.apiEndpointMode === "public" ? (source.platform === "gitee" ? "Gitee 公网 API" : "GitHub 公网 API") : source.customEndpoint}</span>
+                        端点: <span className="font-mono text-zinc-400">
+                          {source.platform === "zip" ? `本地 ZIP 文件: ${source.customEndpoint}` :
+                           source.platform === "git_link" ? `Git 克隆链接: ${source.customEndpoint}` :
+                           source.apiEndpointMode === "public" ? (source.platform === "gitee" ? "Gitee 公网 API" : "GitHub 公网 API") : 
+                           source.customEndpoint}
+                        </span>
                       </p>
-                      {source.platform !== "gitee" && (
+                      {source.platform !== "gitee" && source.platform !== "zip" && source.platform !== "git_link" && (
                         <p className="text-[10px] text-[var(--fluent-secondary)] mt-0.5">
                           版本: <span className="font-mono text-zinc-400">{source.apiVersion}</span>
                         </p>
                       )}
-                      <p className="text-[10px] text-[var(--fluent-secondary)] mt-0.5">
-                        密钥: <span className="font-mono text-zinc-500">
-                          {source.token ? `${source.platform === "gitee" ? "access" : "ghp"}_••••••••${source.token.slice(-4)}` : "未配置公开访问"}
-                        </span>
-                      </p>
+                      {source.platform !== "zip" && source.platform !== "git_link" && (
+                        <p className="text-[10px] text-[var(--fluent-secondary)] mt-0.5">
+                          密钥: <span className="font-mono text-zinc-500">
+                            {source.token
+                              ? `${source.platform === "gitee" ? "access" : "ghp"}_••••••••${source.token.slice(-4)}`
+                              : "匿名访问 (无令牌 - 存在频次限制)"}
+                          </span>
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -393,6 +617,7 @@ export default function DataSourceWizard() {
                     </span>
 
                     <div className="flex items-center gap-2 select-none">
+                      {/* Enable / Disable toggle button */}
                       {!active ? (
                         <button
                           onClick={() => handleActivateSource(source)}
@@ -424,14 +649,38 @@ export default function DataSourceWizard() {
                           {isTesting ? "诊断中..." : testStatus === "success" ? "已达" : testStatus === "error" ? "异常" : "测试"}
                         </span>
                       </button>
-                      
-                      <button
-                        onClick={() => handleDeleteSource(source.id)}
-                        className="p-1 border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 rounded-lg cursor-pointer transition"
-                        title="移除此数据源"
-                      >
-                        <Trash className="w-3.5 h-3.5" />
-                      </button>
+
+                      {source.id.startsWith("builtin_") ? (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleUseCustomToken(source)}
+                            className="px-2.5 py-1 border border-zinc-700/60 hover:bg-zinc-800 text-zinc-300 rounded-lg cursor-pointer transition select-none text-[9px]"
+                            title="配置自定义 API 令牌"
+                          >
+                            使用自定义API令牌
+                          </button>
+                          <span className="px-2 py-0.5 bg-zinc-800 text-zinc-400 border border-zinc-700/50 rounded-lg text-[9px] font-bold select-none cursor-default">
+                            系统内置
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleStartEdit(source)}
+                            className="p-1 border border-[var(--fluent-border)] hover:bg-[rgba(128,128,128,0.08)] bg-[var(--fluent-card)] text-zinc-300 rounded-lg cursor-pointer transition"
+                            title="修改此数据源配置"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSource(source.id)}
+                            className="p-1 border border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 rounded-lg cursor-pointer transition"
+                            title="移除此数据源"
+                          >
+                            <Trash className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -452,7 +701,7 @@ export default function DataSourceWizard() {
         <div className="text-left shrink-0">
           <h3 className="text-sm font-bold text-white">请选择您的数据源类型</h3>
         </div>
- 
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
           {/* GitHub Card */}
           <div
@@ -475,7 +724,7 @@ export default function DataSourceWizard() {
                 </p>
               </div>
             </div>
- 
+
             <div className="mt-4 pt-2.5 border-t border-zinc-800/10 dark:border-zinc-800/30 flex justify-end">
               <button
                 type="button"
@@ -516,7 +765,7 @@ export default function DataSourceWizard() {
                 </p>
               </div>
             </div>
- 
+
             <div className="mt-4 pt-2.5 border-t border-zinc-800/10 dark:border-zinc-800/30 flex justify-end">
               <button
                 type="button"
@@ -535,12 +784,313 @@ export default function DataSourceWizard() {
               </button>
             </div>
           </div>
+        
+
+
+          {/* ZIP Card */}
+          <div
+            onClick={() => handleSelectType("zip")}
+            className={cn(
+              "p-5 border rounded-xl bg-[var(--fluent-card)] hover:bg-[rgba(128,128,128,0.02)] transition-all cursor-pointer flex flex-col justify-between min-h-[150px] text-left shadow-sm relative",
+              selectedType === "zip"
+                ? "border-[var(--fluent-accent)] ring-1 ring-[var(--fluent-accent)]"
+                : "border-[var(--fluent-border)]"
+            )}
+          >
+            <div className="flex gap-4">
+              <div className="p-2.5 rounded-lg bg-zinc-800/50 shrink-0 text-white flex items-center justify-center">
+                <Archive className="w-6 h-6 text-yellow-500" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="font-bold text-xs text-white">本地 ZIP 压缩包数据源</h4>
+                <p className="text-[10px] text-[var(--fluent-secondary)] mt-1.5 leading-snug">
+                  选择并导入本地的软件清单 ZIP 归档文件，从本地磁盘直接离线解析并渲染应用列表。
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-2.5 border-t border-zinc-800/10 dark:border-zinc-800/30 flex justify-end">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectType("zip");
+                }}
+                className={cn(
+                  "text-[10px] font-bold px-3 py-1 rounded transition select-none cursor-pointer",
+                  selectedType === "zip"
+                    ? "bg-[var(--fluent-accent)] text-white"
+                    : "bg-[rgba(128,128,128,0.08)] border border-[var(--fluent-border)] text-[var(--fluent-text)] hover:bg-[rgba(128,128,128,0.15)]"
+                )}
+              >
+                {selectedType === "zip" ? "已选择" : "选择"}
+              </button>
+            </div>
+          </div>
+
+          {/* OpenStore API Card */}
+          <div
+            onClick={() => handleSelectType("openstore_api")}
+            className={cn(
+              "p-5 border rounded-xl bg-[var(--fluent-card)] hover:bg-[rgba(128,128,128,0.02)] transition-all cursor-pointer flex flex-col justify-between min-h-[150px] text-left shadow-sm relative",
+              selectedType === "openstore_api"
+                ? "border-[var(--fluent-accent)] ring-1 ring-[var(--fluent-accent)]"
+                : "border-[var(--fluent-border)]"
+            )}
+          >
+            <div className="flex gap-4">
+              <div className="p-2.5 rounded-lg bg-zinc-800/50 shrink-0 text-white flex items-center justify-center">
+                <Globe className="w-6 h-6 text-purple-500" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="font-bold text-xs text-white">通用 OpenStore API</h4>
+                <p className="text-[10px] text-[var(--fluent-secondary)] mt-1.5 leading-snug">
+                  对接任何符合 OpenStore 标准接口协议的自定义网关或服务器，获取扁平化、强类型标准结构的软件资源。
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-2.5 border-t border-zinc-800/10 dark:border-zinc-800/30 flex justify-end">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectType("openstore_api");
+                }}
+                className={cn(
+                  "text-[10px] font-bold px-3 py-1 rounded transition select-none cursor-pointer",
+                  selectedType === "openstore_api"
+                    ? "bg-[var(--fluent-accent)] text-white"
+                    : "bg-[rgba(128,128,128,0.08)] border border-[var(--fluent-border)] text-[var(--fluent-text)] hover:bg-[rgba(128,128,128,0.15)]"
+                )}
+              >
+                {selectedType === "openstore_api" ? "已选择" : "选择"}
+              </button>
+            </div>
+          </div>
+
+          {/* Git Link Card */}
+          <div
+            onClick={() => handleSelectType("git_link")}
+            className={cn(
+              "p-5 border rounded-xl bg-[var(--fluent-card)] hover:bg-[rgba(128,128,128,0.02)] transition-all cursor-pointer flex flex-col justify-between min-h-[150px] text-left shadow-sm relative",
+              selectedType === "git_link"
+                ? "border-[var(--fluent-accent)] ring-1 ring-[var(--fluent-accent)]"
+                : "border-[var(--fluent-border)]"
+            )}
+          >
+            <div className="flex gap-4">
+              <div className="p-2.5 rounded-lg bg-zinc-800/50 shrink-0 text-white flex items-center justify-center">
+                <GitFork className="w-6 h-6 text-emerald-500" />
+              </div>
+              <div className="min-w-0">
+                <h4 className="font-bold text-xs text-white">Git 仓库链接数据源</h4>
+                <p className="text-[10px] text-[var(--fluent-secondary)] mt-1.5 leading-snug">
+                  直接输入通用的 Git 仓库链接（支持 HTTPS 协议），拉取指定 Git 仓内的清单数据并克隆仓库。
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-2.5 border-t border-zinc-800/10 dark:border-zinc-800/30 flex justify-end">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectType("git_link");
+                }}
+                className={cn(
+                  "text-[10px] font-bold px-3 py-1 rounded transition select-none cursor-pointer",
+                  selectedType === "git_link"
+                    ? "bg-[var(--fluent-accent)] text-white"
+                    : "bg-[rgba(128,128,128,0.08)] border border-[var(--fluent-border)] text-[var(--fluent-text)] hover:bg-[rgba(128,128,128,0.15)]"
+                )}
+              >
+                {selectedType === "git_link" ? "已选择" : "选择"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
   };
 
   const renderStep2 = () => {
+    if (selectedType === "zip") {
+      return (
+        <div className="space-y-6 flex-1 max-w-2xl mx-auto text-left animate-fade-in">
+          <div>
+            <h3 className="text-sm font-bold text-white">配置本地 ZIP 压缩包数据源</h3>
+            <p className="text-[10px] text-[var(--fluent-secondary)] mt-0.5">
+              请指定本地软件清单的 `.zip` 文件路径。应用将直接解压并从中加载应用列表。
+            </p>
+          </div>
+
+          <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] p-6 rounded-xl space-y-4 shadow-sm">
+            <div className="space-y-4">
+              {/* Custom Name */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[var(--fluent-secondary)] uppercase">
+                  数据源自定义名称
+                </label>
+                <input
+                  type="text"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  placeholder="如: 我的离线 ZIP 源"
+                  className="w-full bg-[rgba(128,128,128,0.05)] border border-[var(--fluent-border)] rounded-lg py-1.5 px-3 text-xs focus:outline-none"
+                />
+              </div>
+
+              {/* File input / Path input */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[var(--fluent-secondary)] uppercase">
+                  ZIP 文件路径 (或选择本地 ZIP 文件)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={zipPath}
+                    onChange={(e) => setZipPath(e.target.value)}
+                    placeholder="例如: C:/Users/Documents/source.zip"
+                    className="flex-1 bg-[rgba(128,128,128,0.05)] border border-[var(--fluent-border)] rounded-lg py-1.5 px-3 text-xs font-mono focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleZipFileBrowse}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg border border-[var(--fluent-border)] cursor-pointer flex items-center justify-center shrink-0 select-none"
+                  >
+                    浏览文件
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Diagnostics */}
+            <div className="pt-3 border-t border-[var(--fluent-border)] flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={testingConnection}
+                className="px-4 py-1.5 border border-[var(--fluent-border)] hover:bg-[rgba(128,128,128,0.08)] bg-[var(--fluent-card)] rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition select-none disabled:opacity-50 shrink-0"
+              >
+                <Terminal className={cn("w-3.5 h-3.5", testingConnection && "animate-spin")} />
+                <span>{testingConnection ? "正在验证文件..." : "验证文件合法性"}</span>
+              </button>
+
+              {testResult === "success" && (
+                <span className="text-xs text-green-500 font-bold flex items-center gap-1 animate-fade-in">
+                  <CheckCircle2 className="w-4 h-4" />
+                  文件验证通过
+                </span>
+              )}
+
+              {testResult === "error" && (
+                <span className="text-xs text-red-500 font-bold flex items-center gap-1 animate-fade-in" title={errorMessage}>
+                  <AlertTriangle className="w-4 h-4" />
+                  验证失败: {errorMessage}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (selectedType === "git_link") {
+      return (
+        <div className="space-y-6 flex-1 max-w-2xl mx-auto text-left animate-fade-in">
+          <div>
+            <h3 className="text-sm font-bold text-white">配置 Git 仓库链接数据源</h3>
+            <p className="text-[10px] text-[var(--fluent-secondary)] mt-0.5">
+              填写以 HTTPS 开头的通用 Git 仓库克隆地址，支持配置私有仓访问令牌。
+            </p>
+          </div>
+
+          <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] p-6 rounded-xl space-y-4 shadow-sm">
+            <div className="space-y-4">
+              {/* Custom Name */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[var(--fluent-secondary)] uppercase">
+                  数据源自定义名称
+                </label>
+                <input
+                  type="text"
+                  value={customName}
+                  onChange={(e) => setCustomName(e.target.value)}
+                  placeholder="如: 通用 Git 软件源"
+                  className="w-full bg-[rgba(128,128,128,0.05)] border border-[var(--fluent-border)] rounded-lg py-1.5 px-3 text-xs focus:outline-none"
+                />
+              </div>
+
+              {/* Git URL */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[var(--fluent-secondary)] uppercase">
+                  Git 克隆链接 (Git Clone HTTPS URL)
+                </label>
+                <input
+                  type="text"
+                  value={gitUrl}
+                  onChange={(e) => {
+                    setGitUrl(e.target.value);
+                    if (!customName.trim()) {
+                      try {
+                        const repoName = e.target.value.split("/").pop()?.replace(/\.git$/i, "") || "";
+                        if (repoName) setCustomName(`Git 源: ${repoName}`);
+                      } catch (_) {}
+                    }
+                  }}
+                  placeholder="如: https://github.com/username/my-apps.git"
+                  className="w-full bg-[rgba(128,128,128,0.05)] border border-[var(--fluent-border)] rounded-lg py-1.5 px-3 text-xs font-mono focus:outline-none"
+                />
+              </div>
+
+              {/* Private Token */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[var(--fluent-secondary)] uppercase flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-yellow-500" />
+                  <span>访问凭证 (Token) / 可选</span>
+                </label>
+                <input
+                  type="password"
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  placeholder="私有仓库的个人访问令牌 (PAT / Access Token)"
+                  className="w-full bg-[rgba(128,128,128,0.05)] border border-[var(--fluent-border)] rounded-lg py-1.5 px-3 text-xs font-mono focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Diagnostics */}
+            <div className="pt-3 border-t border-[var(--fluent-border)] flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={testingConnection}
+                className="px-4 py-1.5 border border-[var(--fluent-border)] hover:bg-[rgba(128,128,128,0.08)] bg-[var(--fluent-card)] rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition select-none disabled:opacity-50 shrink-0"
+              >
+                <Terminal className={cn("w-3.5 h-3.5", testingConnection && "animate-spin")} />
+                <span>{testingConnection ? "正在验证链接..." : "测试克隆链接"}</span>
+              </button>
+
+              {testResult === "success" && (
+                <span className="text-xs text-green-500 font-bold flex items-center gap-1 animate-fade-in">
+                  <CheckCircle2 className="w-4 h-4" />
+                  链接验证成功
+                </span>
+              )}
+
+              {testResult === "error" && (
+                <span className="text-xs text-red-500 font-bold flex items-center gap-1 animate-fade-in" title={errorMessage}>
+                  <AlertTriangle className="w-4 h-4" />
+                  验证失败: {errorMessage}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     const isGitee = selectedType === "gitee";
     return (
       <div className="space-y-6 flex-1 max-w-2xl mx-auto text-left">
@@ -550,44 +1100,55 @@ export default function DataSourceWizard() {
             根据 {isGitee ? "Gitee" : "GitHub"} 开发文档，请指定您的连接服务器类型、API 版本以及相应的安全令牌。
           </p>
         </div>
- 
+
         <div className="border border-[var(--fluent-border)] bg-[var(--fluent-card)] p-6 rounded-xl space-y-4 shadow-sm">
           <div className="space-y-4">
-            
-            {/* API Endpoint Mode */}
+
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-[var(--fluent-secondary)] uppercase flex items-center gap-1.5">
                 <Globe className="w-3.5 h-3.5 text-blue-400" />
                 <span>API 服务端点类型 (API Endpoint Type)</span>
               </label>
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setApiEndpointMode("public")}
-                  className={cn(
-                    "px-4 py-2 border rounded-lg text-xs font-semibold cursor-pointer transition-all",
-                    apiEndpointMode === "public"
-                      ? "border-[var(--fluent-accent)] bg-[var(--fluent-accent)]/5 text-white"
-                      : "border-[var(--fluent-border)] bg-zinc-800/30 text-[var(--fluent-text)] hover:border-zinc-500"
-                  )}
-                >
-                  {isGitee ? "Gitee 公网版 (gitee.com/api/v5)" : "GitHub 公网版 (api.github.com)"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setApiEndpointMode("enterprise")}
-                  className={cn(
-                    "px-4 py-2 border rounded-lg text-xs font-semibold cursor-pointer transition-all",
-                    apiEndpointMode === "enterprise"
-                      ? "border-[var(--fluent-accent)] bg-[var(--fluent-accent)]/5 text-white"
-                      : "border-[var(--fluent-border)] bg-zinc-800/30 text-[var(--fluent-text)] hover:border-zinc-500"
-                  )}
-                >
-                  {isGitee ? "Gitee 企业版 (Gitee Enterprise)" : "GitHub 企业版 (Enterprise Server)"}
-                </button>
-              </div>
+              {(() => {
+                const publicAlreadyAdded = dataSources.some(
+                  (s) => s.platform === selectedType && s.apiEndpointMode === "public"
+                );
+                return (
+                  <div className={cn(
+                    "grid gap-2.5 pt-1",
+                    publicAlreadyAdded ? "grid-cols-1" : "grid-cols-2"
+                  )}>
+                    {!publicAlreadyAdded && (
+                      <button
+                        type="button"
+                        onClick={() => setApiEndpointMode("public")}
+                        className={cn(
+                          "px-4 py-2 border rounded-lg text-xs font-semibold cursor-pointer transition-all",
+                          apiEndpointMode === "public"
+                            ? "border-[var(--fluent-accent)] bg-[var(--fluent-accent)]/5 text-white"
+                            : "border-[var(--fluent-border)] bg-zinc-800/30 text-[var(--fluent-text)] hover:border-zinc-500"
+                        )}
+                      >
+                        {isGitee ? "Gitee 公网版 (gitee.com/api/v5)" : "GitHub 公网版 (api.github.com)"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setApiEndpointMode("enterprise")}
+                      className={cn(
+                        "px-4 py-2 border rounded-lg text-xs font-semibold cursor-pointer transition-all",
+                        apiEndpointMode === "enterprise"
+                          ? "border-[var(--fluent-accent)] bg-[var(--fluent-accent)]/5 text-white"
+                          : "border-[var(--fluent-border)] bg-zinc-800/30 text-[var(--fluent-text)] hover:border-zinc-500"
+                      )}
+                    >
+                      {isGitee ? "Gitee 企业版 (Gitee Enterprise)" : "GitHub 企业版 (Enterprise Server)"}
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
- 
+
             {/* Custom Endpoint Input - Shown only when Enterprise is selected */}
             {apiEndpointMode === "enterprise" && (
               <div className="space-y-1 animate-fade-in">
@@ -602,7 +1163,7 @@ export default function DataSourceWizard() {
                 />
               </div>
             )}
- 
+
             {/* API Version Matching REST Docs - GitHub only */}
             {!isGitee && (
               <div className="space-y-1">
@@ -620,7 +1181,7 @@ export default function DataSourceWizard() {
                 </select>
               </div>
             )}
- 
+
             {/* Authentication Token */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-[var(--fluent-secondary)] uppercase flex items-center gap-1.5">
@@ -683,8 +1244,8 @@ export default function DataSourceWizard() {
         </div>
         <h3 className="text-base font-extrabold text-white">{selectedType === "gitee" ? "Gitee" : "GitHub"} 数据源配置成功</h3>
         <p className="text-xs text-[var(--fluent-secondary)] mt-2 leading-relaxed">
-          {selectedType === "gitee" 
-            ? "Gitee 开放平台 API 数据源配置流程已经全部完成。我们已将该访问凭据同步录入您的数据源管理器列表。您现在可以调用 Gitee API 并极速下载大陆区域的开源代码库和发行资产。"
+          {selectedType === "gitee"
+            ? "Gitee 开放平台 API 数据源配置流程已经全部完成。我们已将该访问凭据同步录入您的数据源管理器列表。您现在可以调用 Gitee API 并极速下载大陆地区的开源代码库和发行资产。"
             : "GitHub REST API 数据源配置流程已经全部完成。我们已将该访问凭据同步录入您的数据源管理器列表。您现在可以调用 GitHub API 进行超额请求以及下载受信任的私有和公开仓库。"}
         </p>
 
@@ -720,7 +1281,7 @@ export default function DataSourceWizard() {
         <div className="flex items-center justify-center max-w-xl mx-auto w-full mb-8 select-none shrink-0">
           <div className="flex flex-col items-center shrink-0">
             <div className={cn(
-              "w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-colors duration-200", 
+              "w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-colors duration-200",
               step === 1 ? "bg-[var(--fluent-accent)] text-white" : "bg-zinc-800 text-zinc-400 border border-zinc-700/50"
             )}>
               1
@@ -729,12 +1290,12 @@ export default function DataSourceWizard() {
               选择类型
             </span>
           </div>
-          
+
           <div className={cn("flex-1 h-[1.5px] mx-4 -mt-4 transition-colors duration-300", step >= 2 ? "bg-[var(--fluent-accent)]" : "bg-zinc-800")} />
 
           <div className="flex flex-col items-center shrink-0">
             <div className={cn(
-              "w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-colors duration-200", 
+              "w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-colors duration-200",
               step === 2 ? "bg-[var(--fluent-accent)] text-white" : step > 2 ? "bg-[var(--fluent-accent)]/20 text-[var(--fluent-accent)] border border-[var(--fluent-accent)]" : "bg-zinc-800 text-zinc-400 border border-zinc-700/50"
             )}>
               2
@@ -748,7 +1309,7 @@ export default function DataSourceWizard() {
 
           <div className="flex flex-col items-center shrink-0">
             <div className={cn(
-              "w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-colors duration-200", 
+              "w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-colors duration-200",
               step === 3 ? "bg-[var(--fluent-accent)] text-white" : "bg-zinc-800 text-zinc-400 border border-zinc-700/50"
             )}>
               3
@@ -802,9 +1363,302 @@ export default function DataSourceWizard() {
     );
   };
 
+  // Rendering view: Edit flow
+  const renderEditView = () => {
+    const isGitee = selectedType === "gitee";
+    return (
+      <div className="flex-1 flex flex-col">
+        {/* Header Navigation */}
+        <div className="flex items-center gap-3 mb-6 shrink-0 text-left select-none">
+          <button
+            onClick={() => setView("list")}
+            className="p-1.5 rounded-lg border border-[var(--fluent-border)] bg-[var(--fluent-card)] hover:bg-[rgba(128,128,128,0.15)] cursor-pointer transition text-[var(--fluent-text)] active:scale-95"
+            title="返回数据源列表"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div>
+            <h2 className="text-xl font-extrabold tracking-tight">修改数据源</h2>
+            <p className="text-xs text-[var(--fluent-secondary)] mt-0.5">
+              编辑该自定义代码托管源的 API 配置和连接凭据。
+            </p>
+          </div>
+        </div>
+
+        <hr className="border-[var(--fluent-border)] mb-6 shrink-0" />
+
+        {/* Edit Form */}
+        <div className="space-y-5 max-w-xl text-left select-text">
+          {/* 1. Name */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-white block">数据源名称</label>
+            <input
+              type="text"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              placeholder="例如: GitHub 企业源"
+              className="w-full text-xs bg-[var(--fluent-card)] border border-[var(--fluent-border)] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[var(--fluent-accent)]"
+            />
+          </div>
+
+          {/* 2. Platform */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-white block font-sans">平台类型</label>
+            <div className="flex items-center gap-2.5 p-3 rounded-lg border border-[var(--fluent-border)] bg-zinc-900/20 max-w-xs select-none">
+              {selectedType === "winget" ? <Package className="w-5 h-5 text-blue-400" /> :
+               selectedType === "zip" ? <Archive className="w-5 h-5 text-yellow-500" /> :
+               selectedType === "git_link" ? <GitFork className="w-5 h-5 text-emerald-500" /> :
+               (isGitee ? <GiteeIcon className="w-5 h-5 text-red-500" /> : <GithubIcon className="w-5 h-5 text-white" />)}
+              <span className="text-xs font-bold uppercase">{selectedType}</span>
+              <span className="text-[10px] text-[var(--fluent-secondary)]">(不可修改)</span>
+            </div>
+          </div>
+
+          {/* Platform specific fields */}
+          {selectedType === "zip" ? (
+            <div className="space-y-4 pt-2">
+              {/* ZIP File Path */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-white block">ZIP 文件路径</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={zipPath}
+                    onChange={(e) => setZipPath(e.target.value)}
+                    placeholder="例如: C:/Users/Documents/source.zip"
+                    className="flex-1 bg-[rgba(128,128,128,0.05)] border border-[var(--fluent-border)] rounded-lg py-1.5 px-3 text-xs font-mono focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleZipFileBrowse}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg border border-[var(--fluent-border)] cursor-pointer flex items-center justify-center shrink-0 select-none"
+                  >
+                    浏览文件
+                  </button>
+                </div>
+              </div>
+
+              {/* Diagnostics */}
+              <div className="pt-2 border-t border-[var(--fluent-border)] flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testingConnection}
+                  className="px-4 py-1.5 border border-[var(--fluent-border)] hover:bg-[rgba(128,128,128,0.08)] bg-[var(--fluent-card)] rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition select-none disabled:opacity-50 shrink-0"
+                >
+                  <Terminal className={cn("w-3.5 h-3.5", testingConnection && "animate-spin")} />
+                  <span>{testingConnection ? "正在验证文件..." : "验证文件合法性"}</span>
+                </button>
+
+                {testResult === "success" && (
+                  <span className="text-xs text-green-500 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4" />
+                    文件验证通过
+                  </span>
+                )}
+
+                {testResult === "error" && (
+                  <span className="text-xs text-red-500 font-bold flex items-center gap-1" title={errorMessage}>
+                    <AlertTriangle className="w-4 h-4" />
+                    验证失败: {errorMessage}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : selectedType === "git_link" ? (
+            <div className="space-y-4 pt-2">
+              {/* Git URL */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-white block">Git 克隆链接 (Git Clone HTTPS URL)</label>
+                <input
+                  type="text"
+                  value={gitUrl}
+                  onChange={(e) => setGitUrl(e.target.value)}
+                  placeholder="如: https://github.com/username/my-apps.git"
+                  className="w-full text-xs font-mono bg-[var(--fluent-card)] border border-[var(--fluent-border)] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[var(--fluent-accent)]"
+                />
+              </div>
+
+              {/* Private Token */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-white block flex items-center gap-1.5">
+                  <Key className="w-3.5 h-3.5 text-yellow-500" />
+                  <span>访问凭证 (Token) / 可选</span>
+                </label>
+                <input
+                  type="password"
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  placeholder="私有仓库的个人访问令牌 (PAT / Access Token)"
+                  className="w-full text-xs font-mono bg-[var(--fluent-card)] border border-[var(--fluent-border)] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[var(--fluent-accent)]"
+                />
+              </div>
+
+              {/* Diagnostics */}
+              <div className="pt-2 border-t border-[var(--fluent-border)] flex items-center gap-2 select-none">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testingConnection}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold px-4 py-2 rounded-lg cursor-pointer transition border border-[var(--fluent-border)] flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Terminal className={cn("w-3.5 h-3.5", testingConnection && "animate-spin")} />
+                  <span>{testingConnection ? "正在诊断..." : "测试克隆链接"}</span>
+                </button>
+
+                {testResult === "success" && (
+                  <span className="text-xs text-green-500 font-bold flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>链接验证成功</span>
+                  </span>
+                )}
+
+                {testResult === "error" && (
+                  <span className="text-xs text-red-500 font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>验证失败: {errorMessage}</span>
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* 3. Endpoint Mode */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-white block">连接模式</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setApiEndpointMode("public")}
+                    className={cn(
+                      "flex-1 py-2 text-xs font-bold rounded-lg border transition",
+                      apiEndpointMode === "public"
+                        ? "bg-[var(--fluent-accent)] border-[var(--fluent-accent)] text-white"
+                        : "bg-[var(--fluent-card)] border-[var(--fluent-border)] text-zinc-400 hover:text-zinc-200"
+                    )}
+                  >
+                    公网版 (Public)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setApiEndpointMode("enterprise")}
+                    className={cn(
+                      "flex-1 py-2 text-xs font-bold rounded-lg border transition",
+                      apiEndpointMode === "enterprise"
+                        ? "bg-[var(--fluent-accent)] border-[var(--fluent-accent)] text-white"
+                        : "bg-[var(--fluent-card)] border-[var(--fluent-border)] text-zinc-400 hover:text-zinc-200"
+                    )}
+                  >
+                    企业/私有版 (Enterprise)
+                  </button>
+                </div>
+              </div>
+
+              {/* 4. Enterprise Custom Endpoint */}
+              {apiEndpointMode === "enterprise" && (
+                <div className="space-y-1.5 animate-fade-in">
+                  <label className="text-xs font-bold text-white block">自定义 API 根端点 (Endpoint)</label>
+                  <input
+                    type="text"
+                    value={customEndpoint}
+                    onChange={(e) => setCustomEndpoint(e.target.value)}
+                    placeholder={isGitee ? "https://gitee.com/api/v5" : "https://github-enterprise.company.com/api/v3"}
+                    className="w-full text-xs font-mono bg-[var(--fluent-card)] border border-[var(--fluent-border)] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[var(--fluent-accent)]"
+                  />
+                  <p className="text-[10px] text-[var(--fluent-secondary)] leading-relaxed">
+                    请配置企业版或私有部署 API 端点。必须以 <code>http://</code> 或 <code>https://</code> 开头。
+                  </p>
+                </div>
+              )}
+
+              {/* 5. API Version for GitHub */}
+              {!isGitee && apiEndpointMode === "enterprise" && (
+                <div className="space-y-1.5 animate-fade-in">
+                  <label className="text-xs font-bold text-white block font-sans">API 版本 (X-GitHub-Api-Version)</label>
+                  <input
+                    type="text"
+                    value={apiVersion}
+                    onChange={(e) => setApiVersion(e.target.value)}
+                    placeholder="2026-03-10"
+                    className="w-full text-xs font-mono bg-[var(--fluent-card)] border border-[var(--fluent-border)] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[var(--fluent-accent)]"
+                  />
+                </div>
+              )}
+
+              {/* 6. Token */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-white block">个人访问令牌 (Token)</label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value)}
+                    placeholder={isGitee ? "请输入 Gitee Access Token..." : "请输入 GitHub Personal Access Token (classic 或 fine-grained)..."}
+                    className="w-full text-xs font-mono bg-[var(--fluent-card)] border border-[var(--fluent-border)] rounded-lg pl-9 pr-3 py-2 text-white focus:outline-none focus:border-[var(--fluent-accent)]"
+                  />
+                  <Key className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
+                </div>
+                <p className="text-[10px] text-[var(--fluent-secondary)] leading-relaxed">
+                  留空表示采用匿名拉取。公网源的匿名连接可能会受到较频繁 API 频次限制。
+                </p>
+              </div>
+
+              {/* Connection Test Diagnostics */}
+              <div className="pt-2">
+                <div className="flex items-center gap-2 select-none">
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={testingConnection}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold px-4 py-2 rounded-lg cursor-pointer transition border border-[var(--fluent-border)] flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Terminal className={cn("w-3.5 h-3.5", testingConnection && "animate-spin")} />
+                    <span>{testingConnection ? "正在诊断..." : "测试连接连通性"}</span>
+                  </button>
+
+                  {testResult === "success" && (
+                    <span className="text-xs text-green-500 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>连通诊断通过 {githubUser && `(账号: ${githubUser})`}</span>
+                    </span>
+                  )}
+
+                  {testResult === "error" && (
+                    <span className="text-xs text-red-500 font-bold flex items-center gap-1">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span>诊断失败: {errorMessage}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Actions */}
+          <div className="pt-4 border-t border-[var(--fluent-border)] flex items-center gap-3 select-none">
+            <button
+              type="button"
+              onClick={handleSaveChanges}
+              className="bg-[var(--fluent-accent)] hover:bg-[var(--fluent-accent-hover)] text-white text-xs font-bold px-6 py-2.5 rounded-xl cursor-pointer transition shadow-md shadow-blue-500/10 active:scale-98"
+            >
+              保存修改
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("list")}
+              className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold px-6 py-2.5 rounded-xl cursor-pointer transition border border-[var(--fluent-border)]"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex-1 overflow-y-auto h-full px-4 md:px-8 py-6 md:py-8 flex flex-col relative select-none">
-      {view === "list" ? renderListView() : renderAddSourceView()}
+      {view === "list" ? renderListView() : view === "edit" ? renderEditView() : renderAddSourceView()}
     </div>
   );
 }

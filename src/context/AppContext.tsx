@@ -2,16 +2,20 @@ import React, { createContext, useContext, useState, useEffect, useRef } from "r
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import Database from "@tauri-apps/plugin-sql";
+import { UrlSourceConfig, UrlSourceTestResult, testUrlSource as testUrlSourceAdapter, clearUrlSourceCache } from "@/lib/urlSourcesAdapter";
 
 export interface DataSource {
   id: string;
   name: string;
-  platform?: "github" | "gitee";
+  platform?: "github" | "gitee" | "zip" | "git_link" | "openstore_api";
   apiEndpointMode: "public" | "enterprise";
   customEndpoint: string;
   apiVersion: string;
   token: string;
   addedAt: string;
+  enabled?: boolean;
+  /** openstore_api 类型:首页/无 query 时按这个列表逐个请求并合并 */
+  homepageQueries?: string[];
 }
 
 export interface InstalledRepo {
@@ -64,6 +68,7 @@ interface AppContextType {
   dataSources: DataSource[];
   addDataSource: (source: DataSource) => Promise<void>;
   deleteDataSource: (id: string) => Promise<void>;
+  toggleDataSourceEnabled: (id: string, enabled: boolean) => void;
 
   // Binary asset downloads
   assetDownloads: Record<string, AssetDownload>;
@@ -98,6 +103,16 @@ interface AppContextType {
   giteeLatency: number | null;
   detectPreferredPlatform: () => Promise<void>;
   isDetectingNetwork: boolean;
+
+  // URL data sources management
+  urlSources: UrlSourceConfig[];
+  setUrlSources: React.Dispatch<React.SetStateAction<UrlSourceConfig[]>>;
+  addUrlSource: (source: UrlSourceConfig) => void;
+  updateUrlSource: (source: UrlSourceConfig) => void;
+  removeUrlSource: (id: string) => void;
+  toggleUrlSourceEnabled: (id: string, enabled: boolean) => void;
+  testUrlSource: (source: UrlSourceConfig) => Promise<UrlSourceTestResult>;
+  refreshUrlSource: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -187,7 +202,99 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
 
   const [installedRepos, setInstalledRepos] = useState<InstalledRepo[]>([]);
-  const [dataSources, setDataSources] = useState<DataSource[]>([]);
+  const [customDataSources, setCustomDataSources] = useState<DataSource[]>([]);
+
+  const [disabledSourceIds, setDisabledSourceIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem("git_store_disabled_sources");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const toggleDataSourceEnabled = (id: string, enabled: boolean) => {
+    setDisabledSourceIds(prev => {
+      let next;
+      if (enabled) {
+        next = prev.filter(x => x !== id);
+      } else {
+        next = [...prev, id];
+      }
+      localStorage.setItem("git_store_disabled_sources", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // URL data sources state
+  // 优先级:localStorage > 静态 preset(种子) > []。
+  // 任何用户改动都会立即回写 localStorage,preset 仅在首次启动且没用户数据时生效。
+  const [urlSources, setUrlSources] = useState<UrlSourceConfig[]>(() => {
+    try {
+      const raw = localStorage.getItem("git_store_url_sources");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed as UrlSourceConfig[];
+      }
+    } catch (err) {
+      console.warn("无法解析 localStorage 中的 urlSources,回退为空", err);
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem("git_store_url_sources", JSON.stringify(urlSources));
+  }, [urlSources]);
+
+  /* ---------------- URL data sources helpers ---------------- */
+  const addUrlSource = (source: UrlSourceConfig) => {
+    setUrlSources((prev) => {
+      const filtered = prev.filter((s) => s.id !== source.id);
+      return [...filtered, { ...source, addedAt: source.addedAt || new Date().toISOString() }];
+    });
+  };
+  const updateUrlSource = (source: UrlSourceConfig) => {
+    setUrlSources((prev) =>
+      prev.map((s) => (s.id === source.id ? { ...source } : s))
+    );
+    clearUrlSourceCache(source.id);
+  };
+  const removeUrlSource = (id: string) => {
+    setUrlSources((prev) => prev.filter((s) => s.id !== id));
+    clearUrlSourceCache(id);
+  };
+  const toggleUrlSourceEnabled = (id: string, enabled: boolean) => {
+    setUrlSources((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, enabled } : s))
+    );
+  };
+  const refreshUrlSource = (id: string) => {
+    clearUrlSourceCache(id);
+  };
+  // 始终对最新 state 调测,避免读到旧引用
+  const handleTestUrlSource = async (source: UrlSourceConfig) => {
+    const result = await testUrlSourceAdapter(source);
+    setUrlSources((prev) =>
+      prev.map((s) => (s.id === source.id ? { ...s, lastTest: result } : s))
+    );
+    return result;
+  };
+
+  // Built-in public sources
+  const dataSources = React.useMemo<DataSource[]>(() => {
+    const builtinGithub: DataSource = {
+      id: "builtin_github",
+      name: "GitHub 公网 API (内置)",
+      platform: "github",
+      apiEndpointMode: "public",
+      customEndpoint: "https://api.github.com",
+      apiVersion: "2026-03-10",
+      token: githubToken,
+      addedAt: "系统内置",
+    };
+
+    return [builtinGithub, ...customDataSources].map(s => ({
+      ...s,
+      enabled: !disabledSourceIds.includes(s.id)
+    }));
+  }, [customDataSources, githubToken, disabledSourceIds]);
+
   const [assetDownloads, setAssetDownloads] = useState<Record<string, AssetDownload>>({});
   
   // Search History (retains in localStorage for quick access)
@@ -241,8 +348,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     setIsDetectingNetwork(false);
 
-    // Count configured active data source platforms
-    const platforms = new Set(dataSources.map(ds => ds.platform || "github"));
+    const platforms = new Set(
+      dataSources
+        .map(ds => ds.platform || "github")
+        .filter((p): p is "github" | "gitee" => p === "github" || p === "gitee")
+    );
     
     if (platforms.size === 1) {
       // Only one data source is configured
@@ -379,10 +489,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         // 4. Load data sources
-        const sources = await db.select<DataSource[]>("SELECT * FROM data_sources");
-        if (sources.length > 0) {
-          setDataSources(sources);
-        } else {
+        let sources = await db.select<DataSource[]>("SELECT * FROM data_sources");
+        if (sources.length === 0) {
           // LocalStorage fallback migration
           const savedSources = localStorage.getItem("git_store_data_sources");
           if (savedSources) {
@@ -394,9 +502,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 [ds.id, ds.name, ds.apiEndpointMode, ds.customEndpoint, ds.apiVersion, ds.token, ds.addedAt, ds.platform || "github"]
               );
             }
-            setDataSources(list);
+            sources = list;
           }
         }
+
+        // Filter out any built-in sources from the database records
+        const customOnly = sources.filter((s) => s.id !== "builtin_github" && s.id !== "builtin_gitee");
+        setCustomDataSources(customOnly);
       } catch (err) {
         console.error("Failed to initialize SQLite local database:", err);
       }
@@ -484,7 +596,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     customUrl?: string
   ) => {
     const repoUrl = customUrl || `https://github.com/${owner}/${repo}`;
-    
+
     const newRepo: InstalledRepo = {
       owner,
       repo,
@@ -505,6 +617,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return [newRepo, ...prev];
     });
 
+    // Find matching source for authentication
+    const matchedSource = dataSources.find((s) => {
+      if (s.apiEndpointMode === "public") {
+        if (s.platform === "github" && repoUrl.includes("github.com/")) return true;
+        if (s.platform === "gitee" && repoUrl.includes("gitee.com/")) return true;
+      } else if (s.apiEndpointMode === "enterprise" && s.customEndpoint) {
+        try {
+          const urlObj = new URL(s.customEndpoint);
+          if (repoUrl.includes(urlObj.hostname)) return true;
+        } catch (e) {}
+      }
+      return false;
+    });
+
+    const isMatchedGitee = matchedSource ? matchedSource.platform === "gitee" : repoUrl.includes("gitee.com");
+    const tokenToUse = matchedSource 
+      ? matchedSource.token 
+      : (isMatchedGitee ? giteeToken : githubToken);
+
+    const activeGithubToken = !isMatchedGitee ? (tokenToUse || null) : (githubToken || null);
+    const activeGiteeToken = isMatchedGitee ? (tokenToUse || null) : (giteeToken || null);
+
     try {
       const folderName = `${owner}_${repo}`.replace(/[^a-zA-Z0-9_.-]/g, "_");
       
@@ -514,8 +648,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           repoUrl,
           targetDir: downloadDir,
           folderName,
-          githubToken: githubToken || null,
-          giteeToken: giteeToken || null,
+          githubToken: activeGithubToken,
+          giteeToken: activeGiteeToken,
           useZip: !gitInstalled,
         });
       } catch (firstErr) {
@@ -545,8 +679,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             repoUrl: backupUrl,
             targetDir: downloadDir,
             folderName,
-            githubToken: githubToken || null,
-            giteeToken: giteeToken || null,
+            githubToken: activeGithubToken,
+            giteeToken: activeGiteeToken,
             useZip: !gitInstalled,
           });
         } else {
@@ -691,13 +825,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("git_store_search_history");
   };
 
-  // SQL data sources operations
   const addDataSource = async (source: DataSource) => {
-    setDataSources((prev) => {
+    setCustomDataSources((prev) => {
       const filtered = prev.filter((s) => s.id !== source.id);
       const updated = [...filtered, source];
-      localStorage.setItem("git_store_data_sources", JSON.stringify(updated));
-      return updated;
+      const customOnly = updated.filter((s) => !s.id.startsWith("builtin_"));
+      localStorage.setItem("git_store_data_sources", JSON.stringify(customOnly));
+      return customOnly;
     });
 
     if (dbRef.current) {
@@ -714,10 +848,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteDataSource = async (id: string) => {
-    setDataSources((prev) => {
+    setCustomDataSources((prev) => {
       const updated = prev.filter((s) => s.id !== id);
-      localStorage.setItem("git_store_data_sources", JSON.stringify(updated));
-      return updated;
+      const customOnly = updated.filter((s) => !s.id.startsWith("builtin_"));
+      localStorage.setItem("git_store_data_sources", JSON.stringify(customOnly));
+      return customOnly;
     });
 
     if (dbRef.current) {
@@ -756,6 +891,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         dataSources,
         addDataSource,
         deleteDataSource,
+        toggleDataSourceEnabled,
         assetDownloads,
         theme,
         setTheme,
@@ -780,6 +916,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         giteeLatency,
         detectPreferredPlatform,
         isDetectingNetwork,
+        urlSources,
+        setUrlSources,
+        addUrlSource,
+        updateUrlSource,
+        removeUrlSource,
+        toggleUrlSourceEnabled,
+        testUrlSource: handleTestUrlSource,
+        refreshUrlSource,
       }}
     >
       {children}

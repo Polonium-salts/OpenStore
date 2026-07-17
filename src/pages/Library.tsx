@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Play,
 } from "lucide-react";
+import AppIcon from "@/components/AppIcon";
 
 type LibraryView = "library" | "downloads";
 
@@ -114,6 +115,7 @@ export default function Library() {
       tags: [repo.primaryLanguage, "Git"].filter(Boolean),
       bannerGradient: "from-blue-600/20 to-zinc-900/10",
       url: repo.url,
+      sources: [{ id: "builtin_github", name: "GitHub", platform: "github" }],
     });
     setActiveTab("detail");
   };
@@ -255,9 +257,10 @@ export default function Library() {
                         >
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-3">
-                              <img
-                                src={`https://github.com/${repo.owner}.png`}
-                                alt={repo.repo}
+                              <AppIcon
+
+                                fallbackUrl={`https://github.com/${repo.owner}.png`}
+                                title={repo.repo}
                                 className="w-8 h-8 rounded-lg object-cover bg-zinc-800 border border-zinc-700/50 shrink-0"
                               />
                               <div className="min-w-0">
@@ -397,9 +400,10 @@ export default function Library() {
                       className="flex items-center gap-4 px-4 py-3.5 hover:bg-[rgba(128,128,128,0.03)] cursor-pointer transition-colors group"
                       onClick={() => handleRowClick(repo)}
                     >
-                      <img
-                        src={`https://github.com/${repo.owner}.png`}
-                        alt={repo.repo}
+                      <AppIcon
+
+                        fallbackUrl={`https://github.com/${repo.owner}.png`}
+                        title={repo.repo}
                         className="w-9 h-9 rounded-lg object-cover bg-zinc-800 border border-zinc-700/50 shrink-0"
                       />
                       <div className="min-w-0 flex-1">
@@ -500,9 +504,10 @@ export default function Library() {
                     {/* Animated background shimmer */}
                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-500/[0.04] to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
 
-                    <img
-                      src={`https://github.com/${repo.owner}.png`}
-                      alt={repo.repo}
+                    <AppIcon
+
+                      fallbackUrl={`https://github.com/${repo.owner}.png`}
+                      title={repo.repo}
                       className="w-11 h-11 rounded-xl object-cover bg-zinc-800 border border-zinc-700/50 shrink-0"
                     />
                     <div className="min-w-0 flex-1">

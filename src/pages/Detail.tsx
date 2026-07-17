@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
-import { Star, ChevronLeft, Calendar, FileText, Code2, Cpu, Terminal, FolderOpen, XCircle, RefreshCw, Trash2, ArrowUpRight, AlertTriangle } from "lucide-react";
+import { Star, ChevronLeft, Calendar, FileText, Code2, Cpu, Terminal, FolderOpen, XCircle, RefreshCw, Trash2, ArrowUpRight, AlertTriangle, Package } from "lucide-react";
+import { cn } from "@/lib/utils";
+import AppIcon from "@/components/AppIcon";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -19,7 +21,8 @@ export default function Detail() {
     githubToken,
     giteeToken,
     gitInstalled,
-    assetDownloads
+    assetDownloads,
+    dataSources
   } = useApp();
 
   const [readme, setReadme] = useState<string>("正在从云端加载自述文件 (README.md)...");
@@ -73,33 +76,102 @@ export default function Detail() {
   };
 
   const repoInfo = selectedRepo;
+  const repoSources = repoInfo?.sources || [];
+  const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (repoSources.length > 0) {
+      // Find Gitee source first if available to prioritize, or default to first
+      const giteeSrc = repoSources.find((s: any) => s.platform === "gitee");
+      setActiveSourceId(giteeSrc ? giteeSrc.id : repoSources[0].id);
+    } else {
+      setActiveSourceId(null);
+    }
+  }, [repoInfo]);
 
   useEffect(() => {
     if (!repoInfo) return;
     fetchReadmeAndDetails();
-  }, [repoInfo]);
+  }, [repoInfo, activeSourceId]);
+
+  const matchedSource = dataSources.find((s) => {
+    if (activeSourceId) return s.id === activeSourceId;
+    if (repoInfo?.url) {
+      if (s.apiEndpointMode === "public") {
+        if (s.platform === "github" && repoInfo.url.includes("github.com/")) return true;
+        if (s.platform === "gitee" && repoInfo.url.includes("gitee.com/")) return true;
+      } else if (s.apiEndpointMode === "enterprise" && s.customEndpoint) {
+        try {
+          const urlObj = new URL(s.customEndpoint);
+          if (repoInfo.url.includes(urlObj.hostname)) return true;
+        } catch (e) {}
+      }
+    }
+    return false;
+  });
+
+  const isMatchedGitee = matchedSource ? matchedSource.platform === "gitee" : (repoInfo?.url?.includes("gitee.com/") || false);
+
+  const repoUrl = matchedSource
+    ? (isMatchedGitee 
+        ? `https://gitee.com/${repoInfo.owner}/${repoInfo.repo}` 
+        : `https://github.com/${repoInfo.owner}/${repoInfo.repo}`)
+    : repoInfo?.url || "";
 
   const fetchReadmeAndDetails = async () => {
+    if (!repoInfo) return;
     setLoadingReadme(true);
     setReadme("正在加载自述文件...");
 
-    const isGitee = repoInfo.url?.includes("gitee.com/") || false;
-    const headers: Record<string, string> = {
-      Accept: isGitee ? "application/json" : "application/vnd.github.v3+json",
-    };
-    const token = isGitee 
-      ? (localStorage.getItem("git_store_gitee_token") || giteeToken || "")
-      : (localStorage.getItem("git_store_token") || githubToken || "");
+    if (repoInfo.platform === "url_source" || repoInfo.platform === "openstore_api" || repoInfo.platform === "zip") {
+      setReadme(repoInfo.readme || repoInfo.description || "暂无描述");
+      setLatestRelease({
+        tag_name: repoInfo.version || "1.0.0",
+        published_at: new Date().toISOString(),
+      });
+      const assets = repoInfo.assets || [];
+      setReleasesCount(assets.length);
+      
+      let matched = null;
+      if (assets.length > 0) {
+        matched = assets[0];
+      }
+      setMatchedAsset(matched);
+      setLoadingReadme(false);
+      return;
+    }
 
-    if (token.trim()) {
+
+
+    const apiBase = matchedSource 
+      ? (matchedSource.apiEndpointMode === "public"
+          ? (matchedSource.platform === "gitee" ? "https://gitee.com/api/v5" : "https://api.github.com")
+          : matchedSource.customEndpoint.trim())
+      : (isMatchedGitee ? "https://gitee.com/api/v5" : "https://api.github.com");
+
+    const token = matchedSource
+      ? (matchedSource.token || "")
+      : (isMatchedGitee 
+          ? (localStorage.getItem("git_store_gitee_token") || giteeToken || "")
+          : (localStorage.getItem("git_store_token") || githubToken || ""));
+
+    const headers: Record<string, string> = {
+      Accept: isMatchedGitee ? "application/json" : "application/vnd.github.v3+json",
+    };
+    if (!isMatchedGitee) {
+      const version = matchedSource?.apiVersion || "2026-03-10";
+      headers["X-GitHub-Api-Version"] = version;
+    }
+    if (token.trim() && !isMatchedGitee) {
       headers.Authorization = `Bearer ${token.trim()}`;
     }
 
     try {
       // 1. Fetch README
-      const readmeApi = isGitee
-        ? `https://gitee.com/api/v5/repos/${repoInfo.owner}/${repoInfo.repo}/readme`
-        : `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/readme`;
+      let readmeApi = `${apiBase}/repos/${repoInfo.owner}/${repoInfo.repo}/readme`;
+      if (isMatchedGitee && token.trim()) {
+        readmeApi += `?access_token=${encodeURIComponent(token.trim())}`;
+      }
 
       const readmeRes = await fetch(readmeApi, { headers });
       if (readmeRes.ok) {
@@ -118,9 +190,10 @@ export default function Detail() {
       }
 
       // 2. Fetch Detailed Repo Info
-      const detailsApi = isGitee
-        ? `https://gitee.com/api/v5/repos/${repoInfo.owner}/${repoInfo.repo}`
-        : `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}`;
+      let detailsApi = `${apiBase}/repos/${repoInfo.owner}/${repoInfo.repo}`;
+      if (isMatchedGitee && token.trim()) {
+        detailsApi += `?access_token=${encodeURIComponent(token.trim())}`;
+      }
 
       const detailsRes = await fetch(detailsApi, { headers });
       if (detailsRes.ok) {
@@ -131,12 +204,13 @@ export default function Detail() {
       // 3. Fetch Latest Release & Assets Auto Match
       try {
         let releaseData = null;
-        if (isGitee) {
+        if (isMatchedGitee) {
           // Gitee releases API endpoint list, pick first one as latest
-          const releaseRes = await fetch(
-            `https://gitee.com/api/v5/repos/${repoInfo.owner}/${repoInfo.repo}/releases?per_page=1`,
-            { headers }
-          );
+          let releaseUrl = `${apiBase}/repos/${repoInfo.owner}/${repoInfo.repo}/releases?per_page=1`;
+          if (token.trim()) {
+            releaseUrl += `&access_token=${encodeURIComponent(token.trim())}`;
+          }
+          const releaseRes = await fetch(releaseUrl, { headers });
           if (releaseRes.ok) {
             const list = await releaseRes.json();
             if (Array.isArray(list) && list.length > 0) {
@@ -146,7 +220,7 @@ export default function Detail() {
         } else {
           // GitHub latest release endpoint
           const releaseRes = await fetch(
-            `https://api.github.com/repos/${repoInfo.owner}/${repoInfo.repo}/releases/latest`,
+            `${apiBase}/repos/${repoInfo.owner}/${repoInfo.repo}/releases/latest`,
             { headers }
           );
           if (releaseRes.ok) {
@@ -158,7 +232,14 @@ export default function Detail() {
           setLatestRelease(releaseData);
           
           const platform = getPlatform();
-          const assets = releaseData.assets || [];
+          const assets = isMatchedGitee
+            ? (releaseData.attach_files || []).map((file: any) => ({
+                id: file.id,
+                name: file.name,
+                size: file.size,
+                browser_download_url: file.download_url,
+              }))
+            : (releaseData.assets || []);
           setReleasesCount(assets.length);
 
           let matched = null;
@@ -262,7 +343,7 @@ export default function Detail() {
   }
 
   // Find installation details
-  const installedItem = installedRepos.find((r) => r.url === `https://github.com/${repoInfo.owner}/${repoInfo.repo}`);
+  const installedItem = installedRepos.find((r) => r.url === repoUrl);
   const isDownloaded = installedItem?.status === "completed";
   const isDownloading = installedItem?.status === "cloning" || installedItem?.status === "downloading_zip";
   const isUpdating = installedItem?.status === "pulling";
@@ -323,12 +404,12 @@ export default function Detail() {
 
         {repoInfo.url && (
           <a
-            href={repoInfo.url}
+            href={repoUrl}
             target="_blank"
             rel="noreferrer"
             className="text-[10px] font-bold text-[var(--fluent-secondary)] hover:text-white flex items-center gap-1 border border-[var(--fluent-border)] rounded-lg px-3 py-1.5 hover:bg-[rgba(128,128,128,0.05)] transition"
           >
-            <span>GitHub 仓库原网</span>
+            <span>{isMatchedGitee ? "Gitee 仓库原网" : "GitHub 仓库原网"}</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
           </a>
         )}
@@ -339,9 +420,10 @@ export default function Detail() {
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
           {/* Identity details */}
           <div className="flex items-center gap-4.5 text-left min-w-0">
-            <img
-              src={repoInfo.icon}
-              alt={repoInfo.title}
+            <AppIcon
+              platform={repoInfo.platform}
+              fallbackUrl={repoInfo.icon}
+              title={repoInfo.title}
               className="w-20 h-20 rounded-2xl object-cover bg-zinc-800 border border-zinc-700/50 flex-shrink-0 shadow-md"
             />
             <div className="min-w-0">
@@ -362,6 +444,45 @@ export default function Detail() {
                 <span>•</span>
                 <span className="font-mono text-zinc-400">{repoInfo.language}</span>
               </div>
+
+              {/* Source Switcher / Badge */}
+              {repoSources.length > 1 ? (
+                <div className="flex items-center gap-2 mt-3 select-none flex-wrap">
+                  <span className="text-[10px] text-[var(--fluent-secondary)] font-bold">可用软件源:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {repoSources.map((src: any) => {
+                      const isActive = activeSourceId === src.id;
+                      return (
+                        <button
+                          key={src.id}
+                          onClick={() => setActiveSourceId(src.id)}
+                          className={cn(
+                            "text-[9px] font-extrabold px-2.5 py-1 rounded border transition-all cursor-pointer",
+                            isActive
+                              ? "bg-[var(--fluent-accent)] border-[var(--fluent-accent)] text-white font-black"
+                              : "bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:text-zinc-300"
+                          )}
+                          title={src.name}
+                        >
+                          {src.platform === "gitee" ? "Gitee" : "GitHub"} ({src.name})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : repoSources.length === 1 ? (
+                <div className="flex items-center gap-1.5 mt-3 text-[9px] font-bold text-[var(--fluent-secondary)] select-none">
+                  <span>软件源:</span>
+                  <span className={cn(
+                    "px-2 py-0.5 rounded border uppercase tracking-wide",
+                    repoSources[0].platform === "gitee"
+                      ? "bg-red-500/10 border-red-500/20 text-red-500"
+                      : "bg-blue-500/10 border-blue-500/20 text-blue-400"
+                  )} title={repoSources[0].name}>
+                    {repoSources[0].platform === "gitee" ? "Gitee" : "GitHub"} ({repoSources[0].name})
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -412,10 +533,9 @@ export default function Detail() {
                 </button>
               )
             )}
-
             {!installedItem ? (
               <button
-                onClick={() =>
+                onClick={() => {
                   installRepository(
                     repoInfo.owner,
                     repoInfo.repo,
@@ -423,11 +543,15 @@ export default function Detail() {
                     repoInfo.description,
                     repoInfo.language,
                     repoInfo.url
-                  )
-                }
-                className="w-full md:w-44 bg-[var(--fluent-accent)] hover:bg-[var(--fluent-accent-hover)] text-white text-xs font-black py-2.5 rounded-xl transition cursor-pointer shadow-md shadow-blue-500/15 active:scale-98"
+                  );
+                }}
+                className={cn(
+                  "w-full md:w-44 text-white text-xs font-black py-2.5 rounded-xl transition cursor-pointer shadow-md active:scale-98 flex items-center justify-center gap-1.5",
+                  "bg-[var(--fluent-accent)] hover:bg-[var(--fluent-accent-hover)] shadow-blue-500/15"
+                )}
               >
-                下载项目源码
+                <Package className="w-3.5 h-3.5" />
+                <span>下载项目源码</span>
               </button>
             ) : (
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">

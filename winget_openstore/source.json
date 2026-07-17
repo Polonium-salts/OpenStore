@@ -1,0 +1,7 @@
+{
+  "id": "winget_openstore",
+  "name": "Winget 软件源",
+  "version": "1.0.0",
+  "description": "基于 winget.run 接口封装的 Winget 软件源",
+  "adapter": "adapter.js"
+}

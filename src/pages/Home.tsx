@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
+import { fetchAndAdaptUrlSource } from "@/lib/urlSourcesAdapter";
+import { loadAppsFromZipSourceWithMeta } from "@/lib/zipSourceLoader";
+import AppIcon from "@/components/AppIcon";
 import { BorderBeam } from "@/components/magicui/border-beam";
 import { ShineBorder } from "@/components/magicui/shine-border";
 import { Particles } from "@/components/magicui/particles";
@@ -19,10 +22,12 @@ interface GitHubAppItem {
   rating: number;
   url: string;
   bannerGradient: string;
+  sources?: any[];
+  platform?: string;
 }
 
 export default function Home() {
-  const { setSelectedRepo, setActiveTab, installRepository, installedRepos, activeTab, githubToken, giteeToken, preferredPlatform, dataSources } = useApp();
+  const { setSelectedRepo, setActiveTab, installRepository, installedRepos, activeTab, githubToken, giteeToken, preferredPlatform, dataSources, urlSources } = useApp();
   
   const [apps, setApps] = useState<GitHubAppItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,29 +56,111 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      if (dataSources.length === 0) {
+      const activeDataSources = dataSources.filter(s => s.enabled !== false);
+      if (activeDataSources.length === 0 && urlSources.filter(s => s.enabled).length === 0) {
         setApps([]);
         setLoading(false);
         return;
       }
 
-      const fetchPromises = dataSources.map(async (source, idx) => {
+      const fetchPromises = activeDataSources.map(async (source, idx) => {
         const isGitee = source.platform === "gitee";
+        const isZip = source.platform === "zip";
+        const isGitLink = source.platform === "git_link";
+        const isOpenStoreApi = source.platform === "openstore_api";
+
+        if (isGitLink) {
+          return [];
+        }
+
+        if (isZip) {
+          // 空 query 让适配器自行决定(通常返回全量);带 query 时由适配器过滤。
+          try {
+            const result = await loadAppsFromZipSourceWithMeta(
+              source.customEndpoint.trim(),
+              ""
+            );
+            return result.apps;
+          } catch (err) {
+            console.warn(`[${source.name}] ZIP 源加载失败:`, err);
+            return [];
+          }
+        }
+
         const token = source.token || "";
         const mode = source.apiEndpointMode;
         
         let base = "";
         let fetchUrl = "";
         const headers: Record<string, string> = {};
+          if (isOpenStoreApi) {
+            const endpoint = source.customEndpoint.trim().replace(/\/+$/, "");
+            if (!endpoint) return [];
+
+            // 优先用用户在 wizard 中配置的 homepageQueries。
+            // 之前版本这里硬编码了 ["vscode", "chrome"],任何用户安装的
+            // OpenStore API 网关在首页都只能看到这两个应用,这是 bug。
+            const queries = (source.homepageQueries && source.homepageQueries.length > 0)
+              ? source.homepageQueries
+              : [];
+            if (queries.length === 0) {
+              console.warn(
+                `[${source.name}] 未配置 homepageQueries,跳过首页拉取。请在数据源管理中补充。`
+              );
+              return [];
+            }
+
+            const fetchPromises = queries.map(async (q) => {
+              const ctrl = new AbortController();
+              const timer = setTimeout(() => ctrl.abort(), 8000);
+              try {
+                const res = await fetch(`${endpoint}/api/apps/${encodeURIComponent(q)}`, {
+                  signal: ctrl.signal,
+                });
+                clearTimeout(timer);
+                if (!res.ok) return null;
+                const json = await res.json();
+                if (json && json.code === 200 && json.data) return json.data;
+                return null;
+              } catch (err) {
+                clearTimeout(timer);
+                console.warn(`[${source.name}] /api/apps/${q} 拉取失败:`, err);
+                return null;
+              }
+            });
+
+            const results = await Promise.all(fetchPromises);
+            return results
+              .filter(Boolean)
+              .map((app: any) => ({
+                owner: app.developer || "未知",
+                repo: app.app_id || "app",
+                title: app.name || "未知应用",
+                publisher: app.developer || "未知",
+                description: app.description || "暂无描述",
+                category: "应用软件",
+                icon: app.icon_url,
+                stars: 0,
+                language: "OpenStore API",
+                rating: 5.0,
+                url: "",
+                bannerGradient: "from-purple-700/30 to-purple-950/20",
+                sourceId: source.id,
+                sourceName: source.name,
+                platform: "openstore_api" as const,
+                version: app.version,
+              }));
+          }
+
 
         if (isGitee) {
           base = mode === "public" ? "https://gitee.com/api/v5" : source.customEndpoint.trim() || "https://gitee.com/api/v5";
           headers["Accept"] = "application/json";
-          if (token.trim()) {
-            headers["Authorization"] = `Bearer ${token.trim()}`;
-          }
           const query = "tauri";
-          fetchUrl = `${base}/search/repositories?q=${encodeURIComponent(query)}&order=desc&per_page=15`;
+          fetchUrl = `${base}/search/repositories?q=${encodeURIComponent(query)}&order=desc&per_page=50`;
+          if (token.trim()) {
+            fetchUrl += `&access_token=${encodeURIComponent(token.trim())}`;
+          }
         } else {
           base = mode === "public" ? "https://api.github.com" : source.customEndpoint.trim() || "https://api.github.com";
           headers["Accept"] = "application/vnd.github.v3+json";
@@ -82,7 +169,7 @@ export default function Home() {
             headers["Authorization"] = `Bearer ${token.trim()}`;
           }
           const query = "stars:>1000 tauri OR electron OR rust-gui OR desktop-app";
-          fetchUrl = `${base}/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=15`;
+          fetchUrl = `${base}/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=50`;
         }
 
         try {
@@ -126,6 +213,9 @@ export default function Home() {
               rating: Number((4.1 + (repo.stargazers_count % 8) / 10).toFixed(1)),
               url: repo.html_url,
               bannerGradient: gradients[(idx + repoIdx) % gradients.length],
+              sourceId: source.id,
+              sourceName: source.name,
+              platform: source.platform,
             };
           });
         } catch (e) {
@@ -135,19 +225,58 @@ export default function Home() {
       });
 
       const results = await Promise.all(fetchPromises);
-      let mergedApps = results.flat();
+      
+      // Fetch enabled URL sources
+      const activeUrlSources = urlSources.filter(s => s.enabled);
+      const urlResults = await Promise.all(
+        activeUrlSources.map(async (source) => {
+          try {
+            const res = await fetchAndAdaptUrlSource(source);
+            return res.apps || [];
+          } catch (err) {
+            console.error(`Failed to fetch URL source ${source.name}:`, err);
+            return [];
+          }
+        })
+      );
+
+      const allApps = [...results.flat(), ...urlResults.flat()];
 
       // Sort by stars count descending
-      mergedApps.sort((a, b) => b.stars - a.stars);
+      allApps.sort((a, b) => b.stars - a.stars);
 
-      // Remove duplicates by combining owner/repo identifier
-      const seen = new Set();
-      mergedApps = mergedApps.filter(item => {
+      const mergedApps: any[] = [];
+      const seenKeys = new Set<string>();
+
+      for (const item of allApps) {
         const key = `${item.owner.toLowerCase()}/${item.repo.toLowerCase()}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          mergedApps.push({
+            ...item,
+            sources: [{
+              id: item.sourceId,
+              name: item.sourceName,
+              url: item.url,
+              platform: item.platform
+            }]
+          });
+        } else {
+          const existing = mergedApps.find(
+            (r) => `${r.owner.toLowerCase()}/${r.repo.toLowerCase()}` === key
+          );
+          if (existing) {
+            if (!existing.sources.some((s: any) => s.id === item.sourceId)) {
+              existing.sources.push({
+                id: item.sourceId,
+                name: item.sourceName,
+                url: item.url,
+                platform: item.platform
+              });
+            }
+          }
+        }
+      }
 
       setApps(mergedApps);
     } catch (err: any) {
@@ -160,7 +289,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchStoreData();
-  }, [githubToken, giteeToken, preferredPlatform, dataSources]);
+  }, [githubToken, giteeToken, preferredPlatform, dataSources, urlSources]);
 
   // Derived sections
   const getCarouselItems = () => {
@@ -186,7 +315,7 @@ export default function Home() {
     return apps.slice(3, 5).map((app) => ({
       title: app.title,
       desc: app.description,
-      rating: app.rating.toFixed(1),
+      rating: (app.rating ?? 5.0).toFixed(1),
       icon: app.icon,
       app,
     }));
@@ -220,7 +349,7 @@ export default function Home() {
       title: app.title,
       publisher: app.publisher,
       icon: app.icon,
-      rating: app.rating.toFixed(1),
+      rating: (app.rating ?? 5.0).toFixed(1),
       app
     }));
   };
@@ -252,7 +381,8 @@ export default function Home() {
       stars: app.stars,
       language: app.language,
       tags: [app.language, app.category],
-      url: app.url
+      url: app.url,
+      sources: app.sources
     };
     setSelectedRepo(repoInfo);
     setActiveTab("detail");
@@ -273,9 +403,11 @@ export default function Home() {
           <span className="text-xs font-black text-[var(--fluent-secondary)] w-5 text-center shrink-0">
             {item.rank}
           </span>
-          <img
-            src={item.icon}
-            alt={item.title}
+          <AppIcon
+            platform={item.app.platform}
+            
+            fallbackUrl={item.icon}
+            title={item.title}
             className="w-10 h-10 rounded-lg object-cover bg-zinc-800 border border-zinc-700/50 shrink-0"
           />
           <div className="text-left min-w-0">
@@ -432,9 +564,11 @@ export default function Home() {
               className="flex-1 rounded-xl border border-[var(--fluent-border)] bg-[var(--fluent-card)] p-4 flex items-center justify-between cursor-pointer hover:bg-[rgba(128,128,128,0.03)] transition-all duration-200 relative group overflow-hidden shadow-sm"
             >
               <div className="flex gap-3">
-                <img
-                  src={item.icon}
-                  alt={item.title}
+                <AppIcon
+                  platform={item.app.platform}
+                  
+                  fallbackUrl={item.icon}
+                  title={item.title}
                   className="w-11 h-11 rounded-lg object-cover bg-zinc-800 border border-zinc-700/50 flex-shrink-0"
                 />
                 <div className="text-left min-w-0 flex flex-col justify-center">
@@ -509,9 +643,11 @@ export default function Home() {
               <ShineBorder borderRadius={12} borderWidth={1.2} duration={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
 
               <div className="flex gap-3">
-                <img
-                  src={app.icon}
-                  alt={app.title}
+                <AppIcon
+                  platform={app.platform}
+                  
+                  fallbackUrl={app.icon}
+                  title={app.title}
                   className="w-11 h-11 rounded-lg object-cover border border-zinc-700/50 bg-zinc-850 flex-shrink-0"
                 />
                 <div className="flex-1 min-w-0 text-left">
@@ -521,6 +657,14 @@ export default function Home() {
                   <p className="text-[10px] text-[var(--fluent-secondary)] truncate">
                     {app.publisher}
                   </p>
+                  {app.sources && app.sources.length > 0 && (
+                  <div className="absolute top-3 left-3 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md px-2.5 py-1 rounded-md border border-zinc-200/50 dark:border-zinc-700/50 flex items-center gap-1.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-[9px] font-bold text-zinc-700 dark:text-zinc-300">
+                        {app.sources?.[0]?.name || (app.platform === "gitee" ? "Gitee" : "GitHub")}
+                      </span>
+                    </div>
+                  )}
                   <p className="text-[10px] text-[var(--fluent-secondary)] line-clamp-2 mt-1 leading-snug">
                     {app.description}
                   </p>
@@ -613,9 +757,11 @@ export default function Home() {
                 className="min-w-[210px] max-w-[210px] p-4.5 border border-[var(--fluent-border)] bg-[var(--fluent-card)] rounded-xl hover:bg-[rgba(128,128,128,0.03)] transition shadow-sm text-left flex flex-col justify-between h-[120px] shrink-0 cursor-pointer relative group animate-fade-in"
               >
                 <div className="flex gap-2.5">
-                  <img
-                    src={app.icon}
-                    alt={app.title}
+                  <AppIcon
+                    platform={app.platform}
+                    
+                    fallbackUrl={app.icon}
+                    title={app.title}
                     className="w-8.5 h-8.5 rounded-lg object-cover bg-zinc-800 border border-zinc-700/50"
                   />
                   <div className="min-w-0">
@@ -629,7 +775,7 @@ export default function Home() {
                   <span className="text-zinc-400 font-mono">{app.language}</span>
                   <div className="flex items-center gap-0.5 text-yellow-500">
                     <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
-                    <span>{app.rating.toFixed(1)}</span>
+                    <span>{(app.rating ?? 5.0).toFixed(1)}</span>
                   </div>
                 </div>
               </div>
